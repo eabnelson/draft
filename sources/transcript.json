@@ -1,0 +1,620 @@
+{
+  "source": "https://x.com/jasonfried/status/2105403067793584590",
+  "platform": "x",
+  "videos": [
+    {
+      "id": "2105402445379854336",
+      "title": "Jason Fried - For years, maybe a decade, I've wanted to build a writing tool that j...",
+      "url": "https://x.com/jasonfried/status/2105403067793584590",
+      "creator": "Jason Fried",
+      "duration_seconds": 415.381333,
+      "language": "en",
+      "method": "mlx_whisper",
+      "model": "mlx-community/whisper-large-v3-turbo",
+      "segments": [
+        {
+          "start": 0.0,
+          "end": 6.92,
+          "text": "Okay, so here we are. Starts out as a plain, simple text editor, nothing more. But then if"
+        },
+        {
+          "start": 6.92,
+          "end": 13.16,
+          "text": "you click the word count up here, it turns on. Now, let me show you what I mean. I've always"
+        },
+        {
+          "start": 13.16,
+          "end": 17.94,
+          "text": "wondered about four features from a text editor, from a writing environment, something like that."
+        },
+        {
+          "start": 18.04,
+          "end": 21.66,
+          "text": "Something where I can write ideas down, I can play with them, I can play with different versions"
+        },
+        {
+          "start": 21.66,
+          "end": 27.1,
+          "text": "of words and headlines and paragraphs and look at them in context, in line. I've never found"
+        },
+        {
+          "start": 27.1,
+          "end": 31.26,
+          "text": "anything that works this way, so I built it myself. Here's how it works. So I've got a headline here,"
+        },
+        {
+          "start": 31.4,
+          "end": 34.94,
+          "text": "the obvious, the easy, and the possible. And you'll see it has kind of a little squiggly underline"
+        },
+        {
+          "start": 34.94,
+          "end": 39.78,
+          "text": "below it and a couple dots at the end. That means that I've written alternate versions of this"
+        },
+        {
+          "start": 39.78,
+          "end": 45.58,
+          "text": "headline. And to see them, I just mouse over it and use my arrow key on my keyboard to scroll"
+        },
+        {
+          "start": 45.58,
+          "end": 49.2,
+          "text": "through them. So the obvious, the easy, and the possible, or maybe I want the three possibilities,"
+        },
+        {
+          "start": 49.2,
+          "end": 54.0,
+          "text": "or maybe I want the clear, the easy, and the achievable. I'm going to keep it like this because"
+        },
+        {
+          "start": 54.0,
+          "end": 57.86,
+          "text": "that's what I prefer at the moment. Looking down here, I've got another word that's underlined."
+        },
+        {
+          "start": 57.94,
+          "end": 62.54,
+          "text": "This one's tension. Much of the tension in product development and interface design comes from trying,"
+        },
+        {
+          "start": 62.72,
+          "end": 66.88,
+          "text": "et cetera. I don't know. Is tension the right word? Maybe I should say pressure or uncertainty"
+        },
+        {
+          "start": 66.88,
+          "end": 72.36,
+          "text": "or difficulty or struggle, right? I wrote these alternatives. Now, let me show you how I did that."
+        },
+        {
+          "start": 73.48,
+          "end": 78.18,
+          "text": "You just go, well, I can use the keyboard equivalent here just to open up the side panel."
+        },
+        {
+          "start": 78.84,
+          "end": 83.7,
+          "text": "And if I click on the word, I can see I have other options here. And I can add another one,"
+        },
+        {
+          "start": 84.28,
+          "end": 89.78,
+          "text": "I don't know, challenge, right? Much of the challenge in product development. If I"
+        },
+        {
+          "start": 90.44,
+          "end": 96.66,
+          "text": "arrow up, I can, again, kind of select these and see them in line in context so I can get a feel"
+        },
+        {
+          "start": 96.66,
+          "end": 100.68,
+          "text": "for how they read and how they feel for real. And I could leave it like this for a while. Like I'm"
+        },
+        {
+          "start": 100.68,
+          "end": 104.0,
+          "text": "going to leave struggle there for a while. I don't know. You'll see that the dot in the middle"
+        },
+        {
+          "start": 104.0,
+          "end": 108.66,
+          "text": "is highlighted. It's very subtle, but you'll see that. That tells me that it's not the original"
+        },
+        {
+          "start": 108.66,
+          "end": 115.46,
+          "text": "word that I initially chose. So I know I'm on a variation of a word. Here's another example."
+        },
+        {
+          "start": 115.82,
+          "end": 119.28,
+          "text": "Here's another one, paperclip. I don't know, maybe should I say paperclip or thumbtack?"
+        },
+        {
+          "start": 119.54,
+          "end": 124.46,
+          "text": "And by the way, if the alternate word starts with a vowel, you'll see it says a thumbtack. But if I"
+        },
+        {
+          "start": 124.46,
+          "end": 129.26,
+          "text": "go here, it says an eraser. So it automatically detects that and takes care of that for me,"
+        },
+        {
+          "start": 129.36,
+          "end": 134.12,
+          "text": "which is nice. Same thing is true at the paragraph level. I can go through a variety of different"
+        },
+        {
+          "start": 134.12,
+          "end": 141.04,
+          "text": "variations on a paragraph that I've written, which is quite nice. The other thing I can do here is I"
+        },
+        {
+          "start": 141.04,
+          "end": 145.9,
+          "text": "can dim something back. So this is something I also tend to want to do when I'm writing. So let's"
+        },
+        {
+          "start": 145.9,
+          "end": 150.68,
+          "text": "say I take this section and I'm like, I don't really know if I want this in the paragraph. I"
+        },
+        {
+          "start": 150.68,
+          "end": 154.62,
+          "text": "don't want to lose it and delete it. I don't want to go away because I might keep it, but I'm not"
+        },
+        {
+          "start": 154.62,
+          "end": 159.82,
+          "text": "sure. So you just highlight some text, right click and say ghost it. It goes back to about 10%."
+        },
+        {
+          "start": 160.4,
+          "end": 162.7,
+          "text": "And what's nice about that is it's still there."
+        },
+        {
+          "start": 162.88,
+          "end": 164.9,
+          "text": "I can still read it, but it's very easy to ignore."
+        },
+        {
+          "start": 164.9,
+          "end": 167.06,
+          "text": "And I can see what the paragraph feels like without it."
+        },
+        {
+          "start": 167.16,
+          "end": 168.5,
+          "text": "And I can just leave that there for a while."
+        },
+        {
+          "start": 168.7,
+          "end": 172.76,
+          "text": "If I ever want to bring it back, I just right click it and say revive, which is cool."
+        },
+        {
+          "start": 173.32,
+          "end": 178.56,
+          "text": "By the way, when it comes to these alternatives, I can write them myself, which is typically what I like to do."
+        },
+        {
+          "start": 181.12,
+          "end": 183.1,
+          "text": "But you can also have an AI help you."
+        },
+        {
+          "start": 183.26,
+          "end": 187.18,
+          "text": "So I can select this word, right click and say AI alternatives for selection."
+        },
+        {
+          "start": 187.38,
+          "end": 188.16,
+          "text": "It's going to open that."
+        },
+        {
+          "start": 189.82,
+          "end": 192.24,
+          "text": "I should say, it just filled in some additional ideas."
+        },
+        {
+          "start": 192.4,
+          "end": 196.58,
+          "text": "So it could be calls or judgments or decisions or trade-offs."
+        },
+        {
+          "start": 196.86,
+          "end": 198.38,
+          "text": "You'll see this one has a bullet point."
+        },
+        {
+          "start": 198.56,
+          "end": 199.5,
+          "text": "I wrote that one."
+        },
+        {
+          "start": 199.64,
+          "end": 204.5,
+          "text": "And this one has a bot point, as I'm calling it, that was written by an AI."
+        },
+        {
+          "start": 204.7,
+          "end": 209.0,
+          "text": "So I can keep track of where the suggestions came from, where they mine, where the AIs,"
+        },
+        {
+          "start": 209.12,
+          "end": 209.26,
+          "text": "whatever."
+        },
+        {
+          "start": 209.44,
+          "end": 211.52,
+          "text": "I can just undo those and get rid of them if I don't want them."
+        },
+        {
+          "start": 212.62,
+          "end": 213.78,
+          "text": "And I will do that."
+        },
+        {
+          "start": 213.78,
+          "end": 215.14,
+          "text": "And I'll just move back out of here."
+        },
+        {
+          "start": 215.26,
+          "end": 218.64,
+          "text": "And the underline will go away because I don't have alternate ideas."
+        },
+        {
+          "start": 219.82,
+          "end": 225.48,
+          "text": "like to do when I write is to keep some extra writing nearby. So I might write a paragraph"
+        },
+        {
+          "start": 225.48,
+          "end": 229.86,
+          "text": "that I know I don't want. I don't even know if it fits, but I want to kind of keep it around just in"
+        },
+        {
+          "start": 229.86,
+          "end": 236.0,
+          "text": "case. So if you click on this button down here, you go into the overflow panel. The overflow panel"
+        },
+        {
+          "start": 236.0,
+          "end": 242.76,
+          "text": "just has whatever you want to put in it. Extra text. I can even select something here and I can,"
+        },
+        {
+          "start": 242.82,
+          "end": 247.02,
+          "text": "oops, I'll just select something here and I can stash it in overflow. That would send it over"
+        },
+        {
+          "start": 247.02,
+          "end": 252.84,
+          "text": "there to the right hand side so for me what i used to do is i would actually just put a bunch of new"
+        },
+        {
+          "start": 252.84,
+          "end": 258.04,
+          "text": "lines at the bottom of a document you know and add a bunch of stuff way down below so i didn't lose it"
+        },
+        {
+          "start": 258.56,
+          "end": 262.44,
+          "text": "but it was there if i needed it this is much better because i don't have to go to the bottom"
+        },
+        {
+          "start": 262.44,
+          "end": 266.52,
+          "text": "and i can just pull it up whenever i want to copy paste drag stuff over whatever so that's really"
+        },
+        {
+          "start": 266.52,
+          "end": 271.56,
+          "text": "nice too i've got the overflow and i've got the suggestions um the other thing i've got here is"
+        },
+        {
+          "start": 271.56,
+          "end": 276.16,
+          "text": "of course you can save it you can open it you can post it to x automatically and if you want you can"
+        },
+        {
+          "start": 276.78,
+          "end": 279.6,
+          "text": "Wait, LinkedIn, I guess, wait."
+        },
+        {
+          "start": 280.9,
+          "end": 282.14,
+          "text": "I can't post to LinkedIn."
+        },
+        {
+          "start": 282.68,
+          "end": 283.94,
+          "text": "I don't want to post to LinkedIn,"
+        },
+        {
+          "start": 283.94,
+          "end": 286.74,
+          "text": "so I built this feature that prevents me from posting on LinkedIn."
+        },
+        {
+          "start": 287.54,
+          "end": 289.8,
+          "text": "All right, the last thing I'm going to show you here"
+        },
+        {
+          "start": 289.8,
+          "end": 292.0,
+          "text": "is what I'm calling the lab."
+        },
+        {
+          "start": 292.16,
+          "end": 293.46,
+          "text": "This is a temporary name."
+        },
+        {
+          "start": 294.7,
+          "end": 296.32,
+          "text": "If I open this little button here,"
+        },
+        {
+          "start": 297.46,
+          "end": 300.4,
+          "text": "I put together a few things that I like to do"
+        },
+        {
+          "start": 300.4,
+          "end": 301.56,
+          "text": "when editing my own writing."
+        },
+        {
+          "start": 302.74,
+          "end": 306.26,
+          "text": "So, and I'm using an AI to help me do that if I want to do that."
+        },
+        {
+          "start": 307.02,
+          "end": 308.48,
+          "text": "like mark the convoluted sentences,"
+        },
+        {
+          "start": 308.68,
+          "end": 310.28,
+          "text": "find words that don't fit the tone."
+        },
+        {
+          "start": 310.4,
+          "end": 311.64,
+          "text": "For example, let's say I'm writing something"
+        },
+        {
+          "start": 311.64,
+          "end": 313.16,
+          "text": "that's very plain and straightforward,"
+        },
+        {
+          "start": 313.26,
+          "end": 315.96,
+          "text": "and then I use some very complicated language somewhere,"
+        },
+        {
+          "start": 316.12,
+          "end": 317.78,
+          "text": "like pull it out, call that out, let me know."
+        },
+        {
+          "start": 318.12,
+          "end": 320.54,
+          "text": "But the thing I like most is this idea of the trim."
+        },
+        {
+          "start": 320.76,
+          "end": 322.82,
+          "text": "I can slightly trim this, tighten it some more,"
+        },
+        {
+          "start": 322.98,
+          "end": 324.5,
+          "text": "even sharper, or cut it in half."
+        },
+        {
+          "start": 324.68,
+          "end": 326.6,
+          "text": "So I'll just start here, slight trim."
+        },
+        {
+          "start": 326.82,
+          "end": 327.46,
+          "text": "Select that."
+        },
+        {
+          "start": 328.44,
+          "end": 329.88,
+          "text": "AI scans the whole document."
+        },
+        {
+          "start": 331.0,
+          "end": 333.82,
+          "text": "And what it does is, you'll see it uses the dim feature."
+        },
+        {
+          "start": 333.94,
+          "end": 336.86,
+          "text": "It dims out some of the stuff that it thinks I could lose"
+        },
+        {
+          "start": 337.28,
+          "end": 339.04,
+          "text": "if I wanted this to be a bit tighter."
+        },
+        {
+          "start": 339.56,
+          "end": 341.28,
+          "text": "So it's not rewriting anything for me."
+        },
+        {
+          "start": 341.34,
+          "end": 342.4,
+          "text": "I don't want it to do that."
+        },
+        {
+          "start": 342.52,
+          "end": 344.74,
+          "text": "I just want it to help me trim things down."
+        },
+        {
+          "start": 345.12,
+          "end": 346.32,
+          "text": "I can walk through the changes."
+        },
+        {
+          "start": 346.32,
+          "end": 348.22,
+          "text": "I can make the cuts or I can say, eh, maybe not."
+        },
+        {
+          "start": 348.54,
+          "end": 350.8,
+          "text": "I can go here and say like, tighten this even more."
+        },
+        {
+          "start": 350.98,
+          "end": 352.2,
+          "text": "So really cut this down."
+        },
+        {
+          "start": 352.32,
+          "end": 353.68,
+          "text": "Now it's about 20% shorter."
+        },
+        {
+          "start": 354.36,
+          "end": 357.08,
+          "text": "And of course, I can also go all the way"
+        },
+        {
+          "start": 357.08,
+          "end": 358.86,
+          "text": "and cut it in half, which sometimes I'll do."
+        },
+        {
+          "start": 358.96,
+          "end": 359.54,
+          "text": "It's kind of interesting."
+        },
+        {
+          "start": 360.26,
+          "end": 361.76,
+          "text": "But that's essentially what I've got here."
+        },
+        {
+          "start": 361.84,
+          "end": 365.06,
+          "text": "I've got a way to very quickly look at alternative ideas"
+        },
+        {
+          "start": 365.62,
+          "end": 366.7,
+          "text": "for things I've written."
+        },
+        {
+          "start": 367.02,
+          "end": 372.94,
+          "text": "some suggestions from ai if i want to i can have this for words sentences and paragraphs i can stash"
+        },
+        {
+          "start": 372.94,
+          "end": 377.66,
+          "text": "extra writing in the sidebar for me in case i want to pull it out or use it again or look at it later"
+        },
+        {
+          "start": 377.66,
+          "end": 381.94,
+          "text": "or i have some notes or some words i like that i might want to use somewhere or an outline i'm not"
+        },
+        {
+          "start": 381.94,
+          "end": 386.24,
+          "text": "an outliner but you could do that here and then i've also got the lab and then i've got the ability"
+        },
+        {
+          "start": 386.24,
+          "end": 390.1,
+          "text": "to decide like hey maybe i don't really need this let me just kind of dim this out for a little bit"
+        },
+        {
+          "start": 390.1,
+          "end": 391.46,
+          "text": "So I don't see it."
+        },
+        {
+          "start": 391.98,
+          "end": 397.32,
+          "text": "And that is basically everything I've ever wanted in a writing tool."
+        },
+        {
+          "start": 397.74,
+          "end": 398.64,
+          "text": "And now I have it."
+        },
+        {
+          "start": 400.62,
+          "end": 404.08,
+          "text": "And I've got some more things to work on, a couple more things I want to adjust and tweak."
+        },
+        {
+          "start": 404.24,
+          "end": 406.62,
+          "text": "But hopefully I will release this as a product so other people can use it."
+        },
+        {
+          "start": 406.68,
+          "end": 407.46,
+          "text": "It'll be open source."
+        },
+        {
+          "start": 407.68,
+          "end": 408.42,
+          "text": "It won't be a product."
+        },
+        {
+          "start": 408.5,
+          "end": 409.74,
+          "text": "Well, it'll be a product, but it'll be free."
+        },
+        {
+          "start": 410.6,
+          "end": 411.68,
+          "text": "Anyway, there you have it."
+        },
+        {
+          "start": 411.8,
+          "end": 412.34,
+          "text": "Hope you like it."
+        },
+        {
+          "start": 412.66,
+          "end": 414.02,
+          "text": "Let me know if you have any questions in the comments."
+        },
+        {
+          "start": 414.22,
+          "end": 414.36,
+          "text": "Thanks."
+        }
+      ],
+      "text": "Okay, so here we are. Starts out as a plain, simple text editor, nothing more. But then if you click the word count up here, it turns on. Now, let me show you what I mean. I've always wondered about four features from a text editor, from a writing environment, something like that. Something where I can write ideas down, I can play with them, I can play with different versions of words and headlines and paragraphs and look at them in context, in line. I've never found anything that works this way, so I built it myself. Here's how it works. So I've got a headline here, the obvious, the easy, and the possible. And you'll see it has kind of a little squiggly underline below it and a couple dots at the end. That means that I've written alternate versions of this headline. And to see them, I just mouse over it and use my arrow key on my keyboard to scroll through them. So the obvious, the easy, and the possible, or maybe I want the three possibilities, or maybe I want the clear, the easy, and the achievable. I'm going to keep it like this because that's what I prefer at the moment. Looking down here, I've got another word that's underlined. This one's tension. Much of the tension in product development and interface design comes from trying, et cetera. I don't know. Is tension the right word? Maybe I should say pressure or uncertainty or difficulty or struggle, right? I wrote these alternatives. Now, let me show you how I did that. You just go, well, I can use the keyboard equivalent here just to open up the side panel. And if I click on the word, I can see I have other options here. And I can add another one, I don't know, challenge, right? Much of the challenge in product development. If I arrow up, I can, again, kind of select these and see them in line in context so I can get a feel for how they read and how they feel for real. And I could leave it like this for a while. Like I'm going to leave struggle there for a while. I don't know. You'll see that the dot in the middle is highlighted. It's very subtle, but you'll see that. That tells me that it's not the original word that I initially chose. So I know I'm on a variation of a word. Here's another example. Here's another one, paperclip. I don't know, maybe should I say paperclip or thumbtack? And by the way, if the alternate word starts with a vowel, you'll see it says a thumbtack. But if I go here, it says an eraser. So it automatically detects that and takes care of that for me, which is nice. Same thing is true at the paragraph level. I can go through a variety of different variations on a paragraph that I've written, which is quite nice. The other thing I can do here is I can dim something back. So this is something I also tend to want to do when I'm writing. So let's say I take this section and I'm like, I don't really know if I want this in the paragraph. I don't want to lose it and delete it. I don't want to go away because I might keep it, but I'm not sure. So you just highlight some text, right click and say ghost it. It goes back to about 10%. And what's nice about that is it's still there. I can still read it, but it's very easy to ignore. And I can see what the paragraph feels like without it. And I can just leave that there for a while. If I ever want to bring it back, I just right click it and say revive, which is cool. By the way, when it comes to these alternatives, I can write them myself, which is typically what I like to do. But you can also have an AI help you. So I can select this word, right click and say AI alternatives for selection. It's going to open that. I should say, it just filled in some additional ideas. So it could be calls or judgments or decisions or trade-offs. You'll see this one has a bullet point. I wrote that one. And this one has a bot point, as I'm calling it, that was written by an AI. So I can keep track of where the suggestions came from, where they mine, where the AIs, whatever. I can just undo those and get rid of them if I don't want them. And I will do that. And I'll just move back out of here. And the underline will go away because I don't have alternate ideas. like to do when I write is to keep some extra writing nearby. So I might write a paragraph that I know I don't want. I don't even know if it fits, but I want to kind of keep it around just in case. So if you click on this button down here, you go into the overflow panel. The overflow panel just has whatever you want to put in it. Extra text. I can even select something here and I can, oops, I'll just select something here and I can stash it in overflow. That would send it over there to the right hand side so for me what i used to do is i would actually just put a bunch of new lines at the bottom of a document you know and add a bunch of stuff way down below so i didn't lose it but it was there if i needed it this is much better because i don't have to go to the bottom and i can just pull it up whenever i want to copy paste drag stuff over whatever so that's really nice too i've got the overflow and i've got the suggestions um the other thing i've got here is of course you can save it you can open it you can post it to x automatically and if you want you can Wait, LinkedIn, I guess, wait. I can't post to LinkedIn. I don't want to post to LinkedIn, so I built this feature that prevents me from posting on LinkedIn. All right, the last thing I'm going to show you here is what I'm calling the lab. This is a temporary name. If I open this little button here, I put together a few things that I like to do when editing my own writing. So, and I'm using an AI to help me do that if I want to do that. like mark the convoluted sentences, find words that don't fit the tone. For example, let's say I'm writing something that's very plain and straightforward, and then I use some very complicated language somewhere, like pull it out, call that out, let me know. But the thing I like most is this idea of the trim. I can slightly trim this, tighten it some more, even sharper, or cut it in half. So I'll just start here, slight trim. Select that. AI scans the whole document. And what it does is, you'll see it uses the dim feature. It dims out some of the stuff that it thinks I could lose if I wanted this to be a bit tighter. So it's not rewriting anything for me. I don't want it to do that. I just want it to help me trim things down. I can walk through the changes. I can make the cuts or I can say, eh, maybe not. I can go here and say like, tighten this even more. So really cut this down. Now it's about 20% shorter. And of course, I can also go all the way and cut it in half, which sometimes I'll do. It's kind of interesting. But that's essentially what I've got here. I've got a way to very quickly look at alternative ideas for things I've written. some suggestions from ai if i want to i can have this for words sentences and paragraphs i can stash extra writing in the sidebar for me in case i want to pull it out or use it again or look at it later or i have some notes or some words i like that i might want to use somewhere or an outline i'm not an outliner but you could do that here and then i've also got the lab and then i've got the ability to decide like hey maybe i don't really need this let me just kind of dim this out for a little bit So I don't see it. And that is basically everything I've ever wanted in a writing tool. And now I have it. And I've got some more things to work on, a couple more things I want to adjust and tweak. But hopefully I will release this as a product so other people can use it. It'll be open source. It won't be a product. Well, it'll be a product, but it'll be free. Anyway, there you have it. Hope you like it. Let me know if you have any questions in the comments. Thanks."
+    }
+  ],
+  "warnings": []
+}

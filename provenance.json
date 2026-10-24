@@ -1,0 +1,46 @@
+{
+  "archive_created_on": "2026-10-24",
+  "project": {
+    "original_name": "Writing Room",
+    "later_name": "Draftroom",
+    "first_build_spec_date": "2026-10-22"
+  },
+  "video": {
+    "original_url": "https://x.com/jasonfried/status/2105403067793584590?s=20",
+    "canonical_url": "https://x.com/jasonfried/status/2105403067793584590",
+    "creator": "Jason Fried",
+    "platform": "x",
+    "post_id": "2105403067793584590",
+    "media_id": "2105402445379854336",
+    "duration_seconds": 415.381333
+  },
+  "transcript": {
+    "tool": "toscript",
+    "tool_repository": "https://github.com/eabnelson/toscript",
+    "job_id": "baf25874c43c4d89b56e7d58040c663d",
+    "method": "mlx_whisper",
+    "model": "mlx-community/whisper-large-v3-turbo",
+    "language": "en",
+    "segment_count": 120,
+    "first_segment_start_seconds": 0,
+    "last_segment_end_seconds": 414.36,
+    "original_warnings": [],
+    "manually_corrected": false,
+    "preservation": "Byte-for-byte copies of the existing saved transcript.md, transcript.txt, and transcript.json.",
+    "files": [
+      "sources/transcript.md",
+      "sources/transcript.txt",
+      "sources/transcript.json"
+    ]
+  },
+  "initial_product_spec": {
+    "title": "Writing Editor Product Spec Draft",
+    "draft_version": "0.1",
+    "document_date": "2026-10-22",
+    "studio_four_url": "https://studiofour.io/artifacts/c3765ad8-c6c0-4ea1-86d8-65d89dc8367d",
+    "artifact_id": "c3765ad8-c6c0-4ea1-86d8-65d89dc8367d",
+    "artifact_version_id": "d2c948e6-ebd5-41a5-88d4-17ec833dae3a",
+    "file": "docs/initial-product-spec.md",
+    "preservation": "Unchanged Markdown content fetched from the original Studio Four artifact version."
+  }
+}
