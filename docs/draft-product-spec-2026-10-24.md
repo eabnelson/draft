@@ -143,3 +143,7 @@ The download button becomes an approximate time remaining, based on recent prepa
 Once every requested change passes independent checks, show **Restart to update**. Save writing, temporarily prevent further edits, and restart the native app into the prepared version. Remove only the included ideas after successful startup confirmation. If startup fails, restore the previous app and retain the list. Returning to official Draft and checking external-agent work use the same restart interaction.
 
 The repo includes a minimal landing page with the real editor and Features components running in an isolated browser demo. A looping tour demonstrates writing, alternatives, set aside, overflow, queued requests, a simulated download, and the resulting working demo features. Viewers watch the walkthrough, with pause/play and replay controls and support for reduced motion. Omit demo-only labels and instructions from the page and app preview. No local agent, account, personal document, or app API is accessed by the demo.
+
+### Walkthrough clarity — October 24, 2026
+
+Keep the complete landing page and app walkthrough within the viewer's screen height. Preserve one app canvas size throughout the loop and scale it uniformly to the available space. Use a smooth glass cursor with visible click feedback, deliberate pauses, and gentle internal scrolling. The page heading explains each step as it begins. Pause and resume retain the current position; replay resets the sequence. Keep the walkthrough free of demo-only labels.

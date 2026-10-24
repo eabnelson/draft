@@ -7,7 +7,20 @@ export class DemoStore{
   library!: {active:string;drafts:Draft[];archived:Draft[]};
   catalog!:Catalog;queue:QueuedFeature[]=[];updates:Update[]=[];version='demo-official';generation=0;
   listeners=new Set<()=>void>();
-  reset(){this.generation++;const draft=fresh();draft.title='Room to think';this.library={active:draft.id,drafts:[draft],archived:[]};this.catalog=clone(official as Catalog);this.queue=[];this.updates=[];this.version='demo-official';this.emit();}
+  private paused=false;
+  private buildTimer?:ReturnType<typeof setTimeout>;
+  private buildRemaining=0;
+  private buildStarted=0;
+  private finishBuild?:()=>void;
+  setPaused(paused:boolean){
+    if(paused===this.paused)return;this.paused=paused;
+    if(paused&&this.buildTimer){clearTimeout(this.buildTimer);this.buildTimer=undefined;this.buildRemaining=Math.max(0,this.buildRemaining-(performance.now()-this.buildStarted));}
+    if(!paused)this.scheduleBuild();
+  }
+  private scheduleBuild(){if(this.paused||!this.finishBuild||this.buildTimer)return;this.buildStarted=performance.now();this.buildTimer=setTimeout(()=>{this.buildTimer=undefined;const finish=this.finishBuild;this.finishBuild=undefined;finish?.();},this.buildRemaining);}
+  private cancelBuild(){if(this.buildTimer)clearTimeout(this.buildTimer);this.buildTimer=undefined;this.finishBuild=undefined;}
+
+  reset(){this.cancelBuild();this.generation++;const draft=fresh();draft.title='Room to think';this.library={active:draft.id,drafts:[draft],archived:[]};this.catalog=clone(official as Catalog);this.queue=[];this.updates=[];this.version='demo-official';this.emit();}
   emit(){for(const listener of this.listeners)listener();}
   subscribe=(listener:()=>void)=>{this.listeners.add(listener);return()=>{this.listeners.delete(listener);};};
   get hasReadingTime(){return this.catalog.features.some(f=>f.id==='demo-reading-time'&&f.state==='active');}
@@ -39,14 +52,14 @@ export class DemoStore{
       const now=new Date().toISOString(),u:Update={id:crypto.randomUUID(),kind:input.kind,request:requests.map(q=>q.request).join('\n'),requests,title:input.kind==='reset'?'Official Draft':`${requests.length} changes for your Draft`,createdAt:now,updatedAt:now,baseVersion:this.version,state:'preparing',stage:'Preparing',estimatedSeconds:180};
       this.updates.push(u);const generation=this.generation;
       // The editor is real; only AI generation and waiting are simulated here.
-      setTimeout(()=>{if(generation!==this.generation||u.state!=='preparing')return;
+      this.finishBuild=()=>{if(generation!==this.generation||u.state!=='preparing')return;
         const supported=requests.every(q=>q.kind==='remove'?q.featureId?.startsWith('demo-'):/reading|read time|focus/i.test(q.request));
         if(!supported&&input.kind!=='reset'){u.state='failed';u.error='This update needs a little more work.';}
         else{u.state='ready';u.preparedAt=new Date().toISOString();u.versionId=`demo-${u.id}`;}this.emit();
-      },6500);
+      };this.buildRemaining=6500;this.scheduleBuild();
       this.emit();return clone(u);
     }
-    if(path==='/api/updates/discard'){const u=this.updates.find(u=>u.id===input.id);if(u)u.state='cancelled';this.emit();return {};}
+    if(path==='/api/updates/discard'){const u=this.updates.find(u=>u.id===input.id);if(u){u.state='cancelled';this.cancelBuild();}this.emit();return {};}
     if(path==='/api/updates/apply'){
       const u=this.updates.find(u=>u.id===input.id);if(!u||u.state!=='ready')throw Error('This update is not ready.');
       if(u.kind==='reset')this.catalog=clone(official as Catalog);
