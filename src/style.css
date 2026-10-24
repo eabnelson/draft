@@ -315,3 +315,5 @@ textarea:focus-visible, select:focus-visible, a:focus-visible {
 .provider-row > svg { color: var(--muted-foreground); }
 .model-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
 @media (max-width: 760px) { .features-page { padding: 22px 24px 45px; } .features-columns { grid-template-columns: 1fr; } .features-heading h1 { font-size: 26px; } .update-card { flex-wrap: wrap; } .update-buttons { width: 100%; flex-direction: row; justify-content: flex-end; } }
+
+.update-history pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; color: var(--muted-foreground); max-width: 70ch; }

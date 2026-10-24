@@ -7,6 +7,7 @@ The accepted product baseline describes the intended product. This first alpha i
 - The macOS Apple Silicon application builds and opens with a bundled local runtime and editable source.
 - Twenty-three document/model/controller checks pass, including archive recovery, failed-save protection, explicit activation, rollback, and rejection of modified candidates.
 - A real Claude Opus 5.5 request added reading time, passed independent checks, and was applied with Update app. Removing that feature and returning to official Draft used the same interaction. The document contents survived all three updates.
+- The same real feature preparation and application also passed in the installed desktop app using its bundled build tools.
 - Both installed providers returned authenticated writing responses. Codex writing requests were also tested inside the restricted process.
 - Native typing, reopening, window closing, and Quit were checked. The native Quit path now waits for a save acknowledgment; the last text was verified on disk while the editor had still shown Saving.
 - Original transcript and initial-spec checksums match their archived copies.
