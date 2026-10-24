@@ -5,11 +5,13 @@ The accepted product baseline describes the intended product. This first alpha i
 ## Verified
 
 - The macOS Apple Silicon application builds and opens with a bundled local runtime and editable source.
-- Twenty-three document/model/controller checks pass, including archive recovery, failed-save protection, explicit activation, rollback, and rejection of modified candidates.
-- A real Claude Opus 5.5 request added reading time, passed independent checks, and was applied with Update app. Removing that feature and returning to official Draft used the same interaction. The document contents survived all three updates.
+- Forty-one document/model/controller checks pass, including archive recovery, failed-save protection, explicit activation, rollback, and rejection of modified candidates.
+- A real Claude Opus 5.5 request added reading time, passed independent checks, and was applied with the explicit update control. Removing that feature and returning to official Draft used the same interaction. The document contents survived all three updates.
 - The same real feature preparation and application also passed in the installed desktop app using its bundled build tools.
 - Both installed providers returned authenticated writing responses. Codex writing requests were also tested inside the restricted process.
 - Native typing, reopening, window closing, and Quit were checked. The native Quit path now waits for a save acknowledgment; the last text was verified on disk while the editor had still shown Saving.
+- A real two-feature batch through Claude Opus 5.5 created reading time and focus mode together in 144 seconds. Both passed the independent checks. The native Restart to update reopened the process with both features, retained saved writing, and kept an idea added after the download for a later update. Focus and Escape were checked in the restarted app. Returning to official Draft also restarted successfully while preserving the document and later idea.
+- The repo website runs the actual editor and Features UI in an isolated in-memory demo. Its looping tour reaches both working example features; generation is labeled as sped up and simulated.
 - Original transcript and initial-spec checksums match their archived copies.
 
 ## Remaining release work

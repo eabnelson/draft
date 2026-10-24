@@ -74,7 +74,7 @@ The catalog distinguishes added features, changed official features, removed/dis
 2. Inspect the official and personal catalogs and the relevant implementation for an existing or similar capability. If found, show where to use it or offer to extend it. An ambiguous match should not permanently block the request.
 3. If the request is new, generate it using the selected local coding-agent connection in an isolated candidate workspace. Preserve the running app and its source checkpoint.
 4. Run appropriate behavior checks and a desktop build. Report progress and actionable failure information in ordinary language. Do not make the user interpret diffs or build logs to complete the normal flow.
-5. Package the verified candidate as a complete personal app update. Show **Update app** only when it is ready. Clicking it durably saves open documents and applies the new version. A preview may be offered, but the primary activation model is an app update rather than Keep change.
+5. Package the verified candidate as a complete personal app update. Show **Restart to update** only when it is ready. Clicking it durably saves open documents and applies the new version. A preview may be offered, but the primary activation model is an app update rather than Keep change.
 6. After the updated version starts successfully, record the feature's short description, origin, timestamps, dependencies, and recovery information. Show it under Your changes.
 
 The same flow can modify or remove official behavior, including layout and core writing behavior. This is ownership of an editable application, not merely a closed list of plugins. The packaging design must explicitly identify which edits can be rebuilt inside the installed app and how native-host changes are handled; do not claim arbitrary native changes are supported until that workflow works.
@@ -117,7 +117,7 @@ Also exercise duplicate requests, canceled/failed builds, provider authenticatio
 2. **License:** MIT for application code and authored specifications, with third-party reference attribution retained separately.
 3. **Activation:** every change is delivered as an app update. This applies to adding a feature, removing one, updating official Draft while preserving custom changes, and returning to source Draft.
 4. **Update states:** Checking request → Preparing update → Building and checking → Update ready → Applying update → Updated. Show honest stages rather than a fabricated download percentage. An AI-built change is described as being prepared locally; an official release can actually be downloaded.
-5. **Agent completion:** a request includes end-to-end implementation, relevant tests, source/catalog changes, and building the candidate. An agent's claim that it finished is insufficient; the application runs its own checks before offering Update app.
+5. **Agent completion:** a request includes end-to-end implementation, relevant tests, source/catalog changes, and building the candidate. An agent's claim that it finished is insufficient; the application runs its own checks before offering Restart to update.
 6. **Apply:** apply is a deliberate user action. Keep the current version usable while preparing an update. Save documents before switching, preserve a recovery version, and roll back if the new UI does not confirm successful startup.
 7. **One model:** use the selected Claude Code/Codex connection for both writing assistance and building features, with separate tool permissions. Prefer Claude Opus 5.5 when both are usable, remembering an explicit user choice.
 
@@ -129,6 +129,17 @@ Update progress uses everyday language. Compiler output, filenames, and technica
 
 A ready, applied, cancelled, or unsuccessful feature can offer **Keep working on this**. **Copy prompt** provides the original request, current result, relevant diagnostics, existing features, and a separate working copy for the person's local agent. The agent asks what the person wants changed before editing. The prompt includes the local build commands and leaves real documents, credentials, and installed versions alone.
 
-The person returns to **Check my changes**. Draft independently copies, checks, and prepares that work as a new update; **Update app** remains the explicit activation step. A failed check preserves the current app, earlier prepared update, and editable work. If the app changes meanwhile, a fresh prompt includes the preserved earlier working copy as a reference.
+The person returns to **Check my changes**. Draft independently copies, checks, and prepares that work as a new update; **Restart to update** remains the explicit activation step. A failed check preserves the current app, earlier prepared update, and editable work. If the app changes meanwhile, a fresh prompt includes the preserved earlier working copy as a reference.
 
 Draft's mark is an empty light grey highlight with a grey squiggle underneath on white. It uses the editor's existing highlight and underline colors; no letters appear inside the highlight.
+
+
+## Feature list and restart update — October 24, 2026
+
+Requests accumulate in a persistent list. A person can select, reorder, or remove ideas without starting the agent. Removing an installed feature adds its removal to the same list. **Download update** snapshots all selected requests and sends one prompt to the selected coding agent, completing and checking them together. New ideas can be added for a later update.
+
+The download button becomes an approximate time remaining, based on recent preparation history when available. Clearly indicate when the estimate is exceeded; never present a fictional percentage or promise an exact completion time. A failed or cancelled preparation keeps the list and current app intact.
+
+Once every requested change passes independent checks, show **Restart to update**. Save writing, temporarily prevent further edits, and restart the native app into the prepared version. Remove only the included ideas after successful startup confirmation. If startup fails, restore the previous app and retain the list. Returning to official Draft and checking external-agent work use the same restart interaction.
+
+The repo includes a minimal landing page with the real editor and Features components running in an isolated browser demo. A looping tour demonstrates writing, alternatives, set aside, overflow, queued requests, a simulated download, and the resulting working demo features. Label the accelerated update simulation. Pause on interaction and support replay and reduced motion. No local agent, account, personal document, or app API is accessed by the demo.

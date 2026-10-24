@@ -1,6 +1,6 @@
 # Draft
 
-A local writing app you can make your own. Write, compare alternate wording, set passages aside, and keep spare ideas in overflow. Ask your connected coding agent for a feature, then apply the finished work with **Update app**.
+A local writing app you can make your own. Write, compare alternate wording, set passages aside, and keep spare ideas in overflow. Ask your connected coding agent for a feature, then apply the finished work with **Restart to update**.
 
 **macOS first · MIT · Early alpha**
 
@@ -18,15 +18,15 @@ Your provider processes the writing context or feature request you submit. Provi
 
 ## Make it yours
 
-Open **Features** to compare **Official Draft** with **Your changes**. Every high-level feature has a date. Describe a feature and choose **Prepare update**. Draft checks for an existing equivalent, creates a separate source workspace, asks your selected agent to implement it, then runs independent document tests, type checks, and builds.
+Open **Features** to compare **Official Draft** with **Your changes**. Every high-level feature has a date. Add ideas to your list, choose which ones you want, then choose **Download update**. Draft checks for an existing equivalent, creates a separate source workspace, asks your selected agent to implement all selected changes together, then runs independent document tests, type checks, and builds.
 
-When those checks succeed, choose **Update app**. The editor saves your writing before switching versions. A failed or interrupted preparation leaves the current version running. If the updated renderer fails to start, Draft restores the previous version.
+The download shows an estimated wait based on recent preparations. When those checks succeed, choose **Restart to update**. The editor saves your writing before restarting into the new version. Ideas added during a download stay in your list for next time. A failed or interrupted preparation leaves the current version running. If the updated renderer fails to start, Draft restores the previous version.
 
 Removing a feature and returning to official Draft use the same prepare → update flow. Official source updates are checked against signed release metadata and can be integrated with personal changes by your agent. An unresolved conflict produces a failed preparation rather than replacing the working app.
 
 The alpha supports changes to the editor and its local runtime. Changes to the native shell or update controller require a new packaged desktop build. Automated checks reduce mistakes; they cannot prove every generated feature is correct. Keep a backup before relying on an experimental feature.
 
-If a feature isn’t quite right, choose **Keep working on this**. **Copy prompt** gives your local Claude Code or Codex agent the request, progress, and a separate working copy. Tell it what you want changed, then return to **Check my changes**. Draft checks the work and offers **Update app** when it is ready. Your current app and writing stay in place while you iterate.
+If a feature isn’t quite right, choose **Keep working on this**. **Copy prompt** gives your local Claude Code or Codex agent the request, progress, and a separate working copy. Tell it what you want changed, then return to **Check my changes**. Draft checks the work and offers **Restart to update** when it is ready. Your current app and writing stay in place while you iterate.
 
 ## Your files and source
 
@@ -35,7 +35,7 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 - `Documents/`: full `.draft.json` writing files, the library index, and previous-file recovery copies. Alternatives, hidden passages, and overflow are included.
 - `versions/`: the exact source and built application for official and personal versions.
 - `Workspaces/`: unfinished feature work shared with your local agent, kept until you finish iterating.
-- `state.json`: model choice, feature-update history, and active/previous version pointers.
+- `state.json`: model choice, queued ideas, feature-update history, and active/previous version pointers.
 - `Exports/`: plain text, Markdown, and complete draft exports.
 
 **Your source code** and **Your documents** in Features open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its build dependencies; ordinary personal updates do not require Node, Rust, Xcode, Git, or a GitHub account.

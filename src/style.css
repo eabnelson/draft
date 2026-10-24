@@ -336,3 +336,13 @@ textarea:focus-visible, select:focus-visible, a:focus-visible {
 .handoff-preview textarea { display: block; width: 100%; margin-top: 12px; border: 1px solid var(--input); border-radius: 8px; padding: 12px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.6; resize: vertical; background: var(--secondary); }
 .handoff-return { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--border); margin-top: 24px; padding-top: 20px; }
 @media (max-width: 600px) { .handoff-card, .handoff-return { flex-direction: column; align-items: stretch; } .handoff-card-actions { justify-content: flex-end; } }
+
+/* A feature list becomes one deliberate app update. */
+.feature-wishlist{border:1px solid var(--border,#e5e5e5);border-radius:9px;margin:18px 0 28px;overflow:hidden}
+.feature-wishlist>header{display:flex;align-items:center;justify-content:space-between;padding:17px 20px 10px}
+.feature-wishlist h2{font-size:13px;font-weight:500;margin:0}.feature-wishlist header>span,.queued-label{font-size:11px;color:#999}
+.feature-wishlist ul{list-style:none;padding:0 20px;margin:0}.feature-wishlist li{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid #f0f0f0}
+.feature-wishlist li label{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.6;min-width:0;cursor:pointer}.feature-wishlist label span{overflow-wrap:anywhere}.feature-wishlist input{margin-top:5px;accent-color:#333;flex-shrink:0}.feature-wishlist li>div{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.wishlist-empty{padding:4px 20px 14px;font-size:12px;color:#aaa}.wishlist-download{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:15px 20px}.wishlist-download>span{font-size:11px;color:#888}.wishlist-download>div{display:flex;gap:8px;align-items:center;flex-shrink:0}.wishlist-handoff{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:#fafafa;font-size:11px;color:#888;border-top:1px solid #eee}
+.restart-overlay{position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.96);display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;color:#737373}
+@media(max-width:600px){.wishlist-download{align-items:flex-start;flex-direction:column;gap:10px}.wishlist-download>div{align-self:flex-end}.wishlist-handoff{flex-wrap:wrap}.queued-label{max-width:56px}}

@@ -18,7 +18,7 @@ if(!dev&&!session)throw Error('Start Draft through the desktop app.');
 const documents=new DocumentStore(join(root,'Documents'));
 const updates=new Updates(root,template,dependencies,process.execPath);
 await updates.initialize();
-let recoveryCounter=0,closeReady=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
+let recoveryCounter=0,closeReady=false,restartRequested=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 function authorized(request:Request){if(dev)return true;const cookie=request.headers.get('cookie')??'';return cookie.split(';').some(s=>s.trim()===`draft_session=${session}`)||request.headers.get('authorization')===`Bearer ${session}`;}
 const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRequestBodySize:30*1024*1024,
@@ -38,7 +38,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRe
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
         if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
-        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady});
+        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested});
         if(url.pathname==='/api/close/ready'&&request.method==='POST'){closeReady=true;return json({ready:true});}
         if(url.pathname==='/api/providers'&&request.method==='GET'){const providers=await updates.agents.discover(url.searchParams.has('refresh'));const selected=await updates.defaultSelection();return json({providers,selection:selected});}
         if(url.pathname==='/api/providers/select'&&request.method==='POST'){await updates.select(input as AgentSelection);return json({saved:true});}
@@ -49,8 +49,9 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRe
           return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal})});
         }
         if(url.pathname==='/api/updates/request'&&request.method==='POST')return json(await updates.request(input.kind as UpdateKind,String(input.request??''),input.featureId));
+        if(url.pathname==='/api/features/queue'&&request.method==='POST')return json(await updates.queue(input));
         if(url.pathname==='/api/updates/discard'&&request.method==='POST'){await updates.discard(input.id);return json({discarded:true});}
-        if(url.pathname==='/api/updates/apply'&&request.method==='POST')return json(await updates.apply(input.id));
+        if(url.pathname==='/api/updates/apply'&&request.method==='POST'){const restart=!dev&&input.restart===true;const result=await updates.apply(input.id,restart);restartRequested=restart;return json({...result,restart});}
         if(url.pathname==='/api/updates/confirm'&&request.method==='POST'){await updates.confirm(input.version);return json({confirmed:true});}
         if(url.pathname==='/api/updates/check'&&request.method==='POST')return json(await updates.checkOfficial());
         if(url.pathname==='/api/updates/handoff'&&request.method==='POST')return json(await updates.handoff({updateId:input.updateId,featureId:input.featureId}));

@@ -145,6 +145,11 @@ fn main() {
         let mut last_recovery=0u64;
         loop {std::thread::sleep(Duration::from_secs(3));if handle.get_webview_window("main").is_none(){break;}
           if let Some(value)=health(port,&token) {
+            if value["restartRequested"].as_bool()==Some(true) {
+              handle.state::<Shutdown>().0.store(true,Ordering::SeqCst);
+              handle.request_restart();
+              break;
+            }
             let recovery=value["recoveryCounter"].as_u64().unwrap_or(0);
             if recovery>last_recovery {last_recovery=recovery;if let Some(window)=handle.get_webview_window("main"){let _=window.eval("window.location.reload()");}}
           }

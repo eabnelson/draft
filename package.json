@@ -1,6 +1,6 @@
 {
   "name": "draft",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0-alpha.3",
   "type": "module",
   "scripts": {
     "dev": "bun desktop/server.ts --dev",
@@ -10,7 +10,8 @@
     "desktop:build": "bun run scripts/package-desktop.ts",
     "source:bundle": "bun run scripts/prepare-resources.ts",
     "release:prepare": "bun run scripts/prepare-release.ts",
-    "website:dev": "bun website/serve.ts"
+    "website:dev": "bun run website:build && bun website/serve.ts",
+    "website:build": "bun website/build.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",

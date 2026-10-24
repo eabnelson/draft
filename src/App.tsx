@@ -15,6 +15,7 @@ function download(content:string,name:string,type:string){const url=URL.createOb
 export default function App(){
   const boot=load();
   const [featuresOpen,setFeaturesOpen]=useState(false),[updateReady,setUpdateReady]=useState(false);
+  const [updating,setUpdating]=useState(false);
   const [draft,setDraft]=useState<Draft>(()=>boot.library.drafts.find(d=>d.id===boot.library.active)??boot.library.drafts[0]??fresh());
   const draftRef=useRef(draft);draftRef.current=draft;
   const library=useRef<Library>(boot.library);
@@ -77,7 +78,7 @@ export default function App(){
     if(name==='undo'||name==='redo'){history(name);return;}
     safely(()=>{
       if(name==='alternative'){
-        const result=addVariant(d,r);commit({...result.draft,revisionMode:true});setActive(result.variantId);setTab('alternatives');setPanel(true);setCandidate('');setTimeout(()=>candidateInput.current?.focus(),0);
+        const result=addVariant(d,r);commit({...result.draft,revisionMode:true});setActive(result.variantId);setTab('alternatives');setPanel(true);setCandidate('');setTimeout(()=>candidateInput.current?.focus({preventScroll:true}),0);
       }else if(name==='ghost'){
         const existing=d.ghosts.filter(g=>r.from===r.to?g.from<=r.from&&g.to>=r.to:overlaps(g,r));
         if(existing.length){commit(changed(d,{ghosts:d.ghosts.filter(g=>!existing.includes(g))}));notice('Passage revived.');}
@@ -158,8 +159,7 @@ export default function App(){
     controller.current?.abort();const abort=new AbortController();controller.current=abort;
     setAiBusy(kind);setAiError('');
     try {
-      const response=await fetch('/api/assist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt}),signal:abort.signal});
-      const data=await response.json();if(!response.ok)throw Error(data.error||'The model could not complete this request.');
+      const data=await api('/api/assist',{prompt},abort.signal);
       if(abort.signal.aborted)return;
       if(draftRef.current.id!==captured.id||draftRef.current.revision!==captured.revision)throw Error('The draft changed while the model was working. Your writing is untouched. Request a fresh suggestion.');
       let result;try{result=JSON.parse(data.response);}catch{throw Error('The model returned an unreadable response. Try again.');}
@@ -185,9 +185,9 @@ export default function App(){
   function cycle(direction:number){if(!variant)return;const options=[null,...variant.candidates.map(c=>c.id)],index=options.indexOf(variant.active);commit(choose(draft,variant.id,options[(index+direction+options.length)%options.length]));}
   const promptScope=variant?variantContext(draft,variant):'';
 
-  return <div className={`app ${panel?'with-panel':'without-panel'}`}>
+  return <><div className={`app ${panel?'with-panel':'without-panel'}`} inert={updating}>
     <header className="topbar">
-      <a className="brand" href="#" onClick={e=>{e.preventDefault();setDocsOpen(!docsOpen);}} aria-label="Draft documents"><img className="brand-mark" src="/mark.svg" alt="" width="28" height="22"/><span>Draft</span></a>
+      <a className="brand" href="#" onClick={e=>{e.preventDefault();setDocsOpen(!docsOpen);}} aria-label="Draft documents"><img className="brand-mark" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" width="28" height="22"/><span>Draft</span></a>
       <div className="document-name"><Input className="draft-title" aria-label="Draft name" value={draft.title} placeholder="Untitled draft" onChange={e=>commit(changed(draft,{title:e.target.value}),'title')}/><Button variant="ghost" size="icon-sm" className="icon-button" onClick={()=>setDocsOpen(!docsOpen)} aria-label="Open drafts" aria-expanded={docsOpen}><ChevronDown size={14}/></Button><span className={`save-state ${saveError?'error':''}`}><span className="status-dot"/>{saveError?'Unsaved':saveState}</span></div>
       <div className="top-actions"><Button variant={featuresOpen?'secondary':'ghost'} size="sm" onClick={()=>setFeaturesOpen(!featuresOpen)}>{updateReady?'Update ready':'Features'}</Button><Button variant="ghost" size="icon-sm" className="icon-button" aria-label="Keyboard shortcuts" onClick={()=>setHelp(true)}><CircleHelp size={17}/></Button><Button variant="outline" className="export-button" onClick={()=>setMenu(!menu)} aria-expanded={menu}><ArrowUpRight size={15}/>Export<ChevronDown size={12}/></Button><Button variant="ghost" size="icon-sm" className="icon-button panel-toggle" aria-label={panel?'Close side panel':'Open side panel'} onClick={()=>setPanel(!panel)}>{panel?<PanelRightClose size={18}/>:<PanelRightOpen size={18}/>}</Button></div>
       {menu&&<div className="dropdown export-menu"><Button variant="ghost" onClick={()=>exportDraft('native')}><Download size={16}/><span>Complete draft<small>Includes editing history and overflow</small></span><span className="file-tag">JSON</span></Button><Button variant="ghost" onClick={()=>exportDraft('txt')}><FileText size={16}/>Clean text<span className="file-tag">TXT</span></Button><Button variant="ghost" onClick={()=>exportDraft('md')}><FileText size={16}/>Markdown<span className="file-tag">MD</span></Button><div className="menu-divider"/><Button variant="ghost" onClick={()=>{file.current?.click();setMenu(false);}}><FolderOpen size={16}/>Open file…</Button></div>}
@@ -195,7 +195,7 @@ export default function App(){
     </header>
     <input ref={file} type="file" accept=".json,.txt,.md" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value='';}}/>
     {saveError&&<div className="save-error" role="alert">{saveError}<Button variant="ghost" onClick={()=>exportDraft('native')}>Export a safe copy <Download size={14}/></Button></div>}
-    {featuresOpen&&<Features onBack={()=>setFeaturesOpen(false)} onBeforeApply={()=>persist(draftRef.current)}/>}
+    {featuresOpen&&<Features onBack={()=>setFeaturesOpen(false)} onUpdating={value=>{if(value){controller.current?.abort();controller.current=null;setAiBusy('');}setUpdating(value);}} onBeforeApply={async()=>{let latest;do{latest=draftRef.current;if(!await persist(latest))return false;}while(draftRef.current!==latest);return true;}}/>}
     <main className="workspace" style={featuresOpen?{display:'none'}:undefined}>
       <section className="writing-area">
         <div className="draft-toolbar"><div className="undo-tools"><Button variant="ghost" size="icon-sm" className="icon-button" title="Undo · ⌘Z" aria-label="Undo" disabled={!undo.current.length} onClick={()=>history('undo')}><Undo2 size={16}/></Button><Button variant="ghost" size="icon-sm" className="icon-button" title="Redo · ⌘⇧Z" aria-label="Redo" disabled={!redo.current.length} onClick={()=>history('redo')}><Redo2 size={16}/></Button></div><div className="selection-tools"><Button variant="ghost" onClick={()=>action('alternative')} title="Add alternative · ⌘⇧A"><ArrowLeftRight size={14}/>Alternative</Button><Button variant="ghost" onClick={()=>action('ghost')} title="Set aside / revive · ⌘⇧G"><GhostIcon size={14}/>Set aside</Button><Button variant="ghost" onClick={()=>action('overflow')} title="Move to overflow · ⌘⇧O"><ArrowDownToLine size={14}/>Overflow</Button></div><Button variant="ghost" className={`word-count ${draft.revisionMode?'enabled':''}`} onClick={()=>{commit(changed(draft,{revisionMode:!draft.revisionMode}));if(!draft.revisionMode)setPanel(true);}} aria-pressed={draft.revisionMode} title="Toggle revision mode"><span>{wordCount} words</span><span className="word-count-mode">Revise</span><span className="toggle-track"><span/></span></Button></div>
@@ -237,5 +237,5 @@ export default function App(){
     {message&&<div className="toast" role="status"><span>{message}</span><Button variant="ghost" aria-label="Dismiss notification" onClick={()=>setMessage('')}><X size={14}/></Button></div>}
     {settings&&<ModelSettings onClose={()=>setSettings(false)}/>}
     {help&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget){setSettings(false);setHelp(false);}}}><section className="modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><Button variant="ghost" className="modal-close icon-button" aria-label="Close dialog" onClick={()=>{setSettings(false);setHelp(false);}}><X size={19}/></Button>{<><h2>Keyboard shortcuts</h2><div className="help-item"><ArrowLeftRight size={18}/><div><h3>Add alternative</h3><p>Select text, then add a wording option.</p><kbd>⌘ ⇧ A</kbd></div></div><div className="help-item"><GhostIcon size={18}/><div><h3>Set aside / revive</h3><p>Hidden passages stay recoverable in the side panel.</p><kbd>⌘ ⇧ G</kbd></div></div><div className="help-item"><ArrowDownToLine size={18}/><div><h3>Move to overflow</h3><p>Use Copy for text with alternatives or hidden passages.</p><kbd>⌘ ⇧ O</kbd></div></div><div className="help-item"><Download size={18}/><div><h3>Save</h3><p>Drafts save as local files on this Mac. Export a complete draft for backup.</p><kbd>⌘ S · save now</kbd></div></div><Button variant="default" className="primary-button full-width" onClick={()=>setHelp(false)}>Done <ArrowRight size={14}/></Button></>}</section></div>}
-  </div>;
+  </div>{updating&&<div className="restart-overlay" role="status"><LoaderCircle className="spin" size={20}/><span>Restarting Draft…</span></div>}</>;
 }
