@@ -42,6 +42,10 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 
 The update builder edits candidate source rather than live files. Its process is restricted from the document store and activation record; verification also runs without network access. New package dependencies are installed in the candidate with lifecycle scripts disabled. Personal backend code runs as part of the app after you apply it, so request features you trust.
 
+## Landing page
+
+The minimal landing page lives in [website/](website/). Run `bun run website:dev` to preview it locally.
+
 ## Develop
 
 Install [Bun](https://bun.sh), then:
