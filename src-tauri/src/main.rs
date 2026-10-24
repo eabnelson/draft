@@ -6,7 +6,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Mutex, OnceLock,
     },
     time::Duration,
 };
@@ -14,6 +14,64 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 struct LocalRuntime(Mutex<Option<Child>>);
 struct Shutdown(AtomicBool);
+static APPLICATION: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+// AppKit's menu and Dock Quit actions bypass Tao's ExitRequested event.
+// Cancel native termination and use the same save barrier as window closing.
+#[link(name = "objc")]
+extern "C" {
+    fn objc_getClass(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn object_getClass(object: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn sel_registerName(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn class_addMethod(
+        class: *mut std::ffi::c_void,
+        selector: *mut std::ffi::c_void,
+        implementation: *const std::ffi::c_void,
+        types: *const std::ffi::c_char,
+    ) -> bool;
+    fn objc_msgSend();
+}
+extern "C" fn should_terminate(
+    _: *mut std::ffi::c_void,
+    _: *mut std::ffi::c_void,
+    _: *mut std::ffi::c_void,
+) -> usize {
+    if let Some(app) = APPLICATION.get() {
+        if app
+            .try_state::<Shutdown>()
+            .is_some_and(|state| state.0.load(Ordering::SeqCst))
+        {
+            return 1;
+        }
+        request_close(app);
+    }
+    0
+}
+fn install_quit_guard(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = APPLICATION.set(app.clone());
+    unsafe {
+        let send: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+        ) -> *mut std::ffi::c_void = std::mem::transmute(objc_msgSend as *const ());
+        let application = send(
+            objc_getClass(c"NSApplication".as_ptr()),
+            sel_registerName(c"sharedApplication".as_ptr()),
+        );
+        let delegate = send(application, sel_registerName(c"delegate".as_ptr()));
+        if delegate.is_null()
+            || !class_addMethod(
+                object_getClass(delegate),
+                sel_registerName(c"applicationShouldTerminate:".as_ptr()),
+                should_terminate as *const std::ffi::c_void,
+                c"Q@:@".as_ptr(),
+            )
+        {
+            return Err("Draft could not enable saving before Quit.".into());
+        }
+    }
+    Ok(())
+}
 impl Drop for LocalRuntime {
     fn drop(&mut self) {
         if let Ok(mut child) = self.0.lock() {
@@ -76,6 +134,7 @@ fn main() {
       if port==0 {return Err("Draft could not start its local runtime. Your documents have not been removed.".into());}
       app.manage(LocalRuntime(Mutex::new(Some(child))));
       app.manage(Shutdown(AtomicBool::new(false)));app.manage(Connection{port,token:token.clone()});
+      install_quit_guard(app.handle())?;
       let origin=format!("http://127.0.0.1:{port}");let allowed=origin.clone();
       WebviewWindowBuilder::new(app,"main",WebviewUrl::External(format!("{origin}/?token={token}").parse()?))
         .title("Draft").inner_size(1200.0,820.0).min_inner_size(780.0,560.0).center()

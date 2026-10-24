@@ -4,6 +4,8 @@ A local writing app you can make your own. Write, compare alternate wording, set
 
 **macOS first · MIT · Early alpha**
 
+[Verified behavior and remaining release work](docs/alpha-status-2026-10-24.md).
+
 [Download the latest build](https://github.com/eabnelson/draft/releases) · [Product spec — October 24, 2026](docs/draft-product-spec-2026-10-24.md) · [Original inspiration](https://x.com/jasonfried/status/2105403067793584590)
 
 ## Use Draft
