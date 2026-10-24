@@ -1,11 +1,11 @@
 # Build a Draft update
 
-Complete the requested change in the candidate source directory supplied by the host. The current application remains in use while you work. Your output becomes an update only after the host's independent checks succeed.
+Complete the requested change in the candidate source directory supplied by the host. The current application remains in use while you work. Your output becomes an update only after the host's independent checks succeed. For an external-agent handoff, follow the copied prompt's completion steps instead of the in-app JSON reply below.
 
 1. Read `features.json`, the requested feature's implementation, and the relevant tests. For an add request, verify whether equivalent behavior already exists. If it does, explain where it is and finish with the structured `already_exists` result.
 2. Implement the complete requested behavior. Use the existing editor and Studio Four UI patterns. Application UI is in `src/`; local backend additions can use `src/runtime.ts`. Preserve other accepted personal changes.
 3. Add meaningful checks for changed behavior. The host runs the project's checks; resolve any failures it returns. Keep document formats backward compatible and preserve unknown metadata.
-4. Update the high-level entry in `features.json`. New features use origin `personal`; changed official features retain their stable IDs. Removing functionality records state `removed`. Include creation/last-update timestamps and dependency IDs where needed. Keep the consumer descriptions short.
+4. Update the high-level entry in `features.json`. New features use origin `personal`; changed official features retain their stable IDs. Removing functionality records state `removed`. Include creation/last-update timestamps and dependency IDs where needed. Keep the consumer descriptions short. Use everyday language for titles and summaries; put compiler output, filenames, and implementation details in diagnostics for the agent, outside the normal update screen.
 5. Finish with a JSON result matching the host's schema: outcome, title, summary, featureId. The summary appears in the consumer's app: use one or two short sentences describing what they can now do (360 characters maximum). Keep file paths, build details, and repair history out of it. An independent build, validation, and installation step follows your response.
 
 For removal, remove the requested behavior and identify dependent custom features before changing them. For official synchronization, integrate the supplied official source while retaining the named personal changes; resolve conflicts in code and verify the result. If a dependency or conflict cannot be resolved while preserving other requested capabilities, explain it as a failed update.

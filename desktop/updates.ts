@@ -6,9 +6,10 @@ import {spawn} from 'node:child_process';
 import {atomicWrite,copySource,exists,readJSON,safeId,sourceHash,assertContainedFiles} from './files';
 import {validateCatalog,likelyMatch,differences} from './catalog';
 import {Agents,builderSandbox,cleanEnvironment} from './agents';
-import type {HostState,Version,Update,UpdateKind,FeaturesState,AgentSelection,Catalog} from './types';
+import {featureHandoffPrompt} from './handoff';
+import type {HostState,Version,Update,UpdateKind,FeaturesState,AgentSelection,Catalog,Handoff,HandoffPrompt} from './types';
 
-const nativeHostVersion='0.2.0-alpha.1';
+const nativeHostVersion='0.2.0-alpha.2';
 const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['implemented','already_exists','failed']},title:{type:'string',maxLength:80},summary:{type:'string',maxLength:360},featureId:{type:'string'}},required:['outcome','title','summary','featureId'],additionalProperties:false};
 export function parseAgentResult(text:string){let value;try{value=JSON.parse(text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw Error('The coding agent did not return a valid completion result.');}if(!['implemented','already_exists','failed'].includes(value.outcome)||typeof value.title!=='string'||typeof value.summary!=='string'||typeof value.featureId!=='string')throw Error('The coding agent returned an incomplete result.');return value as {outcome:'implemented'|'already_exists'|'failed';title:string;summary:string;featureId:string};}
 export class Updates {
@@ -29,12 +30,13 @@ export class Updates {
     if(this.state.schemaVersion!==1||!this.active)throw Error('Draft could not open its application version record. Your document files are separate and remain available.');
     for(const update of this.state.updates)if(['checking','preparing','building'].includes(update.state)){update.state='failed';update.stage='Interrupted';update.error='Draft closed while preparing this update. Your current version was preserved.';}
     if(this.state.pendingActivation){const pending=this.state.pendingActivation;this.state.activeVersion=pending.previous;const update=this.state.updates.find(u=>u.versionId===pending.version);if(update){update.state='failed';update.stage='Previous version restored';update.error='The new version did not finish starting. Draft restored the previous version.';}delete this.state.pendingActivation;}
+    await this.registerBundledVersion();
     await this.save();
   }
   get active(){return this.state.versions.find(v=>v.id===this.state.activeVersion)!;}
   get official(){return this.state.versions.find(v=>v.id===this.state.officialVersion)!;}
   private save():Promise<void>{const value=JSON.stringify(this.state,null,2)+'\n';const next=this.saving.then(()=>atomicWrite(this.statePath,value));this.saving=next.catch(()=>{});return next;}
-  view():FeaturesState{return {official:this.official.catalog,current:this.active.catalog,activeVersion:this.active.id,updates:this.state.updates.slice(-30).reverse(),selection:this.state.selection,sourcePath:this.active.source,documentsPath:join(this.root,'Documents'),appVersion:this.active.catalog.appVersion,nativeHostVersion,...(this.state.latestOfficial?{latestOfficial:{tag:this.state.latestOfficial.tag,url:this.state.latestOfficial.url}}:{})};}
+  view():FeaturesState{const bundled=this.state.versions.find(v=>v.id===this.state.bundledOfficialVersion&&v.id!==this.official.id);return {official:this.official.catalog,current:this.active.catalog,activeVersion:this.active.id,updates:this.state.updates.slice(-30).reverse(),handoffs:(this.state.handoffs??[]).filter(h=>h.baseVersion===this.active.id),selection:this.state.selection,sourcePath:this.active.source,documentsPath:join(this.root,'Documents'),appVersion:this.active.catalog.appVersion,nativeHostVersion,...(bundled?{latestOfficial:{tag:`v${bundled.catalog.appVersion}`,url:'https://github.com/eabnelson/draft/releases'}}:this.state.latestOfficial?{latestOfficial:{tag:this.state.latestOfficial.tag,url:this.state.latestOfficial.url}}:{})};}
   async select(selection:AgentSelection){const providers=await this.agents.discover();if(!providers.some(p=>p.ready&&p.id===selection.provider&&p.models.some(m=>m.id===selection.model)))throw Error('That model is not available from a connected agent.');this.state.selection=selection;await this.save();}
   async defaultSelection(){if(!this.state.selection){const selection=await this.agents.select();if(selection){this.state.selection=selection;await this.save();}}return this.state.selection;}
   async request(kind:UpdateKind,request:string,featureId?:string){
@@ -57,11 +59,13 @@ export class Updates {
         update.checks=[{name:'Official source available',passed:await exists(join(this.official.dist,'index.html'))}];if(!update.checks[0].passed)throw Error('The official application files are missing.');await this.progress(update,'ready','Update ready');return;
       }
       const selection=await this.defaultSelection();if(!selection)throw Error('Connect Claude Code or Codex in Model settings before requesting this update.');
-      workspace=join(this.builds,update.id,'source');await copySource(this.active.source,workspace);await symlink(this.dependencies,join(workspace,'node_modules'),'dir');
+      workspace=join(this.builds,update.id,'source');await copySource(this.active.source,workspace);await symlink(this.dependencies,join(workspace,'node_modules'),'dir');await this.syncControllerSources(workspace);
       let officialSource:string|undefined;
       if(update.kind==='official'){
-        if(!this.state.latestOfficial)throw Error('Check for an official update first.');
-        officialSource=await this.downloadOfficial(this.state.latestOfficial,join(this.builds,update.id,'official'),signal);
+        const bundled=this.state.versions.find(v=>v.id===this.state.bundledOfficialVersion&&v.id!==this.official.id);
+        if(bundled)officialSource=bundled.source;
+        else{if(!this.state.latestOfficial)throw Error('Check for an official update first.');officialSource=await this.downloadOfficial(this.state.latestOfficial,join(this.builds,update.id,'official'),signal);}
+        const reference=join(workspace,'.draft-upstream');await copySource(officialSource,reference);officialSource=reference;
       }
       const instructions=await readFile(join(this.template,'docs/feature-builder.md'),'utf8');
       const personal=differences(this.official.catalog,this.active.catalog);
@@ -73,30 +77,90 @@ export class Updates {
         if(signal.aborted)throw Error('Cancelled.');
         if(result.outcome==='already_exists'){update.state='already-exists';update.stage='Already in Draft';update.summary=result.summary;update.existingFeatureId=result.featureId;await this.save();return;}
         if(result.outcome==='failed')throw Error(result.summary);
-        update.title=result.title.slice(0,80);update.summary=result.summary.slice(0,360);update.featureId=result.featureId;
+        update.title=result.title.slice(0,80);update.summary=result.summary.slice(0,360);if(update.kind==='remove'&&result.featureId!==update.featureId)throw Error('The requested feature removal was not completed.');update.featureId=result.featureId;
         await this.progress(update,'building','Checking the update');
         try{update.checks=await this.buildCandidate(workspace,signal);break;}
         catch(error){feedback=`The host's independent checks failed. Complete the implementation and fix these failures before returning implemented:\n${String(error).slice(-14000)}`;if(attempt===2)throw Error(`The update did not pass its checks. ${String(error).slice(-3000)}`);}
       }
       if(!result)throw Error('The agent did not complete the update.');
-      const catalog=validateCatalog(await readJSON(join(workspace,'features.json')));
-      const feature=catalog.features.find(f=>f.id===result!.featureId);
-      if(update.kind==='add'&&(!feature||feature.state!=='active'))throw Error('The new feature is missing from the update catalog.');
-      if(update.kind==='remove'&&catalog.features.find(f=>f.id===update.featureId)?.state!=='removed')throw Error('The requested removal was not recorded by the update.');
-      const versionId=`personal-${update.id}`,destination=join(this.root,'versions',versionId),source=join(destination,'source'),dist=join(destination,'dist');
-      await copySource(workspace,source);await cp(join(workspace,'dist'),dist,{recursive:true});
-      const version:Version={id:versionId,label:update.title,createdAt:new Date().toISOString(),source,dist,catalog,officialId:this.official.id,parentId:update.baseVersion,changeId:update.id,sourceHash:await sourceHash(source),artifactHash:await sourceHash(dist)};
-      this.state.versions.push(version);update.versionId=versionId;
+      const version=await this.storeCandidate(update,workspace);
       if(officialSource){const officialCatalog=validateCatalog(await readJSON(join(officialSource,'features.json'))),id=`official-${officialCatalog.appVersion}`;if(!this.state.versions.some(v=>v.id===id)){const folder=join(this.root,'versions',id);await copySource(officialSource,join(folder,'source'));await cp(join(officialSource,'dist'),join(folder,'dist'),{recursive:true});this.state.versions.push({id,label:`Draft ${officialCatalog.appVersion}`,createdAt:new Date().toISOString(),source:join(folder,'source'),dist:join(folder,'dist'),catalog:officialCatalog,officialId:id,sourceHash:await sourceHash(join(folder,'source')),artifactHash:await sourceHash(join(folder,'dist'))});}version.officialId=id;}
       await this.progress(update,'ready','Update ready');
     }catch(error){if(update.state!=='cancelled'){update.state='failed';update.stage='Update couldn’t be prepared';update.error=error instanceof Error?error.message:String(error);update.updatedAt=new Date().toISOString();await this.save();}}
+  }
+  private async registerBundledVersion(){
+    const catalog=validateCatalog(await readJSON(join(this.template,'features.json'))),id=`official-${catalog.appVersion}`;
+    if(!this.state.versions.some(v=>v.id===id)){
+      const folder=join(this.root,'versions',id),source=join(folder,'source'),dist=join(folder,'dist');
+      await copySource(this.template,source);await cp(join(this.template,'dist'),dist,{recursive:true});
+      this.state.versions.push({id,label:`Draft ${catalog.appVersion}`,createdAt:new Date().toISOString(),source,dist,catalog,officialId:id,sourceHash:await sourceHash(source),artifactHash:await sourceHash(dist)});
+    }
+    const newer=Bun.semver.order(catalog.appVersion,this.official.catalog.appVersion)>0;
+    this.state.bundledOfficialVersion=newer?id:this.official.id;
+    const unchanged=this.active.id===this.official.id&&this.active.sourceHash&&await sourceHash(this.active.source)===this.active.sourceHash;
+    if(newer&&id!==this.active.id&&unchanged&&!this.state.updates.some(u=>['checking','preparing','building','ready','applying'].includes(u.state))&&!this.state.updates.some(u=>u.kind==='official'&&u.versionId===id)){
+      const now=new Date().toISOString();this.state.updates.push({id:crypto.randomUUID(),kind:'official',request:'Update Draft.',title:'A new version of Draft',state:'ready',stage:'Update ready',createdAt:now,updatedAt:now,baseVersion:this.active.id,versionId:id});
+    }
+  }
+  private async syncControllerSources(workspace:string){
+    for(const folder of ['desktop','scripts','src-tauri']){await rm(join(workspace,folder),{recursive:true,force:true});await copySource(join(this.template,folder),join(workspace,folder));}
+  }
+  private async storeCandidate(update:Update,workspace:string){
+    const catalog=validateCatalog(await readJSON(join(workspace,'features.json'))),feature=catalog.features.find(f=>f.id===update.featureId);
+    if(update.kind==='add'&&feature?.state!=='active')throw Error('The requested feature is missing from this update.');
+    if(update.kind==='remove'&&feature?.state!=='removed')throw Error('The requested removal is missing from this update.');
+    const versionId=`personal-${update.id}`,folder=join(this.root,'versions',versionId),source=join(folder,'source'),dist=join(folder,'dist');
+    await copySource(workspace,source);await cp(join(workspace,'dist'),dist,{recursive:true});
+    const version:Version={id:versionId,label:update.title,createdAt:new Date().toISOString(),source,dist,catalog,officialId:this.official.id,parentId:update.baseVersion,changeId:update.id,sourceHash:await sourceHash(source),artifactHash:await sourceHash(dist)};
+    this.state.versions.push(version);update.versionId=versionId;return version;
+  }
+  async handoff(input:{updateId?:string;featureId?:string}):Promise<HandoffPrompt>{
+    const update=input.updateId?this.state.updates.find(u=>u.id===input.updateId):this.state.updates.findLast(u=>u.featureId===input.featureId&&u.state==='applied');
+    if(!update||!['add','remove'].includes(update.kind))throw Error('Choose a feature to keep working on.');
+    if(['checking','preparing','building','applying'].includes(update.state)||this.runningId===update.id)throw Error('Wait for this update to finish or stop it first.');
+    this.state.handoffs??=[];
+    let handoff=this.state.handoffs.findLast(h=>(h.updateId===update.id||h.lastUpdateId===update.id)&&h.baseVersion===this.active.id&&h.hostVersion===nativeHostVersion);
+    if(!handoff){
+      const id=crypto.randomUUID(),workspace=join(dirname(this.builds),'Handoffs',id,'source');
+      const version=this.state.versions.find(v=>v.id===update.versionId),candidate=join(this.builds,update.id,'source');
+      // An applied historical feature starts from today's app, preserving later changes.
+      const source=update.state==='applied'?this.active.source:version?.source??(await exists(candidate)?candidate:this.active.source);
+      await assertContainedFiles(source);await copySource(source,workspace);await this.syncControllerSources(workspace);await symlink(this.dependencies,join(workspace,'node_modules'),'dir');
+      const previous=this.state.handoffs.findLast(h=>h.updateId===update.id||h.lastUpdateId===update.id);
+      handoff={id,updateId:update.id,workspace,baseVersion:this.active.id,hostVersion:nativeHostVersion,createdAt:new Date().toISOString(),previousWorkspace:previous?.workspace};this.state.handoffs.push(handoff);await this.save();
+    }
+    const original=this.state.updates.find(u=>u.id===handoff.updateId)!;
+    const latest=this.state.updates.find(u=>u.id===handoff.lastUpdateId)??update;
+    return {id:handoff.id,updateId:handoff.updateId,prompt:featureHandoffPrompt({handoff,original,latest,active:this.active,official:this.official.catalog,bun:this.bun,selection:this.state.selection})};
+  }
+  async checkHandoff(id:string){
+    const handoff=this.state.handoffs?.find(h=>h.id===id),original=this.state.updates.find(u=>u.id===handoff?.updateId);
+    if(!handoff||!original)throw Error('Copy a feature prompt first.');
+    if(handoff.baseVersion!==this.active.id||handoff.hostVersion!==nativeHostVersion)throw Error('Your app has changed. Copy a fresh prompt to continue; your previous work has been kept.');
+    if(this.controller||this.state.updates.some(u=>u.state==='applying'||(u.state==='ready'&&u.id!==handoff.updateId&&u.id!==handoff.lastUpdateId)))throw Error('Finish or cancel your other update first.');
+    const now=new Date().toISOString(),update:Update={id:crypto.randomUUID(),kind:original.kind,request:original.request,featureId:original.featureId,title:original.title,state:'building',stage:'Getting your changes ready',createdAt:now,updatedAt:now,baseVersion:this.active.id,handoffId:handoff.id};
+    this.state.updates.push(update);handoff.lastUpdateId=update.id;this.controller=new AbortController();this.runningId=update.id;await this.save();
+    void this.prepareHandoff(handoff,update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
+  }
+  private async prepareHandoff(handoff:Handoff,update:Update,signal:AbortSignal){
+    try{
+      await assertContainedFiles(handoff.workspace);
+      const workspace=join(this.builds,update.id,'source');await copySource(handoff.workspace,workspace);await symlink(this.dependencies,join(workspace,'node_modules'),'dir');
+      update.checks=await this.buildCandidate(workspace,signal);if(signal.aborted)throw Error('Cancelled.');
+      const catalog=validateCatalog(await readJSON(join(workspace,'features.json')));
+      if(!update.featureId){const changes=catalog.features.filter(f=>f.state===(update.kind==='remove'?'removed':'active')&&JSON.stringify(this.active.catalog.features.find(before=>before.id===f.id))!==JSON.stringify(f));if(changes.length!==1)throw Error('Record one high-level feature entry in features.json so Draft can identify this change.');update.featureId=changes[0].id;}
+      update.title=catalog.features.find(f=>f.id===update.featureId)?.title??update.title;
+      await this.storeCandidate(update,workspace);
+      for(const previous of this.state.updates)if(previous.state==='ready'&&previous.id!==update.id&&(previous.id===handoff.updateId||previous.handoffId===handoff.id)){previous.state='cancelled';previous.stage='Replaced by your latest changes';previous.updatedAt=new Date().toISOString();}
+      await this.progress(update,'ready','Update ready');
+    }catch(error){if(update.state!=='cancelled'){update.state='failed';update.stage='A little more work is needed';update.error=error instanceof Error?error.message:String(error);update.updatedAt=new Date().toISOString();await this.save();}}
   }
   private async buildCandidate(workspace:string,signal:AbortSignal){
     await assertContainedFiles(workspace);validateCatalog(await readJSON(join(workspace,'features.json')));
     // Native controller changes need a separately packaged host, never a silent
     // hot swap. The editable runtime and renderer cover normal personal features.
     for(const folder of ['desktop','scripts','src-tauri']){
-      if(await sourceHash(join(workspace,folder))!==await sourceHash(join(this.active.source,folder)))throw Error('This feature changes the native host and needs a full desktop build. Your existing app is unchanged.');
+      if(await sourceHash(join(workspace,folder))!==await sourceHash(join(this.template,folder)))throw Error('This feature changes the native host and needs a full desktop build. Your existing app is unchanged.');
     }
     const checks:{name:string;passed:boolean;detail?:string}[]=[];
     const dependencySet=(manifest:any)=>JSON.stringify([manifest.dependencies??{},manifest.devDependencies??{},manifest.optionalDependencies??{},manifest.overrides??{}]);
@@ -131,12 +195,12 @@ export class Updates {
     this.state.previousVersion=this.state.activeVersion;this.state.pendingActivation={version:version.id,previous:this.state.activeVersion,deadline:Date.now()+20000};
     this.state.activeVersion=version.id;update.state='applying';update.stage='Applying update';await this.save();return {version:version.id};
   }
-  async confirm(versionId:string){const pending=this.state.pendingActivation;if(!pending||pending.version!==versionId)return;const update=this.state.updates.find(u=>u.versionId===versionId&&u.state==='applying');if(update){update.state='applied';update.stage='Updated';update.updatedAt=new Date().toISOString();}this.state.officialVersion=this.active.officialId;delete this.state.pendingActivation;await this.save();}
+  async confirm(versionId:string){const pending=this.state.pendingActivation;if(!pending||pending.version!==versionId)return;const update=this.state.updates.find(u=>u.versionId===versionId&&u.state==='applying');if(update){update.state='applied';update.stage='Updated';update.updatedAt=new Date().toISOString();}this.state.officialVersion=this.active.officialId;if(this.state.latestOfficial?.tag===`v${this.official.catalog.appVersion}`)delete this.state.latestOfficial;delete this.state.pendingActivation;await this.save();}
   async recoverIfNeeded(){const p=this.state.pendingActivation;if(p&&Date.now()>p.deadline){this.state.activeVersion=p.previous;const update=this.state.updates.find(u=>u.versionId===p.version);if(update){update.state='failed';update.stage='Previous version restored';update.error='The update did not confirm startup. Your previous version was restored.';}delete this.state.pendingActivation;await this.save();return true;}return false;}
   async checkOfficial(){
     const response=await fetch('https://api.github.com/repos/eabnelson/draft/releases/latest',{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(12000)});
     if(response.status===404)return {available:false,message:'You have the latest available official version.'};if(!response.ok)throw Error('Official releases could not be checked. Try again later.');
-    const release=await response.json() as any;if(release.tag_name===`v${this.official.catalog.appVersion}`)return {available:false,message:'Official Draft is up to date.'};
+    const release=await response.json() as any;if(Bun.semver.order(String(release.tag_name).replace(/^v/,''),this.official.catalog.appVersion)<=0)return {available:false,message:'Official Draft is up to date.'};
     const asset=release.assets.find((a:any)=>a.name==='draft-update.json');if(!asset)return {available:false,message:'This release does not provide a compatible source update.'};
     const manifest=await (await fetch(asset.browser_download_url,{signal:AbortSignal.timeout(12000)})).json() as any;
     if(typeof manifest.sourceUrl!=='string'||!manifest.sourceUrl.startsWith('https://github.com/eabnelson/draft/releases/download/')||!/^[a-f0-9]{64}$/.test(manifest.sha256)||typeof manifest.signature!=='string')throw Error('The official release metadata is invalid.');

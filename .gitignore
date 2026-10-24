@@ -9,3 +9,4 @@ src-tauri/target/
 .env*
 *-private-key.pem
 src-tauri/gen/
+.draft-upstream/

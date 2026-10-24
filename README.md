@@ -26,6 +26,8 @@ Removing a feature and returning to official Draft use the same prepare → upda
 
 The alpha supports changes to the editor and its local runtime. Changes to the native shell or update controller require a new packaged desktop build. Automated checks reduce mistakes; they cannot prove every generated feature is correct. Keep a backup before relying on an experimental feature.
 
+If a feature isn’t quite right, choose **Keep working on this**. **Copy prompt** gives your local Claude Code or Codex agent the request, progress, and a separate working copy. Tell it what you want changed, then return to **Check my changes**. Draft checks the work and offers **Update app** when it is ready. Your current app and writing stay in place while you iterate.
+
 ## Your files and source
 
 Draft keeps its data in `~/Library/Application Support/Draft/`:

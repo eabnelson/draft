@@ -122,3 +122,13 @@ Also exercise duplicate requests, canceled/failed builds, provider authenticatio
 7. **One model:** use the selected Claude Code/Codex connection for both writing assistance and building features, with separate tool permissions. Prefer Claude Opus 5.5 when both are usable, remembering an explicit user choice.
 
 Implementation choices should preserve these product decisions. Signing/notarization and supported native-host customization must be reported from actual release evidence, rather than inferred from a successful web build.
+
+## Feature refinement — October 24 follow-up
+
+Update progress uses everyday language. Compiler output, filenames, and technical verification details belong in the agent's context, outside the consumer update screen.
+
+A ready, applied, cancelled, or unsuccessful feature can offer **Keep working on this**. **Copy prompt** provides the original request, current result, relevant diagnostics, existing features, and a separate working copy for the person's local agent. The agent asks what the person wants changed before editing. The prompt includes the local build commands and leaves real documents, credentials, and installed versions alone.
+
+The person returns to **Check my changes**. Draft independently copies, checks, and prepares that work as a new update; **Update app** remains the explicit activation step. A failed check preserves the current app, earlier prepared update, and editable work. If the app changes meanwhile, a fresh prompt includes the preserved earlier working copy as a reference.
+
+Draft's mark is an empty light grey highlight with a grey squiggle underneath on white. It uses the editor's existing highlight and underline colors; no letters appear inside the highlight.

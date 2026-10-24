@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {DocumentStore} from '../desktop/documents';
 import {fresh,addCandidate,choose} from '../src/model';
 import {validateCatalog,differences,likelyMatch} from '../desktop/catalog';
-import {readJSON,atomicWrite,sourceHash,safeId,within} from '../desktop/files';
+import {readJSON,atomicWrite,sourceHash,safeId,within,copySource} from '../desktop/files';
 import {Updates,parseAgentResult} from '../desktop/updates';
 import type {Catalog,HostState,Version} from '../desktop/types';
 const catalog=await readJSON<Catalog>(join(import.meta.dir,'../features.json'));
@@ -64,5 +64,18 @@ test('discarding an older failure leaves the current preparation running',async(
   Object.assign(host,{controller,runningId:'current'});
   host.state={schemaVersion:1,activeVersion:'v',officialVersion:'v',versions:[],updates:[{id:'older',kind:'add',request:'',title:'old',state:'failed',stage:'failed',baseVersion:'v',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}]};
   await host.discard('older');expect(controller.signal.aborted).toBe(false);expect(host.state.updates[0].state).toBe('cancelled');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+
+test('generated native build files do not invalidate a clean working copy',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'draft-generated-'));try{
+  const source=join(root,'original'),copy=join(root,'copy');
+  await atomicWrite(join(source,'src-tauri','host.rs'),'trusted source');
+  await atomicWrite(join(source,'src-tauri','gen','schema.json'),'generated metadata');
+  await atomicWrite(join(source,'src-tauri','binaries','build-helper'),'generated binary');
+  await atomicWrite(join(source,'src-tauri','.DS_Store'),'Finder metadata');
+  await copySource(source,copy);
+  expect(await sourceHash(join(source,'src-tauri'))).toBe(await sourceHash(join(copy,'src-tauri')));
  }finally{await rm(root,{recursive:true,force:true});}
 });

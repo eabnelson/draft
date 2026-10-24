@@ -53,6 +53,8 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRe
         if(url.pathname==='/api/updates/apply'&&request.method==='POST')return json(await updates.apply(input.id));
         if(url.pathname==='/api/updates/confirm'&&request.method==='POST'){await updates.confirm(input.version);return json({confirmed:true});}
         if(url.pathname==='/api/updates/check'&&request.method==='POST')return json(await updates.checkOfficial());
+        if(url.pathname==='/api/updates/handoff'&&request.method==='POST')return json(await updates.handoff({updateId:input.updateId,featureId:input.featureId}));
+        if(url.pathname==='/api/updates/handoff/check'&&request.method==='POST')return json(await updates.checkHandoff(input.id));
         if(url.pathname==='/api/reveal'&&request.method==='POST'){
           const path=input.kind==='source'?updates.active.source:input.kind==='documents'?documents.root:input.kind==='versions'?join(root,'versions'):null;
           if(!path)throw Error('Unknown folder.');spawn('/usr/bin/open',[path],{stdio:'ignore'}).unref();return json({opened:true});
