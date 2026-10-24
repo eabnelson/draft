@@ -41,7 +41,7 @@ export class DemoStore{
       // The editor is real; only AI generation and waiting are simulated here.
       setTimeout(()=>{if(generation!==this.generation||u.state!=='preparing')return;
         const supported=requests.every(q=>q.kind==='remove'?q.featureId?.startsWith('demo-'):/reading|read time|focus/i.test(q.request));
-        if(!supported&&input.kind!=='reset'){u.state='failed';u.error='This demo supports reading time and focus mode. Download Draft to build any feature with your agent.';}
+        if(!supported&&input.kind!=='reset'){u.state='failed';u.error='This update needs a little more work.';}
         else{u.state='ready';u.preparedAt=new Date().toISOString();u.versionId=`demo-${u.id}`;}this.emit();
       },6500);
       this.emit();return clone(u);
@@ -64,7 +64,7 @@ export class DemoStore{
       if(u){u.state='applied';const ids=new Set(u.requests?.map(q=>q.id));this.queue=this.queue.filter(q=>!ids.has(q.id));this.emit();}return {};
     }
     if(path.startsWith('/api/providers'))return {providers:[],demo:true};
-    if(path==='/api/assist')throw Error('AI is simulated here. Try writing, alternatives, set aside, and overflow. Download Draft to use your own agent.');
+    if(path==='/api/assist')throw Error('Writing assistance is unavailable right now.');
     if(path==='/api/export'){
       const draft=input.draft,kind=input.kind,blob=new Blob([kind==='native'?JSON.stringify(draft,null,2):cleanText(draft)],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${draft.title}.${kind==='native'?'draft.json':kind}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return {};
     }

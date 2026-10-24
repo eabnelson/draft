@@ -76,7 +76,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
     <div className="features-heading"><div><h1>Make Draft yours.</h1><p>Keep a list. Update when you’re ready.</p></div><span className="version-label">Draft {data?.appVersion??'…'}</span></div>
     <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
       <textarea aria-label="Feature request" placeholder="What would you like Draft to do?" value={request} onChange={event=>setRequest(event.target.value)} disabled={submitting||applying} rows={2}/>
-      <div><span>{data?.demo?'Demo · try a reading time or focus mode':data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add to your list</Button></div>
+      <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add to your list</Button></div>
     </form>
     <section className="feature-wishlist" aria-label="Your feature list">
       <header><h2>Your next update</h2><span>{ideas.length} {ideas.length===1?'idea':'ideas'}</span></header>
@@ -91,7 +91,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
       </div>
       {pending&&canContinue(pending)&&!data?.demo&&<div className="wishlist-handoff"><span>Want to work on this more?</span><Button variant="ghost" size="xs" onClick={()=>openHandoff({updateId:pending.id})}><Copy size={12}/>Get a prompt for your agent</Button></div>}
     </section>
-    {!pending&&data?.updates[0]?.state==='failed'&&data.updates[0].baseVersion===data.activeVersion&&<div className="handoff-card" role="status"><div><strong>This update needs a little more work.</strong><p>{data.demo?'Try reading time and focus mode in this demo.':'Your ideas are still in your list. Your app is unchanged.'}</p></div>{!data.demo&&canContinue(data.updates[0])&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:data.updates[0].id})}>Get a prompt for your agent</Button>}</div>}
+    {!pending&&data?.updates[0]?.state==='failed'&&data.updates[0].baseVersion===data.activeVersion&&<div className="handoff-card" role="status"><div><strong>This update needs a little more work.</strong><p>Your ideas are still in your list. Your app is unchanged.</p></div>{!data.demo&&canContinue(data.updates[0])&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:data.updates[0].id})}>Get a prompt for your agent</Button>}</div>}
     {!pending&&data?.updates[0]?.state==='already-exists'&&<p className="feature-notice" role="status">Draft already does this. You’re ready to keep writing.</p>}
     {handoff&&<div className="handoff-card"><div><strong>Working with your agent?</strong><p>Bring the changes back when you’re happy with them.</p></div><div className="handoff-card-actions"><Button variant="ghost" size="sm" onClick={()=>openHandoff({updateId:handoff.updateId})}>Copy prompt</Button><Button variant="outline" size="sm" disabled={submitting||applying||!!pending&&pending.state!=='ready'} onClick={()=>void checkChanges(handoff.id)}>Check my changes</Button></div></div>}
     {(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}
@@ -107,7 +107,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
     {!data?.demo&&<div className="features-footer"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button></div>}
     {!!data?.updates.some(u=>!busy(u)&&u.state!=='ready')&&<details className="update-history"><summary>Update history</summary>
       {data.updates.filter(u=>!busy(u)&&u.state!=='ready').map(u=><div className="history-row" key={u.id}>
-        <div><strong>{u.title}</strong><span>{status(u)} · {date(u.updatedAt,true)}</span>{u.state==='failed'&&<p>{data.demo?'This demo can add reading time and focus mode. Download Draft to build other ideas.':'Your app is unchanged. Your ideas are still in your list.'}</p>}</div>
+        <div><strong>{u.title}</strong><span>{status(u)} · {date(u.updatedAt,true)}</span>{u.state==='failed'&&<p>Your app is unchanged. Your ideas are still in your list.</p>}</div>
         {!data.demo&&canContinue(u)&&<Button variant="ghost" size="xs" disabled={!!pending&&busy(pending)} onClick={()=>openHandoff({updateId:u.id})}>Keep working on this</Button>}
       </div>)}
     </details>}
