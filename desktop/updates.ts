@@ -121,7 +121,7 @@ export class Updates {
     this.state.handoffs??=[];
     let handoff=this.state.handoffs.findLast(h=>(h.updateId===update.id||h.lastUpdateId===update.id)&&h.baseVersion===this.active.id&&h.hostVersion===nativeHostVersion);
     if(!handoff){
-      const id=crypto.randomUUID(),workspace=join(dirname(this.builds),'Handoffs',id,'source');
+      const id=crypto.randomUUID(),workspace=join(this.root,'Workspaces',id,'source');
       const version=this.state.versions.find(v=>v.id===update.versionId),candidate=join(this.builds,update.id,'source');
       // An applied historical feature starts from today's app, preserving later changes.
       const source=update.state==='applied'?this.active.source:version?.source??(await exists(candidate)?candidate:this.active.source);

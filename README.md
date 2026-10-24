@@ -34,6 +34,7 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 
 - `Documents/`: full `.draft.json` writing files, the library index, and previous-file recovery copies. Alternatives, hidden passages, and overflow are included.
 - `versions/`: the exact source and built application for official and personal versions.
+- `Workspaces/`: unfinished feature work shared with your local agent, kept until you finish iterating.
 - `state.json`: model choice, feature-update history, and active/previous version pointers.
 - `Exports/`: plain text, Markdown, and complete draft exports.
 
