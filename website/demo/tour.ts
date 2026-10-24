@@ -5,6 +5,7 @@ import type {DemoStore} from './store';
 const sample='Good writing needs room.\n\nA first draft is a place to begin. Try a different word. Give an idea a little room to breathe.\n\nThis thought can wait while the rest of the piece finds its shape.\n\nA note for another day.';
 const ease=(t:number)=>t*t*(3-2*t);
 type Point={x:number;y:number};
+type Caret={left:number;top:number;bottom:number};
 
 export class Tour{
   private controller?:AbortController;
@@ -13,14 +14,15 @@ export class Tour{
   private headline='Write your first draft.';
   private position:Point={x:80,y:40};
   private target?:HTMLElement;
+  private typingCaret?:HTMLElement;
   private decorated=new WeakSet<EditorView>();
   private reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   constructor(private store:DemoStore,private reset:()=>void){}
   private announce(){window.dispatchEvent(new CustomEvent('draft-demo-scene',{detail:{scene:this.scene,headline:this.headline,state:this.paused?'paused':'playing'}}));}
   private pointer(kind:string,point?:Point){window.dispatchEvent(new CustomEvent('draft-demo-pointer',{detail:{kind,...point}}));}
-  pause(){if(!this.controller)return;this.paused=true;this.store.setPaused(true);this.announce();}
+  pause(){if(!this.controller)return;this.paused=true;if(this.typingCaret)this.typingCaret.style.animationPlayState='paused';this.store.setPaused(true);this.announce();}
   play(){
-    if(this.controller){this.paused=false;this.store.setPaused(false);this.announce();return;}
+    if(this.controller){this.paused=false;if(this.typingCaret)this.typingCaret.style.animationPlayState='running';this.store.setPaused(false);this.announce();return;}
     this.paused=false;this.store.setPaused(false);
     const controller=new AbortController();this.controller=controller;
     void this.loop(controller.signal).catch(error=>{if(!controller.signal.aborted){console.error(error);this.controller=undefined;this.paused=true;this.store.setPaused(true);this.headline='Replay the walkthrough.';this.pointer('hide');this.announce();document.getElementById('root')!.style.opacity='1';}});
@@ -78,11 +80,21 @@ export class Tour{
     if(!this.decorated.has(view)){this.decorated.add(view);view.dispatch({effects:StateEffect.appendConfig.of(drawSelection({cursorBlinkRate:0}))});}
     return view;
   }
+  private async typeText(text:string,write:(value:string)=>Caret|null,signal:AbortSignal){
+    const caret=document.createElement('span');caret.className='tour-typing-caret';caret.setAttribute('aria-hidden','true');
+    this.typingCaret=caret;document.body.append(caret);document.body.classList.add('tour-is-typing');this.pointer('hide');
+    const update=(value:string)=>{const position=write(value);if(!position)throw Error('The walkthrough typing position is unavailable.');caret.style.transform=`translate3d(${position.left}px,${position.top}px,0)`;caret.style.height=`${Math.max(14,position.bottom-position.top)}px`;};
+    try{
+      update('');
+      for(let i=0;i<text.length;i+=2){update(text.slice(0,i+2));await this.wait(40,signal);}
+      await this.wait(650,signal);
+    }finally{caret.remove();if(this.typingCaret===caret){this.typingCaret=undefined;document.body.classList.remove('tour-is-typing');}}
+  }
   private async typeDraft(signal:AbortSignal){
     const view=this.editor(),r=view.contentDOM.getBoundingClientRect();
-    await this.move({x:r.left+12,y:r.top+16},signal);this.pointer('press');await this.wait(170,signal);this.pointer('release');await this.wait(350,signal);this.pointer('hide');
-    for(let i=0;i<sample.length;i+=2){view.dispatch({changes:{from:view.state.doc.length,insert:sample.slice(i,i+2)}});await this.wait(40,signal);}
-    await this.wait(1800,signal);
+    await this.move({x:r.left+12,y:r.top+16},signal);this.pointer('press');await this.wait(170,signal);this.pointer('release');await this.wait(350,signal);
+    await this.typeText(sample,value=>{if(value.length>view.state.doc.length)view.dispatch({changes:{from:view.state.doc.length,insert:value.slice(view.state.doc.length)}});return view.coordsAtPos(view.state.doc.length);},signal);
+    await this.wait(1150,signal);
   }
   private async select(text:string,signal:AbortSignal){
     const view=this.editor(),from=view.state.doc.toString().indexOf(text),to=from+text.length;
@@ -95,10 +107,17 @@ export class Tour{
   }
   private async field(label:string,text:string,signal:AbortSignal){
     const field=document.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`);if(!field)throw Error(`The walkthrough field is unavailable: ${label}`);
-    await this.pointAt(field,signal);this.pointer('press');await this.wait(160,signal);this.pointer('release');
+    await this.pointAt(field,signal);this.pointer('press');await this.wait(170,signal);this.pointer('release');await this.wait(350,signal);
     const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!;
-    for(let i=0;i<text.length;i+=2){set.call(field,text.slice(0,i+2));field.dispatchEvent(new Event('input',{bubbles:true}));await this.wait(42,signal);}
-    await this.wait(650,signal);
+    // Measure the native textarea's text so the same caret follows its wrapping.
+    const mirror=document.createElement('div'),marker=document.createElement('span'),style=getComputedStyle(field);
+    Object.assign(mirror.style,{position:'fixed',visibility:'hidden',pointerEvents:'none',boxSizing:'border-box',whiteSpace:'pre-wrap',overflowWrap:'break-word',padding:style.padding,fontFamily:style.fontFamily,fontSize:style.fontSize,fontWeight:style.fontWeight,fontStyle:style.fontStyle,lineHeight:style.lineHeight,letterSpacing:style.letterSpacing,textIndent:style.textIndent});
+    mirror.setAttribute('aria-hidden','true');marker.textContent='\u200b';document.body.append(mirror);
+    try{await this.typeText(text,value=>{
+      set.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));
+      const bounds=field.getBoundingClientRect();mirror.style.left=`${bounds.left+field.clientLeft-field.scrollLeft}px`;mirror.style.top=`${bounds.top+field.clientTop-field.scrollTop}px`;mirror.style.width=`${field.clientWidth}px`;
+      mirror.replaceChildren(document.createTextNode(value),marker);return marker.getBoundingClientRect();
+    },signal);}finally{mirror.remove();}
   }
   private async loop(signal:AbortSignal){
     while(!signal.aborted){
