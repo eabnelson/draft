@@ -1,0 +1,24 @@
+[package]
+name = "draft-desktop"
+version = "0.2.0-alpha.1"
+description = "A local writing app you can make your own"
+authors = ["Erik Nelson"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+libc = "0.2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+# Stripping proc-macro dylibs breaks plugin loading on the macOS Rust toolchain.
+strip = false

@@ -1,1 +1,11 @@
 .DS_Store
+node_modules/
+dist/
+resources/
+release/
+src-tauri/target/
+*.tsbuildinfo
+*.log
+.env*
+*-private-key.pem
+src-tauri/gen/

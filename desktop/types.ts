@@ -1,0 +1,11 @@
+export type Feature={id:string;title:string;description:string;updatedAt:string;createdAt?:string;origin:'official'|'personal';state:'active'|'removed';code?:string[];dependsOn?:string[]};
+export type Catalog={schemaVersion:1;appVersion:string;name:string;features:Feature[]};
+export type Model={id:string;name:string;provider:'claude'|'codex';isDefault?:boolean};
+export type Provider={id:'claude'|'codex';name:string;installed:boolean;ready:boolean;path?:string;error?:string;models:Model[]};
+export type AgentSelection={provider:'claude'|'codex';model:string};
+export type UpdateKind='add'|'remove'|'official'|'reset';
+export type UpdateState='checking'|'preparing'|'building'|'ready'|'applying'|'applied'|'failed'|'cancelled'|'already-exists';
+export type Update={id:string;kind:UpdateKind;request:string;featureId?:string;title:string;state:UpdateState;stage:string;createdAt:string;updatedAt:string;baseVersion:string;versionId?:string;error?:string;summary?:string;existingFeatureId?:string;checks?:{name:string;passed:boolean;detail?:string}[]};
+export type Version={id:string;label:string;createdAt:string;source:string;dist:string;catalog:Catalog;officialId:string;parentId?:string;changeId?:string;sourceHash?:string;artifactHash?:string};
+export type HostState={schemaVersion:1;activeVersion:string;officialVersion:string;previousVersion?:string;pendingActivation?:{version:string;previous:string;deadline:number};versions:Version[];updates:Update[];selection?:AgentSelection;latestOfficial?:{tag:string;url:string;downloadUrl:string;sha256:string;signature:string}};
+export type FeaturesState={official:Catalog;current:Catalog;activeVersion:string;updates:Update[];selection?:AgentSelection;sourcePath:string;documentsPath:string;appVersion:string;latestOfficial?:{tag:string;url:string};nativeHostVersion:string};

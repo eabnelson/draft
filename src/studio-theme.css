@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* Opt in to dark styling via a .dark ancestor rather than the OS preference.
+   Studio Four ships only a light theme, so following prefers-color-scheme fired
+   shadcn's dark: utilities with no dark theme behind them. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-emphasis: var(--input-emphasis);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-lg: var(--radius);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  /* Input nudged toward the foreground: the hover state of controls that sit
+     inside a field. */
+  --input-emphasis: color-mix(in oklch, var(--input), var(--foreground) 5%);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Cloud pages set this so overscroll past the edges shows their background, not white. */
+html[data-cloud-theme="dark"],
+html[data-cloud-theme="dark"] body {
+  background: #101010;
+  color-scheme: dark;
+}
+html[data-cloud-theme="light"],
+html[data-cloud-theme="light"] body {
+  background: #fff;
+}

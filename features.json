@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "0.2.0-alpha.1",
+  "name": "Draft",
+  "features": [
+    {"id":"writing","title":"Writing & revision","description":"A focused editor with word count, clean reading, and undo.","updatedAt":"2026-10-24T16:00:00Z","origin":"official","state":"active","code":["src/Editor.tsx","src/model.ts","src/App.tsx"]},
+    {"id":"alternatives","title":"Alternate wording","description":"Compare words, sentences, and paragraphs in context.","updatedAt":"2026-10-22T16:00:00Z","origin":"official","state":"active","code":["src/model.ts","src/App.tsx"]},
+    {"id":"ghosts","title":"Set aside & revive","description":"Hide a passage without losing it.","updatedAt":"2026-10-22T16:00:00Z","origin":"official","state":"active","code":["src/model.ts","src/App.tsx"]},
+    {"id":"overflow","title":"Overflow","description":"Keep spare writing and notes beside the draft.","updatedAt":"2026-10-22T16:00:00Z","origin":"official","state":"active","code":["src/model.ts","src/App.tsx"]},
+    {"id":"documents","title":"Local documents","description":"Save, reopen, and export writing as files on your Mac.","updatedAt":"2026-10-24T16:00:00Z","origin":"official","state":"active","code":["desktop/documents.ts","src/App.tsx"]},
+    {"id":"assistance","title":"Writing assistance","description":"Alternatives, cut previews, and review through your connected agent.","updatedAt":"2026-10-24T16:00:00Z","origin":"official","state":"active","code":["desktop/agents.ts","src/App.tsx"]},
+    {"id":"personal-updates","title":"Make Draft yours","description":"Request a change and apply it as an app update.","updatedAt":"2026-10-24T16:00:00Z","origin":"official","state":"active","code":["desktop/updates.ts","src/Features.tsx"]}
+  ]
+}

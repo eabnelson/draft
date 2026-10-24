@@ -1,0 +1,15 @@
+# Build a Draft update
+
+Complete the requested change in the candidate source directory supplied by the host. The current application remains in use while you work. Your output becomes an update only after the host's independent checks succeed.
+
+1. Read `features.json`, the requested feature's implementation, and the relevant tests. For an add request, verify whether equivalent behavior already exists. If it does, explain where it is and finish with the structured `already_exists` result.
+2. Implement the complete requested behavior. Use the existing editor and Studio Four UI patterns. Application UI is in `src/`; local backend additions can use `src/runtime.ts`. Preserve other accepted personal changes.
+3. Add meaningful checks for changed behavior. The host runs the project's checks; resolve any failures it returns. Keep document formats backward compatible and preserve unknown metadata.
+4. Update the high-level entry in `features.json`. New features use origin `personal`; changed official features retain their stable IDs. Removing functionality records state `removed`. Include creation/last-update timestamps and dependency IDs where needed. Keep the consumer descriptions short.
+5. Finish with a JSON result matching the host's schema: outcome, title, summary, featureId. The summary appears in the consumer's app: use one or two short sentences describing what they can now do (360 characters maximum). Keep file paths, build details, and repair history out of it. An independent build, validation, and installation step follows your response.
+
+For removal, remove the requested behavior and identify dependent custom features before changing them. For official synchronization, integrate the supplied official source while retaining the named personal changes; resolve conflicts in code and verify the result. If a dependency or conflict cannot be resolved while preserving other requested capabilities, explain it as a failed update.
+
+Edit the candidate workspace and its test fixtures. Real writing documents, provider credentials, application-controller state, and previous versions are outside this task. Preserve native-host files and the build toolchain unless the request explicitly requires changing them; a native-host change requires a separately packaged desktop update, and must be reported rather than presented as a live application update.
+
+Use the bundled dependencies and local runtime. New dependencies require a valid package manifest and lockfile; retain all license notices. Keep terminal commands and implementation details out of the product's normal user flow.

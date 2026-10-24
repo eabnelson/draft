@@ -1,0 +1,13 @@
+import {mkdir,readFile,copyFile,stat} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {createHash,sign} from 'node:crypto';
+const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'package.json')).json()).version;
+const output=join(root,'release');await mkdir(output,{recursive:true});
+const source=join(output,`Draft-${version}-source.tar.gz`);
+const child=Bun.spawn(['/usr/bin/tar','-czf',source,'-C',join(root,'resources/source-template'),'.'],{stdout:'ignore',stderr:'inherit'});if(await child.exited)throw Error('Could not package matching source.');
+const data=await readFile(source),hash=createHash('sha256').update(data).digest('hex');
+const keyPath=process.env.DRAFT_UPDATE_SIGNING_KEY_PATH;if(!keyPath)throw Error('Set DRAFT_UPDATE_SIGNING_KEY_PATH to sign this official source update.');
+const signature=sign(null,Buffer.from(hash),await readFile(keyPath)).toString('base64');
+const manifest={version,sourceUrl:`https://github.com/eabnelson/draft/releases/download/v${version}/Draft-${version}-source.tar.gz`,sha256:hash,signature,nativeHostVersion:version};
+await Bun.write(join(output,'draft-update.json'),JSON.stringify(manifest,null,2)+'\n');
+console.log(`Signed source update prepared for v${version}.`);
