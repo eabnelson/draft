@@ -2,7 +2,7 @@
 .app{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .topbar,.save-error{flex-shrink:0}
 .sidebar-header{display:flex;align-items:center;gap:12px;min-width:180px;flex-shrink:0}
-.sidebar-header .panel-toggle{margin:0}.sidebar-header .brand{min-width:0}
+.sidebar-header .panel-toggle{margin:0;background:transparent}.sidebar-header .brand{min-width:0}
 .workspace,.without-panel .workspace{flex:1;min-height:0;overflow:hidden;grid-template-columns:0 minmax(0,1fr) 0;grid-template-areas:"alternatives writing overflow"}
 .with-panel .workspace{grid-template-columns:260px minmax(0,1fr) 0}
 .with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 290px}

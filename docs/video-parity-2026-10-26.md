@@ -37,3 +37,5 @@ In alpha 7, place the sidebar toggle at the far left of the app header. Show the
 In alpha 8, center the indicator beneath the marked wording (beneath the final line for a wrapped passage). Show one dot for the original and each alternative, and mark the selected wording. Left/right arrows cycle through wordings in the draft and comparison controls; arrows in an editable alternative continue to move the text cursor.
 
 In alpha 9, place the sidebar close control immediately to the right of the Draft wordmark. With the sidebar closed, show only the open control at the far left.
+
+In alpha 10, use plain rounded sidebar icons without arrows: a full divider when open and a short inset bar when closed. Keep the toggle background transparent in both states, including hover.
