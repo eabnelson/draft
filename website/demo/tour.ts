@@ -160,7 +160,8 @@ export class Tour{
       await this.step('Build','Your AI builds the update.',signal);await this.click('Download update',signal);await this.updateReady(signal);
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
       await this.step('Use','Reading time. Made for you.',signal);
-      const reading=document.querySelector<HTMLElement>('.demo-reading-time');if(!reading)throw Error('Reading time was not activated.');await this.pointAt(reading,signal);await this.wait(2000,signal);
+      const reading=document.querySelector<HTMLElement>('.demo-reading-time');if(!reading)throw Error('Reading time was not activated.');await this.pointAt(reading,signal);
+      const badge=reading.getBoundingClientRect();await this.move({x:badge.left+badge.width/2,y:badge.bottom+36},signal,300);await this.wait(2000,signal);
       await this.step('Use','Your focus mode, ready to use.',signal);await this.click('Focus',signal);await this.wait(2400,signal);
       await this.click('Exit focus',signal);
       if(!this.store.hasReadingTime||!this.store.hasFocus)throw Error('The walkthrough update did not activate both features.');
