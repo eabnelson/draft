@@ -9,7 +9,7 @@ const cases={},result=document.getElementById('result');
 function report(){result.textContent=JSON.stringify({status:Object.values(cases).some(c=>c.error)?'FAIL':Object.values(cases).length===document.querySelectorAll('iframe').length&&Object.values(cases).every(c=>c.complete)?'PASS':'RUNNING',cases},null,1);}
 function fail(state,message){state.error=message;report();}
 for(const frame of document.querySelectorAll('iframe')){
- const name=frame.dataset.case,state=cases[name]={scene:'Loading',wordings:[],sidebarOpen:false,sidebarClosed:false,queued:0,ready:false,readingTime:false,focus:false,customFeatures:false,scrolled:false,complete:false};
+ const name=frame.dataset.case,state=cases[name]={scene:'Loading',wordings:[],cursorClear:false,sidebarOpen:false,sidebarClosed:false,queued:0,ready:false,readingTime:false,focus:false,customFeatures:false,scrolled:false,complete:false};
  const fit=()=>{const r=frame.parentElement.getBoundingClientRect();frame.style.transform=`scale(${Math.min(r.width/Number(frame.width),r.height/Number(frame.height))})`;};new ResizeObserver(fit).observe(frame.parentElement);fit();
  let doc,observer,inner,scheduled=false;
  function sample(){
@@ -27,6 +27,13 @@ for(const frame of document.querySelectorAll('iframe')){
    if(!state.wordings.some(v=>v.word===word&&v.count===count)){
     const rect=mark.getBoundingClientRect(),row=dots.querySelector('.wording-options').getBoundingClientRect(),error=Math.abs(row.left+row.width/2-rect.left-rect.width/2);
     if(error>1)return fail(state,`Wording dots are not centered: ${word}, ${count} options, ${error.toFixed(2)}px.`);
+    if(state.scene==='Compare with ← →.'){
+     const disc=frame.contentDocument.querySelector('.glass-cursor.visible .cursor-disc');if(disc){
+      const pointer=disc.getBoundingClientRect(),canvas=inner.getBoundingClientRect(),scale=canvas.width/doc.documentElement.clientWidth;
+      const covered=[rect,row].some(r=>pointer.left<canvas.left+r.right*scale&&pointer.right>canvas.left+r.left*scale&&pointer.top<canvas.top+r.bottom*scale&&pointer.bottom>canvas.top+r.top*scale);
+      if(covered)return fail(state,'The comparison cursor covers the wording or option dots.');state.cursorClear=true;
+     }
+    }
     state.wordings.push({word,count,selected});
    }
   }
@@ -51,7 +58,7 @@ for(const frame of document.querySelectorAll('iframe')){
    if(state.scene==='Replay the walkthrough.')return fail(state,'The tour stopped before completing.');
    if(event.data.scene==='Home'){
     const words=state.wordings,verified=words.some(v=>v.word==='paperclip'&&v.count===3&&v.selected===0)&&words.some(v=>v.word==='thumbtack'&&v.count===3&&v.selected===1)&&words.some(v=>v.word==='eraser'&&v.count===3&&v.selected===2);
-    if(!verified||!state.sidebarOpen||!state.sidebarClosed||state.queued!==2||!state.ready||!state.readingTime||!state.focus||!state.customFeatures||!state.scrolled)return fail(state,'A required walkthrough step was not observed.');
+    if(!verified||!state.cursorClear||!state.sidebarOpen||!state.sidebarClosed||state.queued!==2||!state.ready||!state.readingTime||!state.focus||!state.customFeatures||!state.scrolled)return fail(state,'A required walkthrough step was not observed.');
     state.complete=true;frame.contentDocument.querySelector('#toggle')?.click();observer?.disconnect();report();
    }
   });

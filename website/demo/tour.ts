@@ -77,11 +77,17 @@ export class Tour{
   private async compare(direction:-1|1,word:string,signal:AbortSignal){
     const control=this.findButton(direction<0?'Previous wording':'Next wording');if(!control)throw Error('The wording comparison control is unavailable.');
     const before=this.editor().contentDOM.querySelector<HTMLElement>('.variant');if(!before)throw Error('The marked wording is unavailable.');
-    await this.pointAt(before,signal);control.focus({preventScroll:true});
+    const beside=(element:HTMLElement)=>{
+      const r=element.getBoundingClientRect(),scale=(window.frameElement?.getBoundingClientRect().width??window.innerWidth)/window.innerWidth;
+      // The glass cursor has a fixed size in the landing page, outside this scaled app.
+      const gap=30/(scale||1),x=(r.left+r.right)/2,y=(r.top+r.bottom)/2;
+      return [{x,y:r.bottom+gap},{x:r.right+gap,y},{x,y:r.top-gap},{x:r.left-gap,y}].find(p=>p.x>=gap&&p.x<=window.innerWidth-gap&&p.y>=gap&&p.y<=window.innerHeight-gap)??{x:Math.max(0,r.left-gap),y:Math.max(0,r.top-gap)};
+    };
+    await this.reveal(before,signal);this.mark(before);await this.move(beside(before),signal);control.focus({preventScroll:true});
     control.dispatchEvent(new KeyboardEvent('keydown',{key:direction<0?'ArrowLeft':'ArrowRight',bubbles:true,cancelable:true}));
     await this.until(()=>this.editor().contentDOM.querySelector('.variant')?.textContent===word,signal);
     const after=this.editor().contentDOM.querySelector<HTMLElement>('.variant')!;
-    await this.move(this.center(after),signal,250);await this.wait(1400,signal);this.mark();
+    await this.move(beside(after),signal,250);await this.wait(1400,signal);this.mark();
   }
   private editorBounds(view:EditorView){const scroller=view.dom.closest<HTMLElement>('.writing-area')!,bounds=scroller.getBoundingClientRect(),toolbar=scroller.querySelector('.draft-toolbar')?.getBoundingClientRect().height??0;return {scroller,top:bounds.top+toolbar+12,bottom:bounds.bottom-12};}
   private async revealRange(view:EditorView,from:number,to:number,signal:AbortSignal){
