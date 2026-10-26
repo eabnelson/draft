@@ -1,9 +1,10 @@
 import { ChangeSet, Text } from '@codemirror/state';
-import {plainText,balancedRange} from './markdown';
+import {plainText,balancedRange,inferWordingScope,type WordingScope} from './markdown';
 
 export type Span = {from:number; to:number};
 export type Candidate = {id:string; text:string; origin:'human'|'ai'; humanEdited?:boolean};
-export type Variant = Span & {id:string; original:string; candidates:Candidate[]; active:string|null};
+export type Variant = Span & {id:string; original:string; candidates:Candidate[]; active:string|null;scope?:WordingScope};
+export const variantScope=(variant:Pick<Variant,'original'|'scope'>):WordingScope=>variant.scope??inferWordingScope(variant.original);
 export type Ghost = Span & {id:string};
 export type Draft = {format:'writing-room'; version:1; id:string; title:string; text:string; variants:Variant[]; ghosts:Ghost[]; overflow:string; revision:number; revisionMode:boolean; updatedAt:string};
 export type Cut = Span & {id:string; text:string; reason:string; accepted:boolean; replacement?:string};
@@ -49,12 +50,12 @@ export function applyChanges(d:Draft, changes:ChangeSet):Draft {
 export function replace(d:Draft,from:number,to:number,insert:string):Draft {
   return applyChanges(d,ChangeSet.of({from,to,insert},d.text.length));
 }
-export function addVariant(d:Draft, range:Span):{draft:Draft; variantId:string} {
+export function addVariant(d:Draft, range:Span,scope?:WordingScope):{draft:Draft; variantId:string} {
   if(range.from===range.to)throw new Error('Select some words in your draft first.');
   const existing=d.variants.find(v=>overlaps(v,range));
-  if(existing){if(contains(existing,range))return {draft:d,variantId:existing.id};throw new Error('This selection overlaps an existing alternative. Select a separate passage.');}
+  if(existing){if(contains(existing,range)){const update=scope&&range.from===existing.from&&range.to===existing.to&&scope!==existing.scope;return {draft:update?changed(d,{variants:d.variants.map(v=>v.id===existing.id?{...v,scope}:v)}):d,variantId:existing.id};}throw new Error('This selection overlaps an existing alternative. Select a separate passage.');}
   if(d.ghosts.some(g=>overlaps(g,range)))throw new Error('Revive this passage before adding alternatives.');
-  const v:Variant={...range,id:id(),original:d.text.slice(range.from,range.to),candidates:[],active:null};
+  const original=d.text.slice(range.from,range.to),v:Variant={...range,id:id(),original,candidates:[],active:null,scope:scope??inferWordingScope(original)};
   return {draft:changed(d,{variants:[...d.variants,v]}),variantId:v.id};
 }
 export function addCandidate(d:Draft,variantId:string,text:string,origin:'human'|'ai'='human'):Draft {
@@ -120,6 +121,7 @@ export function parseDraft(raw:string):Draft {
   const fail=()=>{throw new Error('The document contains invalid editing data. Your current draft is unchanged.');};
   if(typeof x.id!=='string'||typeof x.title!=='string'||typeof x.text!=='string'||typeof x.overflow!=='string'||!Array.isArray(x.variants)||!Array.isArray(x.ghosts)||!Number.isInteger(x.revision)||x.revision<0||typeof x.revisionMode!=='boolean')fail();
   const ids=new Set<string>();
+  if(x.variants.some((v:any)=>v?.scope!==undefined&&!['word','sentence','paragraph'].includes(v.scope)))fail();
   const span=(r:any)=>{if(!r||!Number.isInteger(r.from)||!Number.isInteger(r.to)||r.from<0||r.to<=r.from||r.to>x.text.length||typeof r.id!=='string'||ids.has(r.id))fail();ids.add(r.id);};
   x.variants.forEach((v:any)=>{span(v);if(typeof v.original!=='string'||!Array.isArray(v.candidates))fail();const cids=new Set<string>();v.candidates.forEach((c:any)=>{if(!c||typeof c.id!=='string'||cids.has(c.id)||typeof c.text!=='string'||!c.text||!['human','ai'].includes(c.origin)||(c.humanEdited!==undefined&&typeof c.humanEdited!=='boolean'))fail();cids.add(c.id);});if(v.active!==null&&!cids.has(v.active))fail();const active=v.active===null?v.original:v.candidates.find((c:any)=>c.id===v.active).text;if(x.text.slice(v.from,v.to)!==active)fail();});
   x.ghosts.forEach(span);

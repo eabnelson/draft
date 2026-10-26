@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.11",
+  "appVersion": "0.2.0-alpha.12",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "Write in Markdown, format selected text, and keep a clean reading view.",
-      "updatedAt": "2026-10-26T18:55:38.998Z",
+      "updatedAt": "2026-10-26T20:38:50.188Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -24,7 +24,7 @@
       "id": "alternatives",
       "title": "Alternate wording",
       "description": "Compare wordings in place, with a sound when you return to the original.",
-      "updatedAt": "2026-10-26T18:34:03.930Z",
+      "updatedAt": "2026-10-26T20:38:50.188Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -32,7 +32,9 @@
         "src/App.tsx",
         "src/WritingPanels.tsx",
         "src/Editor.tsx",
-        "src/comparison-sound.ts"
+        "src/comparison-sound.ts",
+        "src/writing.css",
+        "src/markdown.ts"
       ]
     },
     {

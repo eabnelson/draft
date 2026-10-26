@@ -80,6 +80,12 @@ export function plainText(markdown:string):string {
 }
 
 export type WordingScope='word'|'sentence'|'paragraph';
+export function inferWordingScope(text:string):WordingScope {
+  if(text.includes('\n'))return 'paragraph';
+  const visible=plainText(text).trim();if(!/\s/.test(visible))return 'word';
+  let sentences=0;for(const part of new Intl.Segmenter('en',{granularity:'sentence'}).segment(visible))if(part.segment.trim()&&++sentences>1)return 'paragraph';
+  return 'sentence';
+}
 export function scopeRange(text:string,range:Span,scope:WordingScope):Span {
   const point=Math.min(range.from,text.length);
   if(scope==='word'){

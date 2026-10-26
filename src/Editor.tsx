@@ -2,28 +2,29 @@ import {useEffect,useRef,useState,forwardRef,useImperativeHandle} from 'react';
 import {EditorState,StateEffect,StateField,ChangeSet,Prec} from '@codemirror/state';
 import {EditorView,Decoration,keymap,placeholder,drawSelection,WidgetType,ViewPlugin,type DecorationSet} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap} from '@codemirror/commands';
-import {type Draft,type Span,type Cut,overlaps,contains} from './model';
-import {formatMarkdown,type TextFormat} from './markdown';
+import {type Draft,type Span,type Cut,overlaps,contains,variantScope} from './model';
+import {formatMarkdown,type TextFormat,type WordingScope} from './markdown';
 import {markdownEditing,showMarkdown} from './editor-markdown';
 import {TextMenu} from './TextMenu';
 
 type Annotations={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;focusPassage?:boolean};
 const annotate=StateEffect.define<Annotations>();
 class WordingDots extends WidgetType {
-  constructor(readonly count:number,readonly selected:number,readonly id:string){super();}
-  eq(other:WordingDots){return other.count===this.count&&other.selected===this.selected&&other.id===this.id;}
+  constructor(readonly count:number,readonly selected:number,readonly id:string,readonly scope:WordingScope){super();}
+  eq(other:WordingDots){return other.count===this.count&&other.selected===this.selected&&other.id===this.id&&other.scope===this.scope;}
   toDOM(){
     const span=document.createElement('span'),dots=document.createElement('span');
-    span.className=`wording-dots ${this.selected?'is-alternate':''}`;span.dataset.variant=this.id;
+    span.className=`wording-dots is-${this.scope} ${this.selected?'is-alternate':''}`;span.dataset.variant=this.id;span.dataset.wordingScope=this.scope;span.style.setProperty('--wording-count',String(this.count));
     const label=`${this.selected?'Alternative':'Original'} wording · ${this.selected+1} of ${this.count}`;
     span.setAttribute('role','img');span.setAttribute('aria-label',label);span.title=`${label}. Use ← → to compare.`;
     dots.className='wording-options';dots.setAttribute('aria-hidden','true');
     for(let i=0;i<this.count;i++){const dot=document.createElement('i');if(i===this.selected)dot.className='is-selected';dots.append(dot);}
+    if(this.scope==='paragraph'){const rail=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');rail.classList.add('wording-rail');rail.setAttribute('width','6');rail.setAttribute('aria-hidden','true');rail.append(path);span.append(rail);}
     span.append(dots);return span;
   }
   ignoreEvent(){return false;}
 }
-// Measure after CodeMirror lays out the text, including wrapping and scaled demo views.
+// Measure the rendered passage after wrapping, Markdown, and viewport scaling.
 const centerWordingDots=ViewPlugin.define(view=>{
   const measure={
     read(view:EditorView){
@@ -33,15 +34,22 @@ const centerWordingDots=ViewPlugin.define(view=>{
         rects.push(...Array.from(mark.getClientRects()).filter(r=>r.width>0));passages.set(id,rects);
       }
       return Array.from(view.contentDOM.querySelectorAll<HTMLElement>('.wording-dots'),dot=>{
+        if(dot.dataset.wordingScope==='sentence')return {dot,offset:0,top:0,height:0};
         const rects=passages.get(dot.dataset.variant!)??[],last=rects.at(-1);
-        if(!last)return {dot,offset:0};
-        // A passage that wraps keeps its indicator centered beneath its final line.
+        if(!last)return {dot,offset:0,top:0,height:0};
+        if(dot.dataset.wordingScope==='paragraph'){
+          const top=Math.min(...rects.map(r=>r.top)),bottom=Math.max(...rects.map(r=>r.bottom)),anchor=dot.getBoundingClientRect();
+          return {dot,offset:(Math.min(...rects.map(r=>r.left))-18-anchor.left)/view.scaleX,top:(top-anchor.top)/view.scaleY,height:(bottom-top)/view.scaleY};
+        }
         const line=rects.filter(r=>r.top<last.bottom&&r.bottom>last.top);
         const center=(Math.min(...line.map(r=>r.left))+Math.max(...line.map(r=>r.right)))/2;
-        return {dot,offset:(center-dot.getBoundingClientRect().left)/view.scaleX};
+        return {dot,offset:(center-dot.getBoundingClientRect().left)/view.scaleX,top:0,height:0};
       });
     },
-    write(positions:{dot:HTMLElement;offset:number}[]){for(const {dot,offset} of positions)dot.style.setProperty('--wording-center',`${offset}px`);},
+    write(positions:{dot:HTMLElement;offset:number;top:number;height:number}[]){for(const {dot,offset,top,height} of positions){
+      dot.style.setProperty('--wording-center',`${offset}px`);dot.style.setProperty('--wording-top',`${top}px`);dot.style.setProperty('--wording-height',`${height}px`);
+      const rail=dot.querySelector('svg');if(rail){rail.setAttribute('height',String(height));let path='M3 0';for(let y=0;y<height;y+=4)path+=`Q${y%8?6:0} ${y+2} 3 ${y+4}`;rail.querySelector('path')!.setAttribute('d',path);}
+    }},
   };
   view.requestMeasure(measure);
   return {docViewUpdate:()=>view.requestMeasure(measure),update:(update)=>{if(update.geometryChanged)view.requestMeasure(measure);}};
@@ -55,8 +63,10 @@ const decorations=StateField.define<DecorationSet>({
     if(focusPassage&&focused){const before=d.text.lastIndexOf('\n\n',focused.from),after=d.text.indexOf('\n\n',focused.to),from=before<0?0:before+2,to=after<0?d.text.length:after;for(let n=1;n<=tr.state.doc.lines;n++){const line=tr.state.doc.line(n);if(line.to<from||line.from>to)marks.push(Decoration.line({class:'passage-muted'}).range(line.from));}}
     if(d.revisionMode){
       for(const v of d.variants)if(v.candidates.length){
-        marks.push(Decoration.mark({class:`variant ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,attributes:{'data-variant':v.id,title:'Hover and use ← → to compare wordings'}}).range(v.from,v.to));
-        marks.push(Decoration.widget({widget:new WordingDots(v.candidates.length+1,v.active===null?0:v.candidates.findIndex(c=>c.id===v.active)+1,v.id),side:1}).range(v.to));
+        const scope=variantScope(v);
+        marks.push(Decoration.mark({class:`variant variant-${scope} ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,inclusiveEnd:scope==='sentence',attributes:{'data-variant':v.id,title:'Hover and use ← → to compare wordings'}}).range(v.from,v.to));
+        if(scope==='sentence'){const tail=/\S+\s*$/.exec(d.text.slice(v.from,v.to));if(tail)marks.push(Decoration.mark({class:'sentence-ending',inclusiveEnd:true}).range(v.from+tail.index,v.to));}
+        marks.push(Decoration.widget({widget:new WordingDots(v.candidates.length+1,v.active===null?0:v.candidates.findIndex(c=>c.id===v.active)+1,v.id,scope),side:scope==='sentence'?-1:1}).range(v.to));
       }
       for(const g of d.ghosts)marks.push(Decoration.mark({class:'ghost-text',attributes:{'data-ghost':g.id,'aria-label':'Ghosted text. Right-click to revive.',title:'Ghosted — right-click to revive'}}).range(g.from,g.to));
     }else for(const g of d.ghosts)marks.push(Decoration.replace({}).range(g.from,g.to));

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fresh,addVariant,addCandidate,choose,ghost,parseDraft,cleanText,editCandidate,validateQuotes,makeCuts} from '../src/model';
-import {formatMarkdown,plainText,scopeRange} from '../src/markdown';
+import {fresh,addVariant,addCandidate,choose,ghost,parseDraft,cleanText,editCandidate,validateQuotes,makeCuts,variantScope} from '../src/model';
+import {formatMarkdown,plainText,scopeRange,inferWordingScope} from '../src/markdown';
 import {comparisonFrequency} from '../src/comparison-sound';
 
 test('the paperclip example adjusts articles and returns to the exact original',()=>{
@@ -45,6 +45,32 @@ test('word, sentence, and paragraph scopes follow the selected prose',()=>{
   const paragraph=scopeRange(text,{from,to:from},'paragraph');assert.equal(text.slice(paragraph.from,paragraph.to),'A first thought. Another thought here.');
 });
 test('returning to the original has a lower comparison tone',()=>{assert.ok(comparisonFrequency(true)<comparisonFrequency(false));});
+test('wording size distinguishes multiple sentences from a long single sentence',()=>{
+  assert.equal(inferWordingScope('paperclip'),'word');
+  assert.equal(inferWordingScope('A clear sentence.'),'sentence');
+  assert.equal(inferWordingScope(Array(45).fill('word').join(' ')+'.'),'sentence');
+  assert.equal(inferWordingScope('A first thought. Another thought.'),'paragraph');
+  assert.equal(inferWordingScope('One line\nAnother line'),'paragraph');
+});
+test('a paragraph keeps its size through shorter alternatives, edits, and reopening',()=>{
+  const original='A short paragraph.',result=addVariant({...fresh(),text:original},{from:0,to:original.length},'paragraph');
+  let draft=addCandidate(result.draft,result.variantId,'Brief.');draft=choose(draft,result.variantId,draft.variants[0].candidates[0].id);
+  draft=editCandidate(draft,result.variantId,draft.variants[0].active!,'Smaller.');draft=parseDraft(JSON.stringify(draft));
+  assert.equal(variantScope(draft.variants[0]),'paragraph');assert.equal(draft.text,'Smaller.');
+  assert.equal(variantScope(choose(draft,result.variantId,null).variants[0]),'paragraph');
+});
+test('switching the size of the same passage retains its original and alternatives',()=>{
+  const original='One complete sentence.',result=addVariant({...fresh(),text:original},{from:0,to:original.length},'sentence');
+  const before=addCandidate(result.draft,result.variantId,'Another sentence.'),updated=addVariant(before,{from:0,to:original.length},'paragraph');
+  assert.equal(updated.variantId,result.variantId);assert.equal(updated.draft.variants.length,1);assert.equal(variantScope(updated.draft.variants[0]),'paragraph');
+  assert.deepEqual(updated.draft.variants[0].candidates,before.variants[0].candidates);assert.equal(updated.draft.variants[0].original,original);
+});
+test('legacy wording sizes use the original while invalid stored sizes are rejected',()=>{
+  const original='First sentence. Second sentence.',result=addVariant({...fresh(),text:original},{from:0,to:original.length});
+  let draft=addCandidate(result.draft,result.variantId,'Short.');draft=choose(draft,result.variantId,draft.variants[0].candidates[0].id);
+  delete draft.variants[0].scope;const reopened=parseDraft(JSON.stringify(draft));assert.equal(variantScope(reopened.variants[0]),'paragraph');
+  const invalid=JSON.parse(JSON.stringify(draft));invalid.variants[0].scope='line';assert.throws(()=>parseDraft(JSON.stringify(invalid)),/invalid editing data/);
+});
 test('ghosting and accepting cuts retain valid Markdown and preserve earlier ghosts',()=>{
   let d={...fresh(),text:'Keep **this idea**. Maybe trim [spare words](https://example.com).\n\nA final thought.'};
   const from=d.text.indexOf('this idea');d=ghost(d,{from,to:from+9});assert.ok(!cleanText(d).includes('**'));
