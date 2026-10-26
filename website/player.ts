@@ -6,6 +6,7 @@ const viewer=document.querySelector<HTMLElement>('.demo-frame')!;
 const viewport=document.querySelector<HTMLElement>('.demo-viewport')!;
 const toggle=document.querySelector<HTMLButtonElement>('#toggle')!;
 const headline=document.querySelector<HTMLHeadingElement>('#headline')!;
+const openingHeadline={text:headline.textContent,html:headline.innerHTML,title:document.title};
 const cursor=document.querySelector<HTMLElement>('.glass-cursor')!;
 const disc=cursor.querySelector<HTMLElement>('.cursor-disc')!;
 const ripple=cursor.querySelector<HTMLElement>('.cursor-ripple')!;
@@ -32,10 +33,11 @@ function sync(){toggle.textContent=playing?'Pause':'Play';toggle.setAttribute('a
 function title(text:string){
   if(!text||text===headline.textContent)return;
   titleAnimation?.cancel();
-  document.title=`${text} — Draft`;
-  if(reduced){headline.textContent=text;return;}
+  document.title=text===openingHeadline.text?openingHeadline.title:`${text} — Draft`;
+  const update=()=>{if(text===openingHeadline.text)headline.innerHTML=openingHeadline.html;else headline.textContent=text;};
+  if(reduced){update();return;}
   const out=headline.animate([{opacity:1},{opacity:0}],{duration:140,fill:'forwards'});titleAnimation=out;
-  void out.finished.then(()=>{headline.textContent=text;out.cancel();titleAnimation=headline.animate([{opacity:0},{opacity:1}],{duration:260,easing:'ease-out'});}).catch(()=>{});
+  void out.finished.then(()=>{update();out.cancel();titleAnimation=headline.animate([{opacity:0},{opacity:1}],{duration:260,easing:'ease-out'});}).catch(()=>{});
 }
 function pointer(value:{kind:string;x?:number;y?:number}){
   if(value.kind==='move'&&Number.isFinite(value.x)&&Number.isFinite(value.y)){

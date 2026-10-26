@@ -127,8 +127,10 @@ export class Tour{
     },signal);}finally{mirror.remove();}
   }
   private async loop(signal:AbortSignal){
+    let completed=false;
     while(!signal.aborted){
       this.position={x:80,y:40};this.pointer('hide');this.mark();await this.fade(0,signal);this.reset();await this.wait(150,signal);await this.until(()=>!!document.querySelector('.cm-editor'),signal);if(this.mobile){this.findButton('Close side panel')?.click();await this.wait(80,signal);}await this.fade(1,signal);
+      if(completed){await this.step('Home','Your writing. Your app.',signal);await this.wait(5000,signal);}
       await this.step('Write','Write your first draft.',signal);await this.typeDraft(signal);
       await this.step('Refine','Try a different wording.',signal);await this.select('a little room to breathe',signal);await this.click('Alternative',signal);
       await this.field('New alternative wording','space to find its shape',signal);await this.click('Add alternative',signal);
@@ -149,6 +151,7 @@ export class Tour{
       await this.step('Focus','Write without distractions.',signal);await this.click('Focus',signal);await this.wait(3200,signal);
       await this.step('Write','Back to your full workspace.',signal);await this.click('Exit focus',signal);await this.wait(2600,signal);
       if(!this.store.hasReadingTime||!this.store.hasFocus)throw Error('The walkthrough update did not activate both features.');
+      completed=true;
     }
   }
 }
