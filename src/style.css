@@ -32,7 +32,7 @@ textarea:focus-visible, select:focus-visible, a:focus-visible {
   background: var(--background); position: relative; z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: -.3px; min-width: 180px; }
-.brand-mark { display: block; flex-shrink: 0; object-fit: contain; }
+.brand-wordmark { display: inline-block; padding: 0 4px 2px; border-radius: 2px; background: #f0f0f0; font-size: 18px; line-height: 1.2; font-weight: 600; letter-spacing: -.5px; text-decoration: underline wavy #a3a3a3; text-decoration-thickness: 1px; text-underline-offset: 6px; }
 .document-name { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
 .draft-title[data-slot=input] { width: 180px; border-color: transparent; box-shadow: none; font-size: 13px; padding: 4px 8px; font-weight: 500; }
 .draft-title[data-slot=input]:hover { background: var(--secondary); }
