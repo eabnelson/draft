@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,forwardRef,useImperativeHandle} from 'react';
 import {EditorState,StateEffect,StateField,ChangeSet,Prec} from '@codemirror/state';
-import {EditorView,Decoration,keymap,placeholder,drawSelection,WidgetType,type DecorationSet} from '@codemirror/view';
+import {EditorView,Decoration,keymap,placeholder,drawSelection,WidgetType,ViewPlugin,type DecorationSet} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap} from '@codemirror/commands';
 import {type Draft,type Span,type Cut,overlaps,contains} from './model';
 import {formatMarkdown,type TextFormat} from './markdown';
@@ -10,11 +10,42 @@ import {TextMenu} from './TextMenu';
 type Annotations={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;focusPassage?:boolean};
 const annotate=StateEffect.define<Annotations>();
 class WordingDots extends WidgetType {
-  constructor(readonly alternate:boolean,readonly id:string){super();}
-  eq(other:WordingDots){return other.alternate===this.alternate&&other.id===this.id;}
-  toDOM(){const span=document.createElement('span');span.className=`wording-dots ${this.alternate?'is-alternate':''}`;span.dataset.variant=this.id;span.setAttribute('role','img');span.setAttribute('aria-label',this.alternate?'Alternative wording':'Original wording');span.title=this.alternate?'Alternative wording':'Original wording';for(let i=0;i<3;i++)span.append(document.createElement('i'));return span;}
+  constructor(readonly count:number,readonly selected:number,readonly id:string){super();}
+  eq(other:WordingDots){return other.count===this.count&&other.selected===this.selected&&other.id===this.id;}
+  toDOM(){
+    const span=document.createElement('span'),dots=document.createElement('span');
+    span.className=`wording-dots ${this.selected?'is-alternate':''}`;span.dataset.variant=this.id;
+    const label=`${this.selected?'Alternative':'Original'} wording · ${this.selected+1} of ${this.count}`;
+    span.setAttribute('role','img');span.setAttribute('aria-label',label);span.title=`${label}. Use ← → to compare.`;
+    dots.className='wording-options';dots.setAttribute('aria-hidden','true');
+    for(let i=0;i<this.count;i++){const dot=document.createElement('i');if(i===this.selected)dot.className='is-selected';dots.append(dot);}
+    span.append(dots);return span;
+  }
   ignoreEvent(){return false;}
 }
+// Measure after CodeMirror lays out the text, including wrapping and scaled demo views.
+const centerWordingDots=ViewPlugin.define(view=>{
+  const measure={
+    read(view:EditorView){
+      const passages=new Map<string,DOMRect[]>();
+      for(const mark of view.contentDOM.querySelectorAll<HTMLElement>('.variant[data-variant]')){
+        const id=mark.dataset.variant!,rects=passages.get(id)??[];
+        rects.push(...Array.from(mark.getClientRects()).filter(r=>r.width>0));passages.set(id,rects);
+      }
+      return Array.from(view.contentDOM.querySelectorAll<HTMLElement>('.wording-dots'),dot=>{
+        const rects=passages.get(dot.dataset.variant!)??[],last=rects.at(-1);
+        if(!last)return {dot,offset:0};
+        // A passage that wraps keeps its indicator centered beneath its final line.
+        const line=rects.filter(r=>r.top<last.bottom&&r.bottom>last.top);
+        const center=(Math.min(...line.map(r=>r.left))+Math.max(...line.map(r=>r.right)))/2;
+        return {dot,offset:(center-dot.getBoundingClientRect().left)/view.scaleX};
+      });
+    },
+    write(positions:{dot:HTMLElement;offset:number}[]){for(const {dot,offset} of positions)dot.style.setProperty('--wording-center',`${offset}px`);},
+  };
+  view.requestMeasure(measure);
+  return {docViewUpdate:()=>view.requestMeasure(measure),update:(update)=>{if(update.geometryChanged)view.requestMeasure(measure);}};
+});
 const decorations=StateField.define<DecorationSet>({
   create:()=>Decoration.none,
   update(value,tr){
@@ -24,8 +55,8 @@ const decorations=StateField.define<DecorationSet>({
     if(focusPassage&&focused){const before=d.text.lastIndexOf('\n\n',focused.from),after=d.text.indexOf('\n\n',focused.to),from=before<0?0:before+2,to=after<0?d.text.length:after;for(let n=1;n<=tr.state.doc.lines;n++){const line=tr.state.doc.line(n);if(line.to<from||line.from>to)marks.push(Decoration.line({class:'passage-muted'}).range(line.from));}}
     if(d.revisionMode){
       for(const v of d.variants)if(v.candidates.length){
-        marks.push(Decoration.mark({class:`variant ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,attributes:{'data-variant':v.id,title:'Hover and use ↑ ↓ to compare wordings'}}).range(v.from,v.to));
-        marks.push(Decoration.widget({widget:new WordingDots(v.active!==null,v.id),side:1}).range(v.to));
+        marks.push(Decoration.mark({class:`variant ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,attributes:{'data-variant':v.id,title:'Hover and use ← → to compare wordings'}}).range(v.from,v.to));
+        marks.push(Decoration.widget({widget:new WordingDots(v.candidates.length+1,v.active===null?0:v.candidates.findIndex(c=>c.id===v.active)+1,v.id),side:1}).range(v.to));
       }
       for(const g of d.ghosts)marks.push(Decoration.mark({class:'ghost-text',attributes:{'data-ghost':g.id,'aria-label':'Ghosted text. Right-click to revive.',title:'Ghosted — right-click to revive'}}).range(g.from,g.to));
     }else for(const g of d.ghosts)marks.push(Decoration.replace({}).range(g.from,g.to));
@@ -51,7 +82,7 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
-      markdownEditing,decorations,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
+      markdownEditing,decorations,centerWordingDots,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
       EditorView.contentAttributes.of({'aria-label':'Draft body',role:'textbox','aria-multiline':'true',spellcheck:'true',autocapitalize:'sentences'}),
       Prec.highest(keymap.of([
         {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},{key:'Mod-Shift-z',run:()=>{current.current.onAction('redo');return true;}},

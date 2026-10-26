@@ -34,7 +34,9 @@
 .alternatives-footer [data-slot=button]{padding:0;font-size:11px;font-weight:400;color:#777}
 .cycle-control{gap:3px;font-size:10px;margin-top:15px;padding-top:10px}.cycle-control [data-slot=button]{font-size:14px}
 .wording-dots{display:inline;position:relative;font-size:0;line-height:0;margin:0;cursor:pointer;user-select:none}
-.wording-dots i{position:absolute;left:-12px;top:11px;width:2px;height:2px;border-radius:50%;background:#aaa}.wording-dots i:nth-child(2){left:-7px;top:10.5px;width:3px;height:3px;border:1px solid #999;background:transparent}.wording-dots i:nth-child(3){left:-2px}.wording-dots.is-alternate i:nth-child(2){background:#555;border-color:#555}
+.wording-options{position:absolute;left:var(--wording-center,0px);top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;white-space:nowrap}
+.wording-options i{flex:none;width:3px;height:3px;box-sizing:border-box;border:1px solid transparent;border-radius:50%;background:#bbb}
+.wording-options .is-selected{background:transparent;border-color:#777}.is-alternate .wording-options .is-selected{background:#555;border-color:#555}
 .variant-focused{background:#f4f4f4}.ghost-text,.cut-preview{color:#e8e8e8;background:transparent;text-decoration:none}
 .passage-muted{opacity:.35;transition:opacity .15s}
 .ghost-text:hover{color:#303030;background:transparent}.cut-preview{cursor:pointer}.cut-preview:hover{color:#888}

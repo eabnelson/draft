@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.7",
+  "appVersion": "0.2.0-alpha.8",
   "name": "Draft",
   "features": [
     {
@@ -24,7 +24,7 @@
       "id": "alternatives",
       "title": "Alternate wording",
       "description": "Compare wordings in place, with a sound when you return to the original.",
-      "updatedAt": "2026-10-26T18:14:51.543Z",
+      "updatedAt": "2026-10-26T18:34:03.930Z",
       "origin": "official",
       "state": "active",
       "code": [
