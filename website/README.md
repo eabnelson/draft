@@ -2,6 +2,8 @@
 
 The landing page and looping app walkthrough live here in the Draft repository.
 
+The public site is https://draft.studiofour.io/. GitHub Pages serves the build from `main`; the repository's Pages settings hold the custom domain. Cloudflare routes only the `draft` subdomain with a DNS-only CNAME to `eabnelson.github.io`.
+
 ```sh
 bun install --frozen-lockfile
 bun run website:dev

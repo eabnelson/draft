@@ -44,7 +44,7 @@ The update builder edits candidate source rather than live files. Its process is
 
 ## Landing page
 
-[Visit the website](https://eabnelson.github.io/draft/). The minimal landing page lives in [website/](website/). Run `bun run website:dev` to preview it locally.
+[Visit the website](https://draft.studiofour.io/). The minimal landing page lives in [website/](website/). Run `bun run website:dev` to preview it locally.
 
 Pushes to `main` build and publish the landing page and walkthrough to GitHub Pages through the [website workflow](.github/workflows/pages.yml).
 
