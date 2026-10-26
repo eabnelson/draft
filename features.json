@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.14",
+  "appVersion": "0.2.0-alpha.15",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "Write in Markdown, format selected text, and keep a clean reading view.",
-      "updatedAt": "2026-10-26T21:15:19.061839Z",
+      "updatedAt": "2026-10-26T21:55:47.067691Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -29,7 +29,7 @@
       "id": "alternatives",
       "title": "Alternate wording",
       "description": "Compare wordings in place, with a sound when you return to the original.",
-      "updatedAt": "2026-10-26T20:38:50.188Z",
+      "updatedAt": "2026-10-26T21:55:47.067691Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -58,7 +58,7 @@
       "id": "overflow",
       "title": "Overflow",
       "description": "Keep Markdown notes and spare writing beside your draft.",
-      "updatedAt": "2026-10-26T21:15:19.061839Z",
+      "updatedAt": "2026-10-26T21:55:47.067691Z",
       "origin": "official",
       "state": "active",
       "code": [

@@ -136,7 +136,7 @@ export function MarkdownField(props:FieldProps){
   const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false);current.current=props;
   const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
   useEffect(()=>{
-    const v=new EditorView({parent:host.current!,state:EditorState.create({doc:props.value,extensions:[markdownEditing,EditorView.lineWrapping,history(),keymap.of([
+    const v=new EditorView({parent:host.current!,state:EditorState.create({doc:props.value,extensions:[markdownEditing,EditorView.lineWrapping,drawSelection({drawRangeCursor:false}),history(),keymap.of([
       ...(['b','i','u'] as const).map((key,i)=>({key:`Mod-${key}`,run:(editor:EditorView)=>{try{applyFormat(editor,(['bold','italic','underline'] as const)[i]);}catch{}return true;}})),...historyKeymap,...defaultKeymap,
     ]),placeholder(props.placeholder??''),EditorView.contentAttributes.of({'aria-label':props.label,role:'textbox','aria-multiline':'true',spellcheck:'true'}),
     EditorView.updateListener.of(update=>{if(update.docChanged&&!syncing.current)current.current.onChange(update.state.doc.toString());}),

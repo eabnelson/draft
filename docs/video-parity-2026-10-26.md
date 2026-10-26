@@ -47,3 +47,7 @@ In alpha 12, paragraph alternatives use a vertical squiggle spanning the rendere
 ## Link editing correction — October 26, 2026
 
 Alpha 13 treats hidden link wrappers as a single caret boundary. Applying a link places the caret after it; Space, Enter, or the right arrow at the end lets the writer continue in plain text. Backspace at a link boundary removes the link while preserving its label. Deleting a whole label or across a link also removes any leftover destination and brackets. Partial label edits retain valid Markdown. Hovering or clicking linked text shows its address, an open action, Remove link, and Continue writing. These behaviors apply in the draft, alternatives, and overflow; explicit source mode continues to allow literal Markdown editing. External opening accepts only web and email addresses through the local desktop host.
+
+## Sidebar caret correction — October 26, 2026
+
+Alpha 15 uses the same measured text-caret renderer in editable alternatives and overflow as in the main draft. These fields previously used the browser’s native contenteditable caret, which filled their generous line spacing. The caret now follows the rendered text height without changing line spacing or showing a cursor for a nonempty selection.
