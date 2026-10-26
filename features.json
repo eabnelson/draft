@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.12",
+  "appVersion": "0.2.0-alpha.13",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "Write in Markdown, format selected text, and keep a clean reading view.",
-      "updatedAt": "2026-10-26T20:38:50.188Z",
+      "updatedAt": "2026-10-26T21:15:19.061839Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -17,7 +17,12 @@
         "src/WritingPanels.tsx",
         "src/markdown.ts",
         "src/editor-markdown.ts",
-        "src/TextMenu.tsx"
+        "src/TextMenu.tsx",
+        "src/links.ts",
+        "src/editor-links.ts",
+        "src/writing.css",
+        "desktop/links.ts",
+        "src/client.ts"
       ]
     },
     {
@@ -53,7 +58,7 @@
       "id": "overflow",
       "title": "Overflow",
       "description": "Keep Markdown notes and spare writing beside your draft.",
-      "updatedAt": "2026-10-26T17:04:28Z",
+      "updatedAt": "2026-10-26T21:15:19.061839Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -63,7 +68,12 @@
         "src/markdown.ts",
         "src/Editor.tsx",
         "src/editor-markdown.ts",
-        "src/TextMenu.tsx"
+        "src/TextMenu.tsx",
+        "src/links.ts",
+        "src/editor-links.ts",
+        "src/writing.css",
+        "desktop/links.ts",
+        "src/client.ts"
       ]
     },
     {

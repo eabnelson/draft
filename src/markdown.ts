@@ -4,6 +4,10 @@ import type {Span} from './model';
 export const markdownParser = parser.configure(GFM);
 export type TextFormat = 'bold'|'italic'|'underline'|'strike'|'link'|'text'|'h1'|'h2'|'h3'|'bullet'|'number';
 export type TextEdit = Span & {insert:string; selection:Span};
+export function safeLinkURL(value:string):string|null {
+  if(value.length>8192||/[\u0000-\u001f\u007f]/.test(value))return null;
+  try{const url=new URL(value.trim());return ['http:','https:','mailto:'].includes(url.protocol)?url.href:null;}catch{return null;}
+}
 
 // Removing a fully formatted phrase must remove its wrappers as well.
 export function balancedRange(text:string,range:Span):Span {
@@ -40,12 +44,12 @@ export function formatMarkdown(text:string,range:Span,format:TextFormat,href='')
   const selected=text.slice(from,to);
   if(format==='link'){
     const url=href.trim();
-    if(!/^(https?:\/\/|mailto:)/i.test(url))throw Error('Use a web address or mailto: link.');
+    if(!safeLinkURL(url))throw Error('Use a web address or mailto: link.');
     let label=selected.replace(/^\[([\s\S]*)\]\([^\n]*\)$/,'$1');
     markdownParser.parse(text).iterate({enter(node){if(node.name!=='Link'||node.from>from||node.to<to)return;const punctuation=node.node.getChildren('LinkMark'),opening=punctuation.find(n=>text.slice(n.from,n.to)==='['),closing=punctuation.find(n=>text.slice(n.from,n.to)===']');if(opening&&closing&&from>=opening.to&&to<=closing.from){label=text.slice(opening.to,closing.from);from=node.from;to=node.to;}}});
     const destination=url.replace(/[\s()<>]/g,c=>c==='('?'%28':c===')'?'%29':encodeURIComponent(c));
     const insert=`[${label}](${destination})`;
-    return {from,to,insert,selection:{from:from+1,to:from+1+label.length}};
+    return {from,to,insert,selection:{from:from+insert.length,to:from+insert.length}};
   }
   const [open,close]=format==='bold'?['**','**']:format==='italic'?['*','*']:format==='strike'?['~~','~~']:['<u>','</u>'];
   let insert:string;

@@ -5,6 +5,7 @@ import {spawn} from 'node:child_process';
 import {DocumentStore} from './documents';
 import {Updates} from './updates';
 import {writingSchema} from './writing';
+import {openExternalLink} from './links';
 import {within,exists,atomicWrite} from './files';
 import {cleanText,parseDraft} from '../src/model';
 import {plainText} from '../src/markdown';
@@ -41,6 +42,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
         if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested});
+        if(url.pathname==='/api/links/open'&&request.method==='POST'){await openExternalLink(input.url);return json({opened:true});}
         if(url.pathname==='/api/close/ready'&&request.method==='POST'){closeReady=true;return json({ready:true});}
         if(url.pathname==='/api/providers'&&request.method==='GET'){const providers=await updates.agents.discover(url.searchParams.has('refresh'));const selected=await updates.defaultSelection();return json({providers,selection:selected});}
         if(url.pathname==='/api/providers/select'&&request.method==='POST'){await updates.select(input as AgentSelection);return json({saved:true});}

@@ -75,7 +75,7 @@ const decorations=StateField.define<DecorationSet>({
   },provide:field=>EditorView.decorations.from(field)
 });
 export type EditorHandle={focus:()=>void;select:(range:Span)=>void};
-type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;onChange:(changes:ChangeSet)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
+type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
 
 function replacement(before:string,after:string){let from=0,oldTo=before.length,newTo=after.length;while(from<oldTo&&from<newTo&&before[from]===after[from])from++;while(oldTo>from&&newTo>from&&before[oldTo-1]===after[newTo-1]){oldTo--;newTo--;}return {from,to:oldTo,insert:after.slice(from,newTo)};}
 function selectContext(view:EditorView,event:MouseEvent):Span {
@@ -105,7 +105,7 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
         if(invalid){queueMicrotask(()=>current.current.onError('Select the whole marked passage, or edit within it.'));return [];}
         return tr;
       }),
-      EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes);if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
+      EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes,update.transactions.some(tr=>tr.isUserEvent('input.format')));if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
       EditorView.domEventHandlers({
         mousedown:event=>{const cut=(event.target as HTMLElement).closest<HTMLElement>('[data-cut]');if(event.button===0&&cut&&current.current.onCut&&!current.current.reviewing){event.preventDefault();current.current.onCut(cut.dataset.cut!);return true;}return false;},
         mousemove:event=>{hovered.current=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]')?.dataset.variant??null;return false;},
