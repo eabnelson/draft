@@ -29,3 +29,7 @@ Existing version-1 `.draft.json` files remain valid. Source offsets refer to Mar
 Automated behavior checks cover article adjustment and range mapping, Markdown formatting/toggling and safe links, annotation round trips, selection scopes, tone distinction, and the existing document/update checks. Browser verification uses a separate local profile so real writing remains outside test fixtures. Live AI checks must use the configured provider and report actual results; failed, cancelled, or stale requests must preserve the draft.
 
 The video’s X publication control and LinkedIn joke are not automatic publishing requirements. Draft retains explicit export and its separate Features page. This correction does not change signing/notarization status or claim that every interface detail is a pixel-for-pixel reproduction.
+
+## Header and marker follow-up — October 26, 2026
+
+In alpha 7, place the sidebar toggle at the far left of the app header. Show the Draft wordmark only while the alternatives sidebar is expanded. Place the three-dot wording indicator below the squiggle without reserving space in the line of text.

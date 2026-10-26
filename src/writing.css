@@ -1,6 +1,8 @@
 /* The writing canvas stays in the center; each notebook opens independently. */
 .app{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .topbar,.save-error{flex-shrink:0}
+.sidebar-header{display:flex;align-items:center;gap:12px;min-width:180px;flex-shrink:0}
+.sidebar-header .panel-toggle{margin:0}.sidebar-header .brand{min-width:0}
 .workspace,.without-panel .workspace{flex:1;min-height:0;overflow:hidden;grid-template-columns:0 minmax(0,1fr) 0;grid-template-areas:"alternatives writing overflow"}
 .with-panel .workspace{grid-template-columns:260px minmax(0,1fr) 0}
 .with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 290px}
@@ -31,8 +33,8 @@
 .alternatives-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .alternatives-footer [data-slot=button]{padding:0;font-size:11px;font-weight:400;color:#777}
 .cycle-control{gap:3px;font-size:10px;margin-top:15px;padding-top:10px}.cycle-control [data-slot=button]{font-size:14px}
-.wording-dots{display:inline-flex;gap:2px;align-items:center;vertical-align:middle;margin:0 3px 0 5px;cursor:pointer;user-select:none}
-.wording-dots i{width:2px;height:2px;border-radius:50%;background:#aaa}.wording-dots i:nth-child(2){width:3px;height:3px;border:1px solid #999;background:transparent}.wording-dots.is-alternate i:nth-child(2){background:#555;border-color:#555}
+.wording-dots{display:inline;position:relative;font-size:0;line-height:0;margin:0;cursor:pointer;user-select:none}
+.wording-dots i{position:absolute;left:-12px;top:11px;width:2px;height:2px;border-radius:50%;background:#aaa}.wording-dots i:nth-child(2){left:-7px;top:10.5px;width:3px;height:3px;border:1px solid #999;background:transparent}.wording-dots i:nth-child(3){left:-2px}.wording-dots.is-alternate i:nth-child(2){background:#555;border-color:#555}
 .variant-focused{background:#f4f4f4}.ghost-text,.cut-preview{color:#e8e8e8;background:transparent;text-decoration:none}
 .passage-muted{opacity:.35;transition:opacity .15s}
 .ghost-text:hover{color:#303030;background:transparent}.cut-preview{cursor:pointer}.cut-preview:hover{color:#888}
@@ -62,5 +64,7 @@
 .format-row{display:flex;align-items:center;gap:1px;padding:2px}.format-row [data-slot=button]{height:30px;min-width:30px;padding:0 7px;color:#444;border-radius:7px}.block-format-toggle{margin-left:auto;font-size:12px;gap:3px}
 .writing-menu-actions,.block-formats{display:flex;flex-direction:column;padding-top:5px;margin-top:5px;border-top:1px solid #eee}.writing-menu-actions [data-slot=button],.block-formats [data-slot=button]{justify-content:flex-start;height:32px;padding:0 9px;font-size:12px;font-weight:400}
 .text-menu p{font-size:11px;color:#982323;padding:0 8px}.link-entry{display:flex;gap:5px;padding:8px 2px 3px}.link-entry input{min-width:0;width:100%;border:1px solid #ddd;border-radius:7px;padding:5px 8px;font-size:12px;outline:none}
+@media(max-width:1100px){.sidebar-header{min-width:150px}}
+@media(max-width:760px){.sidebar-header{min-width:0;gap:8px}}
 @media(max-width:1100px){.with-panel .workspace{grid-template-columns:235px minmax(0,1fr) 0}.with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 250px}.with-panel.with-overflow .workspace{grid-template-columns:235px minmax(0,1fr) 250px}.paper{padding:40px 32px 80px}.panel-scroll{padding:18px 14px}}
 @media(max-width:760px){.workspace,.with-panel .workspace,.with-overflow .workspace,.with-panel.with-overflow .workspace{display:flex;flex-direction:column;min-height:0}.writing-area{flex:1;min-height:120px}.side-panel{flex:0 0 min(300px,38dvh);height:min(300px,38dvh);border:0;border-top:1px solid #e8e8e8}.panel-scroll{overflow-y:auto;padding:16px 22px}.alternatives-panel{order:1}.overflow-panel{order:2}.paper{padding:25px 24px 55px}.writing-controls{padding:0 12px}.draft-toolbar{min-height:44px;height:auto;padding:6px 12px}.selection-tools{order:initial;width:auto;gap:0}.selection-tools [data-slot=button]{font-size:10px;padding:0 5px}.word-count{font-size:10px}.word-count-mode,.toggle-track{display:none}.new-option{margin-top:12px}.top-actions{gap:3px}.top-actions>[aria-label="Keyboard shortcuts"]{display:none}.brand-wordmark{font-size:16px}}
