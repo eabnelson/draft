@@ -3,6 +3,7 @@ import {join} from 'node:path';
 const root=import.meta.dir;
 await rm(join(root,'dist'),{recursive:true,force:true});await mkdir(join(root,'dist'),{recursive:true});
 await cp(join(root,'index.html'),join(root,'dist/index.html'));await cp(join(root,'assets'),join(root,'dist/assets'),{recursive:true});
+await cp(join(root,'share'),join(root,'dist/share'),{recursive:true});
 const player=await Bun.build({entrypoints:[join(root,'player.ts')],outdir:join(root,'dist'),target:'browser',minify:true});if(!player.success)throw Error('The walkthrough player could not be built.');
 const child=Bun.spawn([process.execPath,join(root,'../node_modules/vite/bin/vite.js'),'build','--config',join(root,'vite.config.ts')],{cwd:join(root,'..'),stdout:'inherit',stderr:'inherit'});if(await child.exited)process.exit(1);
 const notices=[];for(const name of ['react','react-dom','scheduler','lucide-react','@codemirror/state','@codemirror/view','@codemirror/commands','@codemirror/language','@lezer/common','@lezer/highlight','@lezer/lr','style-mod','w3c-keyname','crelt','@marijn/find-cluster-break','class-variance-authority','clsx','tailwind-merge']){for(const file of ['LICENSE','LICENSE.txt','LICENSE.md'])try{notices.push(`${name}\n${await readFile(join(root,'../node_modules',name,file),'utf8')}`);break;}catch{}}
