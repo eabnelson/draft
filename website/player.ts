@@ -5,13 +5,13 @@ const viewport=document.querySelector<HTMLElement>('.demo-viewport')!;
 const toggle=document.querySelector<HTMLButtonElement>('#toggle')!;
 const headline=document.querySelector<HTMLHeadingElement>('#headline')!;
 const cursor=document.querySelector<HTMLElement>('.glass-cursor')!;
-const arrow=cursor.querySelector<HTMLElement>('.cursor-arrow')!;
+const disc=cursor.querySelector<HTMLElement>('.cursor-disc')!;
 const ripple=cursor.querySelector<HTMLElement>('.cursor-ripple')!;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const width=Number(frame.width),height=Number(frame.height);
 let playing=!reduced,ready=false,scale=1,position={x:80,y:44},titleAnimation:Animation|undefined;
 const send=(command:string)=>frame.contentWindow?.postMessage({channel:'draft-demo',command},location.origin);
-function placeCursor(){cursor.style.transform=`translate3d(${position.x*scale-5}px,${position.y*scale-3}px,0)`;}
+function placeCursor(){cursor.style.transform=`translate3d(${position.x*scale}px,${position.y*scale}px,0) translate(-50%,-50%)`;}
 function fit(){
   const availableWidth=Math.max(0,slot.clientWidth-2),availableHeight=Math.max(0,slot.clientHeight-2);
   scale=Math.max(0,Math.min(availableWidth/width,availableHeight/height));
@@ -35,7 +35,7 @@ function pointer(value:{kind:string;x?:number;y?:number}){
   if(value.kind==='hide'||value.kind==='reset'){cursor.classList.remove('visible');cursor.classList.remove('pressed');}
   if(value.kind==='press'){
     cursor.classList.add('pressed');
-    if(!reduced){arrow.animate([{transform:'scale(1)'},{transform:'scale(.84)'},{transform:'scale(1)'}],{duration:360,easing:'ease-out'});ripple.animate([{transform:'translate(-50%,-50%) scale(.3)',opacity:.8},{transform:'translate(-50%,-50%) scale(1.6)',opacity:0}],{duration:800,easing:'cubic-bezier(.2,.7,.2,1)'});}
+    if(!reduced){disc.animate([{transform:'scale(1)'},{transform:'scale(.8)'},{transform:'scale(1)'}],{duration:360,easing:'ease-out'});ripple.animate([{transform:'translate(-50%,-50%) scale(.3)',opacity:.8},{transform:'translate(-50%,-50%) scale(1.6)',opacity:0}],{duration:800,easing:'cubic-bezier(.2,.7,.2,1)'});}
   }
   if(value.kind==='release')cursor.classList.remove('pressed');
 }
