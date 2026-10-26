@@ -1,5 +1,4 @@
-import {EditorView,drawSelection} from '@codemirror/view';
-import {StateEffect} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
 import type {DemoStore} from './store';
 
 const sample='Good writing needs room.\n\nA first draft is a place to begin. Try a different word. Give an idea a little room to breathe.\n\nThis thought can wait while the rest of the piece finds its shape.\n\nA note for another day.';
@@ -15,7 +14,6 @@ export class Tour{
   private position:Point={x:80,y:40};
   private target?:HTMLElement;
   private typingCaret?:HTMLElement;
-  private decorated=new WeakSet<EditorView>();
   private reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   constructor(private store:DemoStore,private reset:()=>void){}
   private announce(){window.dispatchEvent(new CustomEvent('draft-demo-scene',{detail:{scene:this.scene,headline:this.headline,state:this.paused?'paused':'playing'}}));}
@@ -87,7 +85,6 @@ export class Tour{
   private editor(){
     const element=document.querySelector<HTMLElement>('.cm-editor'),view=element&&EditorView.findFromDOM(element);
     if(!view)throw Error('The walkthrough editor is unavailable.');
-    if(!this.decorated.has(view)){this.decorated.add(view);view.dispatch({effects:StateEffect.appendConfig.of(drawSelection({cursorBlinkRate:0}))});}
     return view;
   }
   private async typeText(text:string,write:(value:string)=>Caret|null,signal:AbortSignal,charactersPerTick=2){

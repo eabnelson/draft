@@ -1,6 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { EditorState, StateEffect, StateField, ChangeSet, Prec } from '@codemirror/state';
-import { EditorView, Decoration, keymap, placeholder, type DecorationSet } from '@codemirror/view';
+import { EditorView, Decoration, keymap, placeholder, drawSelection, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
 import { type Draft, type Span, type Cut, overlaps, contains } from './model';
 
@@ -33,7 +33,7 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
-      decorations, EditorView.lineWrapping, placeholder('Start writing…'),
+      decorations, EditorView.lineWrapping, placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
       EditorView.contentAttributes.of({'aria-label':'Draft body','spellcheck':'true','autocapitalize':'sentences'}),
       Prec.highest(keymap.of([
         {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},

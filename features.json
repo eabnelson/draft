@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.3",
+  "appVersion": "0.2.0-alpha.4",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "A focused editor with word count, clean reading, and undo.",
-      "updatedAt": "2026-10-24T16:00:00Z",
+      "updatedAt": "2026-10-26T14:02:28.277340Z",
       "origin": "official",
       "state": "active",
       "code": [
