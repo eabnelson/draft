@@ -25,7 +25,7 @@ function render(){window.draftBoot={library:structuredClone(store.library),versi
 configureDemo((path,body,signal)=>store.api(path,body,signal),()=>{render();});render();
 const tour=new Tour(store,()=>{store.reset();render();});
 const send=(value:object)=>window.parent.postMessage({channel:'draft-demo',...value},location.origin);
-window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==window.parent||event.data?.channel!=='draft-demo')return;const command=event.data.command;if(command==='play')tour.play();if(command==='pause')tour.pause();if(command==='replay')tour.replay();if(command==='hello')send({state:'ready'});});
+window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==window.parent||event.data?.channel!=='draft-demo')return;const command=event.data.command;if(command==='play')tour.play();if(command==='pause')tour.pause();if(command==='replay')tour.replay();if(command==='layout'){tour.replay(event.data.playing===true);send({state:'layout-ready',layoutId:event.data.layoutId});}if(command==='hello')send({state:'ready'});});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)tour.pause();});
 window.addEventListener('draft-demo-scene',event=>send((event as CustomEvent).detail));
 window.addEventListener('draft-demo-pointer',event=>send({pointer:(event as CustomEvent).detail}));

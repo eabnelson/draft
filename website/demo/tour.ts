@@ -27,7 +27,8 @@ export class Tour{
     const controller=new AbortController();this.controller=controller;
     void this.loop(controller.signal).catch(error=>{if(!controller.signal.aborted){console.error(error);this.controller=undefined;this.paused=true;this.store.setPaused(true);this.headline='Replay the walkthrough.';this.pointer('hide');this.announce();document.getElementById('root')!.style.opacity='1';}});
   }
-  replay(){this.controller?.abort();this.controller=undefined;this.pointer('reset');this.play();}
+  replay(autoplay=true){this.controller?.abort();this.controller=undefined;this.pointer('reset');this.mark();if(autoplay)this.play();else{this.paused=true;this.store.setPaused(true);this.reset();document.getElementById('root')!.style.opacity='1';this.scene='Write';this.headline='Write your first draft.';this.announce();}}
+  private get mobile(){return window.innerWidth<=900;}
   private animate(duration:number,update:(progress:number)=>void,signal:AbortSignal){
     return new Promise<void>((resolve,reject)=>{
       if(signal.aborted){reject(signal.reason);return;}
@@ -74,6 +75,15 @@ export class Tour{
     await this.wait(transition?180:260,signal);if(transition)await this.fade(1,signal);
     await this.wait(400,signal);
   }
+  private async mobilePanel(open:boolean,signal:AbortSignal){if(!this.mobile)return;const label=open?'Open side panel':'Close side panel';if(this.findButton(label))await this.click(label,signal,true);}
+  private editorBounds(view:EditorView){const scroller=view.dom.closest<HTMLElement>('.writing-area')!,bounds=scroller.getBoundingClientRect(),toolbar=scroller.querySelector('.draft-toolbar')?.getBoundingClientRect().height??0;return {scroller,top:bounds.top+toolbar+12,bottom:bounds.bottom-12};}
+  private async revealRange(view:EditorView,from:number,to:number,signal:AbortSignal){
+    const start=view.coordsAtPos(from),end=view.coordsAtPos(to);if(!start||!end)throw Error('The walkthrough passage is unavailable.');
+    const {scroller,top,bottom}=this.editorBounds(view),before=scroller.scrollTop;
+    let target=before;if(start.top<top)target+=start.top-top;else if(end.bottom>bottom)target+=end.bottom-bottom;
+    target=Math.max(0,Math.min(scroller.scrollHeight-scroller.clientHeight,target));
+    if(Math.abs(target-before)>2)await this.animate(this.reduced?0:900,t=>{scroller.scrollTop=before+(target-before)*ease(t);},signal);
+  }
   private editor(){
     const element=document.querySelector<HTMLElement>('.cm-editor'),view=element&&EditorView.findFromDOM(element);
     if(!view)throw Error('The walkthrough editor is unavailable.');
@@ -93,13 +103,13 @@ export class Tour{
   private async typeDraft(signal:AbortSignal){
     const view=this.editor(),r=view.contentDOM.getBoundingClientRect();
     await this.move({x:r.left+12,y:r.top+16},signal);this.pointer('press');await this.wait(170,signal);this.pointer('release');await this.wait(350,signal);
-    await this.typeText(sample,value=>{if(value.length>view.state.doc.length)view.dispatch({changes:{from:view.state.doc.length,insert:value.slice(view.state.doc.length)}});return view.coordsAtPos(view.state.doc.length);},signal,6);
+    await this.typeText(sample,value=>{if(value.length>view.state.doc.length)view.dispatch({changes:{from:view.state.doc.length,insert:value.slice(view.state.doc.length)}});const caret=view.coordsAtPos(view.state.doc.length);if(caret){const {scroller,top,bottom}=this.editorBounds(view);if(caret.bottom>bottom)scroller.scrollTop+=caret.bottom-bottom;else if(caret.top<top)scroller.scrollTop-=top-caret.top;}return view.coordsAtPos(view.state.doc.length);},signal,6);
     await this.wait(350,signal);
   }
   private async select(text:string,signal:AbortSignal){
     const view=this.editor(),from=view.state.doc.toString().indexOf(text),to=from+text.length;
     if(from<0)throw Error('The walkthrough passage is unavailable.');
-    await this.reveal(view.contentDOM,signal);
+    await this.revealRange(view,from,to,signal);
     const start=view.coordsAtPos(from),end=view.coordsAtPos(to);if(!start||!end)throw Error('The walkthrough passage is outside the editor.');
     this.mark();await this.move({x:start.left,y:(start.top+start.bottom)/2},signal);this.pointer('press');
     await this.move({x:end.left,y:(end.top+end.bottom)/2},signal,1050,false,p=>view.dispatch({selection:{anchor:from,head:from+Math.round((to-from)*p)}}));
@@ -121,14 +131,14 @@ export class Tour{
   }
   private async loop(signal:AbortSignal){
     while(!signal.aborted){
-      this.pointer('hide');this.mark();await this.fade(0,signal);this.reset();await this.wait(150,signal);await this.until(()=>!!document.querySelector('.cm-editor'),signal);await this.fade(1,signal);
+      this.position={x:80,y:40};this.pointer('hide');this.mark();await this.fade(0,signal);this.reset();await this.wait(150,signal);await this.until(()=>!!document.querySelector('.cm-editor'),signal);if(this.mobile){this.findButton('Close side panel')?.click();await this.wait(80,signal);}await this.fade(1,signal);
       await this.step('Write','Write your first draft.',signal);await this.typeDraft(signal);
       await this.step('Refine','Try a different wording.',signal);await this.select('a little room to breathe',signal);await this.click('Alternative',signal);
       await this.field('New alternative wording','space to find its shape',signal);await this.click('Add alternative',signal);
-      await this.step('Refine','Choose the words you like.',signal);await this.click('Use alternative 1',signal);await this.wait(2200,signal);
+      await this.step('Refine','Choose the words you like.',signal);await this.click('Use alternative 1',signal);await this.wait(2200,signal);await this.mobilePanel(false,signal);
       await this.step('Refine','Set a thought aside.',signal);await this.select('This thought can wait while the rest of the piece finds its shape.',signal);await this.click('Set aside',signal);await this.wait(1800,signal);
-      await this.step('Refine','Bring it back anytime.',signal);await this.click('Revive',signal);await this.wait(1600,signal);
-      await this.step('Write','Keep spare ideas nearby.',signal);await this.select('A note for another day.',signal);await this.click('Overflow',signal);await this.wait(2200,signal);
+      await this.step('Refine','Bring it back anytime.',signal);await this.mobilePanel(true,signal);await this.click('Revive',signal);await this.wait(1600,signal);await this.mobilePanel(false,signal);
+      await this.step('Write','Keep spare ideas nearby.',signal);await this.select('A note for another day.',signal);await this.click('Overflow',signal);if(this.mobile){const notes=document.querySelector<HTMLElement>('.overflow-editor');if(notes)await this.pointAt(notes,signal);}await this.wait(2200,signal);
       await this.step('Customize','Make Draft your own.',signal);await this.click('Features',signal,true);await this.wait(900,signal);
       await this.field('Feature request','Show reading time beside the word count.',signal);await this.click('Add to your list',signal);await this.wait(1100,signal);
       await this.step('Customize','Keep a list of features.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add to your list',signal);await this.wait(2000,signal);
@@ -136,7 +146,7 @@ export class Tour{
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
       await this.step('Customize','See what you’ve added.',signal);await this.click(['Features','Update ready'],signal,true);
       const lastChange=document.querySelector<HTMLElement>('.feature-column:nth-child(2) .feature-row:last-child');if(!lastChange)throw Error('The walkthrough update did not add its features.');
-      await this.pointAt(lastChange,signal);await this.wait(3200,signal);await this.click('Writing',signal,true);
+      await this.pointAt(lastChange,signal);await this.wait(3200,signal);await this.click('Writing',signal,true);await this.mobilePanel(false,signal);
       await this.step('Write','Your new features, ready to use.',signal);
       const reading=document.querySelector<HTMLElement>('.demo-reading-time');if(!reading)throw Error('Reading time was not activated.');await this.pointAt(reading,signal);await this.wait(2300,signal);
       await this.step('Focus','Write without distractions.',signal);await this.click('Focus',signal);await this.wait(3200,signal);

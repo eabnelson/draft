@@ -1,3 +1,5 @@
+import {walkthroughLayout,fitWalkthrough} from './layout';
+
 const frame=document.querySelector<HTMLIFrameElement>('#demo')!;
 const slot=document.querySelector<HTMLElement>('#stage-slot')!;
 const viewer=document.querySelector<HTMLElement>('.demo-frame')!;
@@ -8,17 +10,24 @@ const cursor=document.querySelector<HTMLElement>('.glass-cursor')!;
 const disc=cursor.querySelector<HTMLElement>('.cursor-disc')!;
 const ripple=cursor.querySelector<HTMLElement>('.cursor-ripple')!;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-const width=Number(frame.width),height=Number(frame.height);
+let layout=walkthroughLayout(window.innerWidth,window.innerHeight,matchMedia('(pointer: coarse)').matches);
+let width=layout.width,height=layout.height,layoutId=0,layoutPending=false;
 let playing=!reduced,ready=false,scale=1,position={x:80,y:44},titleAnimation:Animation|undefined;
-const send=(command:string)=>frame.contentWindow?.postMessage({channel:'draft-demo',command},location.origin);
+const send=(command:string,details:Record<string,unknown>={})=>frame.contentWindow?.postMessage({channel:'draft-demo',command,...details},location.origin);
 function placeCursor(){cursor.style.transform=`translate3d(${position.x*scale}px,${position.y*scale}px,0) translate(-50%,-50%)`;}
 function fit(){
+  const next=walkthroughLayout(window.innerWidth,window.innerHeight,matchMedia('(pointer: coarse)').matches),changed=next.id!==layout.id;
+  layout=next;width=layout.width;height=layout.height;
+  frame.width=String(width);frame.height=String(height);frame.style.width=`${width}px`;frame.style.height=`${height}px`;
+  viewer.dataset.layout=layout.id;
   const availableWidth=Math.max(0,slot.clientWidth-2),availableHeight=Math.max(0,slot.clientHeight-2);
-  scale=Math.max(0,Math.min(availableWidth/width,availableHeight/height));
-  viewer.style.width=`${width*scale+2}px`;viewer.style.height=`${height*scale+2}px`;
+  const fitted=fitWalkthrough(availableWidth,availableHeight,layout);scale=fitted.scale;
+  viewer.style.width=`${fitted.width+2}px`;viewer.style.height=`${fitted.height+2}px`;
   frame.style.transform=`scale(${scale})`;placeCursor();viewer.classList.add('is-ready');
+  if(changed&&ready){layoutPending=true;cursor.classList.remove('visible');send('layout',{playing,layoutId:++layoutId});}
 }
 new ResizeObserver(fit).observe(slot);fit();
+window.addEventListener('resize',fit);
 function sync(){toggle.textContent=playing?'Pause':'Play';toggle.setAttribute('aria-label',playing?'Pause':'Play');}
 function title(text:string){
   if(!text||text===headline.textContent)return;
@@ -42,7 +51,8 @@ function pointer(value:{kind:string;x?:number;y?:number}){
 window.addEventListener('message',event=>{
   if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.channel!=='draft-demo')return;
   const value=event.data;
-  if(value.pointer){pointer(value.pointer);return;}
+  if(value.pointer){if(!layoutPending)pointer(value.pointer);return;}
+  if(value.state==='layout-ready'){if(value.layoutId===layoutId)layoutPending=false;return;}
   if(value.state==='ready'){if(!ready){ready=true;if(playing)send('play');}return;}
   if(typeof value.headline==='string')title(value.headline);
   if(typeof value.scene==='string')viewer.dataset.scene=value.scene;

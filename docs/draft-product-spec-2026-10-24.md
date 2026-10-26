@@ -147,3 +147,7 @@ The repo includes a minimal landing page with the real editor and Features compo
 ### Walkthrough clarity — October 24, 2026
 
 Keep the complete landing page and app walkthrough within the viewer's screen height. Preserve one app canvas size throughout the loop and scale it uniformly to the available space. Use a smooth glass cursor with visible click feedback, deliberate pauses, and gentle internal scrolling. The page heading explains each step as it begins. Pause and resume retain the current position; replay resets the sequence. Keep the walkthrough free of demo-only labels.
+
+### Responsive walkthrough — October 26, 2026
+
+Fit the complete app frame within the available browser width and height, including smaller and shorter windows. Use a mobile portrait presentation on narrow screens and a compact landscape presentation for small, wide windows. Mobile writing tools appear in a bottom panel; personal features appear before official features in the stacked comparison. Keep the logical canvas stable within each presentation. Crossing between presentations restarts the walkthrough with the previous Play/Pause setting so cursor targets stay aligned.
