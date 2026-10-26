@@ -816,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "draft-desktop"
-version = "0.2.0-alpha.13"
+version = "0.2.0-alpha.14"
 dependencies = [
  "libc",
  "serde_json",

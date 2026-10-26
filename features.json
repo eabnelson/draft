@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.13",
+  "appVersion": "0.2.0-alpha.14",
   "name": "Draft",
   "features": [
     {
@@ -105,7 +105,7 @@
       "id": "personal-updates",
       "title": "Make Draft yours",
       "description": "Keep a feature list, download an update, and restart to make it yours.",
-      "updatedAt": "2026-10-26T19:06:35.581Z",
+      "updatedAt": "2026-10-26T21:18:24.063734Z",
       "origin": "official",
       "state": "active",
       "code": [

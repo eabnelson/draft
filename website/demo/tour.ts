@@ -154,7 +154,7 @@ export class Tour{
       await this.step('Refine','Set a thought aside.',signal);await this.select('This thought can wait while the rest of the piece finds its shape.',signal);await this.click('Set aside',signal);await this.wait(1800,signal);
       await this.step('Refine','Bring it back anytime.',signal);await this.sidebar(true,signal);await this.click('Revive',signal);await this.wait(1600,signal);await this.sidebar(false,signal);
       await this.step('Write','Keep spare ideas nearby.',signal);await this.select('A note for another day.',signal);await this.click('Overflow',signal);if(this.mobile){const notes=document.querySelector<HTMLElement>('.overflow-editor');if(notes)await this.pointAt(notes,signal);}await this.wait(2200,signal);
-      await this.step('Customize','See what Draft can do.',signal);await this.click('Features',signal,true);await this.wait(900,signal);
+      await this.step('Customize','See what Draft can do.',signal);await this.click('Preferences',signal,true);await this.wait(900,signal);
       const lastOfficial=document.querySelector<HTMLElement>('.feature-column:first-child .feature-row:last-child');if(!lastOfficial)throw Error('The official feature list is unavailable.');
       await this.pointAt(lastOfficial,signal);await this.wait(1800,signal);
       await this.step('Customize','Make Draft your own.',signal);
@@ -162,7 +162,7 @@ export class Tour{
       await this.step('Customize','Keep a list of features.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add to your list',signal);await this.wait(2000,signal);
       await this.step('Update','Download your changes together.',signal);await this.click('Download update',signal);await this.until(()=>!!this.findButton('Restart to update'),signal);await this.wait(1300,signal);
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
-      await this.step('Customize','See what you’ve added.',signal);await this.click(['Features','Update ready'],signal,true);
+      await this.step('Customize','See what you’ve added.',signal);await this.click(['Preferences','Update ready'],signal,true);
       const lastChange=document.querySelector<HTMLElement>('.feature-column:nth-child(2) .feature-row:last-child');if(!lastChange)throw Error('The walkthrough update did not add its features.');
       await this.pointAt(lastChange,signal);await this.wait(3200,signal);await this.click('Writing',signal,true);await this.sidebar(false,signal);
       await this.step('Write','Your new features, ready to use.',signal);
