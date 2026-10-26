@@ -56,7 +56,7 @@ export class DemoStore{
         const supported=requests.every(q=>q.kind==='remove'?q.featureId?.startsWith('demo-'):/reading|read time|focus/i.test(q.request));
         if(!supported&&input.kind!=='reset'){u.state='failed';u.error='This update needs a little more work.';}
         else{u.state='ready';u.preparedAt=new Date().toISOString();u.versionId=`demo-${u.id}`;}this.emit();
-      };this.buildRemaining=6500;this.scheduleBuild();
+      };this.buildRemaining=input.kind==='reset'?3500:6500;this.scheduleBuild();
       this.emit();return clone(u);
     }
     if(path==='/api/updates/discard'){const u=this.updates.find(u=>u.id===input.id);if(u){u.state='cancelled';this.cancelBuild();}this.emit();return {};}
