@@ -3,6 +3,9 @@ const root=resolve(import.meta.dir,'dist');
 const server=Bun.serve({hostname:'127.0.0.1',port:Number(process.env.DRAFT_WEBSITE_PORT??4320),async fetch(request){
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
   let pathname;try{pathname=decodeURIComponent(new URL(request.url).pathname);}catch{return new Response('Not found',{status:404});}
+  // Local browser checks exercise layout against the built site without shipping
+  // test pages in the static website output.
+  if(pathname==='/__checks__/resize.html')return new Response(Bun.file(resolve(import.meta.dir,'../tests/fixtures/website-resize.html')),{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
   if(pathname.endsWith('/'))pathname+='index.html';const path=resolve(root,`.${pathname}`);
   if(!path.startsWith(root+sep)||pathname.includes('\0')||!await Bun.file(path).exists())return new Response('Not found',{status:404});
   const types:Record<string,string>={'.js':'text/javascript','.css':'text/css','.html':'text/html; charset=utf-8','.svg':'image/svg+xml','.txt':'text/plain'};

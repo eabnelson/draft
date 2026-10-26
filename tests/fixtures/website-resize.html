@@ -1,0 +1,27 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Draft live-resize regression check</title>
+<style>body{margin:0;background:#f5f5f5;font:12px system-ui}button{margin:8px}iframe{display:block;border:0;background:white;max-width:none}pre{position:fixed;right:8px;top:8px;max-width:380px;white-space:pre-wrap;background:#fffffff0;border:1px solid #ddd;padding:10px;z-index:5}#viewport{width:max-content}</style>
+<button id="run">Run resize check</button><pre id="result">Ready</pre><div id="viewport"><iframe id="preview" title="Live resize target" src="/" style="width:1280px;height:900px"></iframe></div>
+<script>
+const frame=document.getElementById('preview'),result=document.getElementById('result');let running=false;
+const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+function measure(){
+  const doc=frame.contentDocument,app=doc.querySelector('#demo'),viewer=doc.querySelector('.demo-frame'),slot=doc.querySelector('#stage-slot');
+  const r=app.getBoundingClientRect(),v=viewer.getBoundingClientRect(),s=slot.getBoundingClientRect();
+  return {viewport:[doc.documentElement.clientWidth,doc.documentElement.clientHeight],layout:viewer.dataset.layout,slot:[s.width,s.height],viewer:[v.width,v.height],app:[r.width,r.height],fits:r.width<=v.width+1&&r.height<=v.height+1&&r.right<=doc.documentElement.clientWidth+1&&r.bottom<=doc.documentElement.clientHeight+1&&v.right<=doc.documentElement.clientWidth+1&&v.bottom<=doc.documentElement.clientHeight+1};
+}
+async function run(){
+  if(running)return;running=true;const samples=[],failures=[];
+  try{
+    // Resize the same loaded page: reloading at the narrow size hides this bug.
+    const sizes=new URLSearchParams(location.search).has('full')?[[1280,900],[1180,900],[1080,900],[980,900],[880,900],[780,900],[720,900],[1280,900],[1280,700],[1280,580],[390,844],[320,568],[640,390],[980,900],[1280,900]]:[[1280,900],[980,900]];
+    for(const [w,h] of sizes){
+      frame.style.width=w+'px';frame.style.height=h+'px';await tick();await tick();await tick();
+      const sample=measure();samples.push(sample);if(!sample.fits)failures.push(sample);
+    }
+    result.textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',samples,failures},null,1);
+  }catch(error){result.textContent='ERROR: '+String(error);}finally{running=false;}
+}
+document.getElementById('run').onclick=run;frame.addEventListener('load',()=>setTimeout(run,300));
+</script>
