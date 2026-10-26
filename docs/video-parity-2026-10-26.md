@@ -35,3 +35,5 @@ The video’s X publication control and LinkedIn joke are not automatic publishi
 In alpha 7, place the sidebar toggle at the far left of the app header. Show the Draft wordmark only while the alternatives sidebar is expanded. Place the three-dot wording indicator below the squiggle without reserving space in the line of text.
 
 In alpha 8, center the indicator beneath the marked wording (beneath the final line for a wrapped passage). Show one dot for the original and each alternative, and mark the selected wording. Left/right arrows cycle through wordings in the draft and comparison controls; arrows in an editable alternative continue to move the text cursor.
+
+In alpha 9, place the sidebar close control immediately to the right of the Draft wordmark. With the sidebar closed, show only the open control at the far left.

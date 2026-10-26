@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.8",
+  "appVersion": "0.2.0-alpha.9",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "Write in Markdown, format selected text, and keep a clean reading view.",
-      "updatedAt": "2026-10-26T18:14:51.543Z",
+      "updatedAt": "2026-10-26T18:40:35.197Z",
       "origin": "official",
       "state": "active",
       "code": [
