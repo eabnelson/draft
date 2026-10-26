@@ -80,21 +80,21 @@ export class Tour{
     if(!this.decorated.has(view)){this.decorated.add(view);view.dispatch({effects:StateEffect.appendConfig.of(drawSelection({cursorBlinkRate:0}))});}
     return view;
   }
-  private async typeText(text:string,write:(value:string)=>Caret|null,signal:AbortSignal){
+  private async typeText(text:string,write:(value:string)=>Caret|null,signal:AbortSignal,charactersPerTick=2){
     const caret=document.createElement('span');caret.className='tour-typing-caret';caret.setAttribute('aria-hidden','true');
     this.typingCaret=caret;document.body.append(caret);document.body.classList.add('tour-is-typing');this.pointer('hide');
     const update=(value:string)=>{const position=write(value);if(!position)throw Error('The walkthrough typing position is unavailable.');caret.style.transform=`translate3d(${position.left}px,${position.top}px,0)`;caret.style.height=`${Math.max(14,position.bottom-position.top)}px`;};
     try{
       update('');
-      for(let i=0;i<text.length;i+=2){update(text.slice(0,i+2));await this.wait(40,signal);}
+      for(let i=0;i<text.length;i+=charactersPerTick){update(text.slice(0,i+charactersPerTick));await this.wait(40,signal);}
       await this.wait(650,signal);
     }finally{caret.remove();if(this.typingCaret===caret){this.typingCaret=undefined;document.body.classList.remove('tour-is-typing');}}
   }
   private async typeDraft(signal:AbortSignal){
     const view=this.editor(),r=view.contentDOM.getBoundingClientRect();
     await this.move({x:r.left+12,y:r.top+16},signal);this.pointer('press');await this.wait(170,signal);this.pointer('release');await this.wait(350,signal);
-    await this.typeText(sample,value=>{if(value.length>view.state.doc.length)view.dispatch({changes:{from:view.state.doc.length,insert:value.slice(view.state.doc.length)}});return view.coordsAtPos(view.state.doc.length);},signal);
-    await this.wait(1150,signal);
+    await this.typeText(sample,value=>{if(value.length>view.state.doc.length)view.dispatch({changes:{from:view.state.doc.length,insert:value.slice(view.state.doc.length)}});return view.coordsAtPos(view.state.doc.length);},signal,6);
+    await this.wait(350,signal);
   }
   private async select(text:string,signal:AbortSignal){
     const view=this.editor(),from=view.state.doc.toString().indexOf(text),to=from+text.length;
