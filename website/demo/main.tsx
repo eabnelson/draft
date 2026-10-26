@@ -10,6 +10,7 @@ import {DemoStore} from './store';
 import {Tour} from './tour';
 import '../../src/studio-theme.css';
 import '../../src/style.css';
+import '../../src/writing.css';
 import './style.css';
 
 const store=new DemoStore();store.reset();const root=createRoot(document.getElementById('root')!);let key=0;

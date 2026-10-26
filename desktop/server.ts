@@ -4,8 +4,10 @@ import {readFile,mkdir} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {DocumentStore} from './documents';
 import {Updates} from './updates';
+import {writingSchema} from './writing';
 import {within,exists,atomicWrite} from './files';
 import {cleanText,parseDraft} from '../src/model';
+import {plainText} from '../src/markdown';
 import type {AgentSelection,UpdateKind} from './types';
 
 const dev=process.argv.includes('--dev');
@@ -21,7 +23,7 @@ await updates.initialize();
 let recoveryCounter=0,closeReady=false,restartRequested=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 function authorized(request:Request){if(dev)return true;const cookie=request.headers.get('cookie')??'';return cookie.split(';').some(s=>s.trim()===`draft_session=${session}`)||request.headers.get('authorization')===`Bearer ${session}`;}
-const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRequestBodySize:30*1024*1024,
+const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_DEV_PORT??4319):0,idleTimeout:0,maxRequestBodySize:30*1024*1024,
   async fetch(request){
     const url=new URL(request.url),origin=`http://127.0.0.1:${server.port}`;
     if(!dev&&url.searchParams.has('token')){
@@ -46,7 +48,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRe
         if(url.pathname==='/api/assist'&&request.method==='POST'){
           if(typeof input.prompt!=='string'||input.prompt.length>100000)throw Error('The writing request is too large.');
           const selected=await updates.defaultSelection();if(!selected)throw Error('Connect Claude Code or Codex in Model settings.');
-          return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal})});
+          return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)})});
         }
         if(url.pathname==='/api/updates/request'&&request.method==='POST')return json(await updates.request(input.kind as UpdateKind,String(input.request??''),input.featureId));
         if(url.pathname==='/api/features/queue'&&request.method==='POST')return json(await updates.queue(input));
@@ -69,7 +71,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?4319:0,idleTimeout:0,maxRe
           if(!['native','txt','md'].includes(kind))throw Error('Unknown export format.');
           const folder=join(root,'Exports');await mkdir(folder,{recursive:true});const stem=draft.title.replace(/[^a-z0-9-_ ]/gi,'').replace(/\s+/g,'-').toLowerCase()||'untitled';
           const path=join(folder,`${stem}-${Date.now()}.${kind==='native'?'draft.json':kind}`);
-          await atomicWrite(path,kind==='native'?JSON.stringify(draft,null,2):cleanText(draft));spawn('/usr/bin/open',['-R',path],{stdio:'ignore'}).unref();return json({path});
+          await atomicWrite(path,kind==='native'?JSON.stringify(draft,null,2):kind==='txt'?plainText(cleanText(draft)):cleanText(draft));spawn('/usr/bin/open',['-R',path],{stdio:'ignore'}).unref();return json({path});
         }
         if(url.pathname.startsWith('/api/custom/')){
           if(activeRuntime?.id!==updates.active.id){const path=join(updates.active.dist,'runtime.js');activeRuntime={id:updates.active.id,handler:await exists(path)?(await import(path+`?version=${updates.active.id}`)).handleRequest:null};}

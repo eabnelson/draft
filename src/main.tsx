@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './studio-theme.css';
 import './style.css';
+import './writing.css';
 import {api} from './client';
 try {
   const [library,health]=await Promise.all([api('/api/library'),api('/api/health')]);

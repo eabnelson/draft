@@ -1,11 +1,12 @@
 import { ChangeSet, Text } from '@codemirror/state';
+import {plainText,balancedRange} from './markdown';
 
 export type Span = {from:number; to:number};
 export type Candidate = {id:string; text:string; origin:'human'|'ai'; humanEdited?:boolean};
 export type Variant = Span & {id:string; original:string; candidates:Candidate[]; active:string|null};
 export type Ghost = Span & {id:string};
 export type Draft = {format:'writing-room'; version:1; id:string; title:string; text:string; variants:Variant[]; ghosts:Ghost[]; overflow:string; revision:number; revisionMode:boolean; updatedAt:string};
-export type Cut = Span & {id:string; text:string; reason:string; accepted:boolean};
+export type Cut = Span & {id:string; text:string; reason:string; accepted:boolean; replacement?:string};
 export const id = () => crypto.randomUUID();
 export const words=(text:string)=>text.trim().match(/\S+/gu)?.length??0;
 export const overlaps=(a:Span,b:Span)=>a.from<b.to && b.from<a.to;
@@ -13,7 +14,7 @@ export const contains=(a:Span,b:Span)=>a.from<=b.from && a.to>=b.to;
 export function fresh(sample=false):Draft {
   const text=sample ? 'Make room for a better draft.\n\nThe first version is a place to begin, not a place to stay. Good writing often starts with giving an idea a little room to breathe.\n\nTry a different word. Let the sentence take another shape. You don’t have to choose between keeping everything and throwing it away.\n\nThis paragraph might belong somewhere else. Or it might not belong here at all. For now, it can wait quietly while the rest of the piece finds its rhythm.\n\nA useful writing tool should help you hear your own voice more clearly. The decisions are still yours.' : '';
   const start=text.indexOf('a little room to breathe');
-  return {format:'writing-room',version:1,id:id(),title:sample?'Room to think':'Untitled draft',text,variants:sample?[{id:id(),from:start,to:start+'a little room to breathe'.length,original:'a little room to breathe',active:null,candidates:[{id:id(),text:'space to find its shape',origin:'human'},{id:id(),text:'time to become something good',origin:'human'}]}]:[],ghosts:[],overflow:sample?'An idea for later:\nThe best tools leave room for a change of mind.':'',revision:0,revisionMode:true,updatedAt:new Date().toISOString()};
+  return {format:'writing-room',version:1,id:id(),title:sample?'Room to think':'Untitled draft',text,variants:sample?[{id:id(),from:start,to:start+'a little room to breathe'.length,original:'a little room to breathe',active:null,candidates:[{id:id(),text:'space to find its shape',origin:'human'},{id:id(),text:'time to become something good',origin:'human'}]}]:[],ghosts:[],overflow:sample?'An idea for later:\nThe best tools leave room for a change of mind.':'',revision:0,revisionMode:false,updatedAt:new Date().toISOString()};
 }
 export function changed(d:Draft, patch:Partial<Draft>):Draft {return {...d,...patch,revision:d.revision+1,updatedAt:new Date().toISOString()};}
 export function cleanText(d:Draft, extra:Span[]=[]):string {
@@ -63,11 +64,30 @@ export function addCandidate(d:Draft,variantId:string,text:string,origin:'human'
 export function choose(d:Draft,variantId:string,candidateId:string|null):Draft {
   const v=d.variants.find(v=>v.id===variantId);if(!v)return d;
   const text=candidateId?v.candidates.find(c=>c.id===candidateId)?.text:v.original;
-  if(text===undefined)return d;
-  const next=replace(d,v.from,v.to,text);
+  if(text===undefined||(candidateId===v.active&&d.text.slice(v.from,v.to)===text))return d;
+  const article=/\b(a|an)([ \t]+)((?:\*\*|__|~~|\*|_|<u>)*)$/i.exec(d.text.slice(0,v.from));
+  const corrected=article?articleFor(text,article[1]):null;
+  const articleEdit=article&&corrected&&corrected!==article[1]?{from:article.index,to:article.index+article[1].length,insert:corrected}:null;
+  const changes=ChangeSet.of([...(articleEdit?[articleEdit]:[]),{from:v.from,to:v.to,insert:text}],d.text.length);
+  const next=applyChanges(d,changes),from=changes.mapPos(v.from,-1);
   // Replacing the complete range deliberately retains the immutable original.
-  const updated={...v,to:v.from+text.length,active:candidateId};
-  return {...next,variants:[...next.variants.filter(x=>x.id!==v.id),updated].sort((a,b)=>a.from-b.from),ghosts:d.ghosts.map(g=>contains(g,v)?{...g,to:g.to+text.length-(v.to-v.from)}:next.ghosts.find(x=>x.id===g.id)!).filter(Boolean)};
+  const updated={...v,from,to:from+text.length,active:candidateId};
+  return {...next,variants:[...next.variants.filter(x=>x.id!==v.id),updated].sort((a,b)=>a.from-b.from),ghosts:d.ghosts.map(g=>contains(g,v)?{...g,from:changes.mapPos(g.from,-1),to:changes.mapPos(g.to,1)}:next.ghosts.find(x=>x.id===g.id)!).filter(Boolean)};
+}
+function articleFor(markdown:string,current:string):string|null {
+  const word=plainText(markdown).match(/^["'“‘(]*([\p{L}\p{N}]+)/u)?.[1];if(!word)return null;
+  // Pronunciation exceptions before the common vowel rule. Ambiguous initials stay as written.
+  const lower=word.toLowerCase();let an:boolean;
+  if(/^(honest|honou?r|hour|heir)/.test(lower))an=true;
+  else if(/^(uni([^nmd]|$)|use|user|usual|util|euro|ewe|one|once)/.test(lower))an=false;
+  else if(/^[A-Z]{2,}$/.test(word)){
+    if(/^(NASA|NATO|UNESCO)$/.test(word))an=false;
+    else if(/^(FBI|MRI|HTML|HTTP|LCD|X|API|AI|SMS)/.test(word))an=true;
+    else if(/^(URL|USB|CPU|PDF|UI|UUID)/.test(word))an=false;
+    else return null;
+  }else if(/^\d/.test(word)){if(/^(8|11|18)/.test(word))an=true;else return null;}
+  else an=/^[aeiou]/i.test(word);
+  const result=an?'an':'a';return /^[A-Z]/.test(current)?result[0].toUpperCase()+result.slice(1):result;
 }
 export function removeCandidate(d:Draft,variantId:string,candidateId:string):Draft {
   const v=d.variants.find(v=>v.id===variantId);if(!v)return d;
@@ -81,6 +101,7 @@ export function editCandidate(d:Draft,variantId:string,candidateId:string,text:s
 }
 export function ghost(d:Draft,range:Span):Draft {
   if(range.from===range.to)throw new Error('Select a passage to set aside.');
+  range=balancedRange(d.text,range);
   const error=boundaryError(d,range);if(error)throw new Error(error);
   const touched=d.ghosts.filter(g=>overlaps(g,range));
   const merged={from:Math.min(range.from,...touched.map(g=>g.from)),to:Math.max(range.to,...touched.map(g=>g.to)),id:id()};
@@ -106,17 +127,25 @@ export function parseDraft(raw:string):Draft {
   if(x.ghosts.some((g:any)=>x.variants.some((v:any)=>overlaps(g,v)&&!contains(g,v))))fail();
   return {...x,updatedAt:new Date().toISOString()};
 }
-export function validateQuotes(d:Draft,items:{text:string;reason?:string}[]):Cut[] {
+export function validateQuotes(d:Draft,items:{text:string;reason?:string;replacement?:string}[]):Cut[] {
   const cuts:Cut[]=[];
   for(const item of items){
     if(typeof item.text!=='string'||!item.text.trim())continue;
     const from=d.text.indexOf(item.text);const to=from+item.text.length;
     if(from<0||d.text.indexOf(item.text,from+1)!==-1)continue;
-    const r={from,to};
+    const r=item.replacement===undefined?balancedRange(d.text,{from,to}):{from,to};
     if(boundaryError(d,r)||d.ghosts.some(g=>overlaps(g,r))||cuts.some(c=>overlaps(c,r)))continue;
-    cuts.push({...r,id:id(),text:item.text,reason:typeof item.reason==='string'?item.reason:'Consider removing this passage.',accepted:true});
+    cuts.push({...r,id:id(),text:d.text.slice(r.from,r.to),reason:typeof item.reason==='string'?item.reason:'Consider removing this passage.',accepted:true,...(typeof item.replacement==='string'&&item.replacement.length<10000?{replacement:item.replacement}:{})});
   }
   return cuts.sort((a,b)=>a.from-b.from);
+}
+export function makeCuts(d:Draft,cuts:Cut[]):Draft {
+  let next=d;
+  for(const cut of cuts.filter(c=>c.accepted).sort((a,b)=>b.from-a.from)){
+    if(d.text.slice(cut.from,cut.to)!==cut.text)throw Error('The draft changed. Request a fresh trim.');
+    next=replace(next,cut.from,cut.to,'');
+  }
+  return next;
 }
 export function variantContext(d:Draft,v:Variant):string {
   const separator=d.text.lastIndexOf('\n\n',v.from),end=d.text.indexOf('\n\n',v.to);

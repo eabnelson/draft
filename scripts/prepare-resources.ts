@@ -8,6 +8,7 @@ await copySource(root,join(resources,'source-template'));
 await cp(join(root,'dist'),join(resources,'source-template/dist'),{recursive:true});
 await cp(join(root,'desktop'),join(resources,'desktop'),{recursive:true});
 await mkdir(join(resources,'src'),{recursive:true});await cp(join(root,'src/model.ts'),join(resources,'src/model.ts'));
+await cp(join(root,'src/markdown.ts'),join(resources,'src/markdown.ts'));
 await cp(process.execPath,join(resources,'bun'));
 await cp(join(root,'node_modules'),join(resources,'node_modules'),{recursive:true,dereference:false,filter:path=>{
   const p=relative(join(root,'node_modules'),path);

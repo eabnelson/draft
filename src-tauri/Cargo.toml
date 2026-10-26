@@ -1,6 +1,6 @@
 [package]
 name = "draft-desktop"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 description = "A local writing app you can make your own"
 authors = ["Erik Nelson"]
 license = "MIT"

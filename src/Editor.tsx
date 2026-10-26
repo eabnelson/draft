@@ -1,71 +1,107 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { EditorState, StateEffect, StateField, ChangeSet, Prec } from '@codemirror/state';
-import { EditorView, Decoration, keymap, placeholder, drawSelection, type DecorationSet } from '@codemirror/view';
-import { defaultKeymap } from '@codemirror/commands';
-import { type Draft, type Span, type Cut, overlaps, contains } from './model';
+import {useEffect,useRef,useState,forwardRef,useImperativeHandle} from 'react';
+import {EditorState,StateEffect,StateField,ChangeSet,Prec} from '@codemirror/state';
+import {EditorView,Decoration,keymap,placeholder,drawSelection,WidgetType,type DecorationSet} from '@codemirror/view';
+import {defaultKeymap,history,historyKeymap} from '@codemirror/commands';
+import {type Draft,type Span,type Cut,overlaps,contains} from './model';
+import {formatMarkdown,type TextFormat} from './markdown';
+import {markdownEditing,showMarkdown} from './editor-markdown';
+import {TextMenu} from './TextMenu';
 
-type Annotations={draft:Draft;active:string|null;cuts:Cut[]};
+type Annotations={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;focusPassage?:boolean};
 const annotate=StateEffect.define<Annotations>();
+class WordingDots extends WidgetType {
+  constructor(readonly alternate:boolean,readonly id:string){super();}
+  eq(other:WordingDots){return other.alternate===this.alternate&&other.id===this.id;}
+  toDOM(){const span=document.createElement('span');span.className=`wording-dots ${this.alternate?'is-alternate':''}`;span.dataset.variant=this.id;span.setAttribute('role','img');span.setAttribute('aria-label',this.alternate?'Alternative wording':'Original wording');span.title=this.alternate?'Alternative wording':'Original wording';for(let i=0;i<3;i++)span.append(document.createElement('i'));return span;}
+  ignoreEvent(){return false;}
+}
 const decorations=StateField.define<DecorationSet>({
   create:()=>Decoration.none,
   update(value,tr){
-    const effect=tr.effects.find(e=>e.is(annotate));
-    if(!effect)return value.map(tr.changes);
-    const {draft:d,active,cuts}=effect.value as Annotations;
-    const marks=[];
-    if(d.text.length)marks.push(Decoration.line({class:'opening-line'}).range(0));
+    const effect=tr.effects.find(e=>e.is(annotate));if(!effect)return value.map(tr.changes);
+    const {draft:d,active,cuts,reviewing,focusPassage}=effect.value as Annotations,marks=[];
+    const focused=d.variants.find(v=>v.id===active);
+    if(focusPassage&&focused){const before=d.text.lastIndexOf('\n\n',focused.from),after=d.text.indexOf('\n\n',focused.to),from=before<0?0:before+2,to=after<0?d.text.length:after;for(let n=1;n<=tr.state.doc.lines;n++){const line=tr.state.doc.line(n);if(line.to<from||line.from>to)marks.push(Decoration.line({class:'passage-muted'}).range(line.from));}}
     if(d.revisionMode){
-      for(const v of d.variants)marks.push(Decoration.mark({class:`variant ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,attributes:{'data-variant':v.id,title:`${v.candidates.length+1} wordings · click to compare`}}).range(v.from,v.to));
-      for(const g of d.ghosts)marks.push(Decoration.mark({class:'ghost-text',attributes:{'data-ghost':g.id,'aria-label':'Set aside. Click Revive in the side panel to restore.',title:'Set aside — hover to read at full contrast'}}).range(g.from,g.to));
-    }else{
-      for(const g of d.ghosts)marks.push(Decoration.replace({}).range(g.from,g.to));
-    }
-    for(const c of cuts)if(c.accepted)marks.push(Decoration.mark({class:'cut-preview',attributes:{title:c.reason}}).range(c.from,c.to));
+      for(const v of d.variants)if(v.candidates.length){
+        marks.push(Decoration.mark({class:`variant ${v.active?'variant-chosen':''} ${v.id===active?'variant-focused':''}`,attributes:{'data-variant':v.id,title:'Hover and use ↑ ↓ to compare wordings'}}).range(v.from,v.to));
+        marks.push(Decoration.widget({widget:new WordingDots(v.active!==null,v.id),side:1}).range(v.to));
+      }
+      for(const g of d.ghosts)marks.push(Decoration.mark({class:'ghost-text',attributes:{'data-ghost':g.id,'aria-label':'Ghosted text. Right-click to revive.',title:'Ghosted — right-click to revive'}}).range(g.from,g.to));
+    }else for(const g of d.ghosts)marks.push(Decoration.replace({}).range(g.from,g.to));
+    for(const c of cuts)if(c.accepted)marks.push(Decoration.mark({class:reviewing?'review-highlight':'cut-preview',attributes:{'data-cut':c.id,title:c.reason}}).range(c.from,c.to));
     return Decoration.set(marks,true);
-  },
-  provide:field=>EditorView.decorations.from(field)
+  },provide:field=>EditorView.decorations.from(field)
 });
 export type EditorHandle={focus:()=>void;select:(range:Span)=>void};
-type Props={draft:Draft;active:string|null;cuts:Cut[];onChange:(changes:ChangeSet)=>void;onSelection:(range:Span)=>void;onVariant:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
+type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;onChange:(changes:ChangeSet)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
+
+function replacement(before:string,after:string){let from=0,oldTo=before.length,newTo=after.length;while(from<oldTo&&from<newTo&&before[from]===after[from])from++;while(oldTo>from&&newTo>from&&before[oldTo-1]===after[newTo-1]){oldTo--;newTo--;}return {from,to:oldTo,insert:after.slice(from,newTo)};}
+function selectContext(view:EditorView,event:MouseEvent):Span {
+  const point=view.posAtCoords({x:event.clientX,y:event.clientY}),selection=view.state.selection.main;
+  if(point===null)return selection;
+  if(!selection.empty&&point>=selection.from&&point<=selection.to)return selection;
+  const range=view.state.wordAt(point)??{from:point,to:point};view.dispatch({selection:{anchor:range.from,head:range.to}});return range;
+}
+function applyFormat(view:EditorView,format:TextFormat,href?:string){const edit=formatMarkdown(view.state.doc.toString(),view.state.selection.main,format,href);view.dispatch({changes:{from:edit.from,to:edit.to,insert:edit.insert},selection:{anchor:edit.selection.from,head:edit.selection.to},userEvent:'input.format'});view.focus();}
+
 export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
-  const host=useRef<HTMLDivElement>(null), view=useRef<EditorView|null>(null), current=useRef(props), syncing=useRef(false);
-  current.current=props;
+  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false),hovered=useRef<string|null>(null);
+  const [menu,setMenu]=useState<{x:number;y:number;range:Span}|null>(null);current.current=props;
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
-      decorations, EditorView.lineWrapping, placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
-      EditorView.contentAttributes.of({'aria-label':'Draft body','spellcheck':'true','autocapitalize':'sentences'}),
+      markdownEditing,decorations,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
+      EditorView.contentAttributes.of({'aria-label':'Draft body',role:'textbox','aria-multiline':'true',spellcheck:'true',autocapitalize:'sentences'}),
       Prec.highest(keymap.of([
-        {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},
-        {key:'Mod-Shift-z',run:()=>{current.current.onAction('redo');return true;}},
-        {key:'Mod-Shift-a',run:()=>{current.current.onAction('alternative');return true;}},
-        {key:'Mod-Shift-g',run:()=>{current.current.onAction('ghost');return true;}},
-        {key:'Mod-Shift-o',run:()=>{current.current.onAction('overflow');return true;}},
+        {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},{key:'Mod-Shift-z',run:()=>{current.current.onAction('redo');return true;}},
+        {key:'Mod-Shift-a',run:()=>{current.current.onAction('alternative');return true;}},{key:'Mod-Shift-g',run:()=>{current.current.onAction('ghost');return true;}},{key:'Mod-Shift-o',run:()=>{current.current.onAction('overflow');return true;}},
+        ...(['b','i','u'] as const).map((key,i)=>({key:`Mod-${key}`,run:(editor:EditorView)=>{try{applyFormat(editor,(['bold','italic','underline'] as const)[i]);}catch(e){current.current.onError((e as Error).message);}return true;}})),
       ])),keymap.of(defaultKeymap),
       EditorState.transactionFilter.of(tr=>{
-        if(syncing.current||!tr.docChanged)return tr;
-        const d=current.current.draft;let invalid=false;
-        tr.changes.iterChangedRanges((from,to)=>{if(from===to)return;for(const v of d.variants){const r={from,to};if(overlaps(r,v)&&!contains(v,r)&&!contains(r,v))invalid=true;}});
-        if(invalid){queueMicrotask(()=>current.current.onError('This edit would split an alternative. Select the whole marked passage, or edit within it.'));return [];}
+        if(syncing.current||!tr.docChanged)return tr;let invalid=false;
+        tr.changes.iterChangedRanges((from,to)=>{if(from===to)return;for(const wording of current.current.draft.variants){const r={from,to};if(overlaps(r,wording)&&!contains(wording,r)&&!contains(r,wording))invalid=true;}});
+        if(invalid){queueMicrotask(()=>current.current.onError('Select the whole marked passage, or edit within it.'));return [];}
         return tr;
       }),
-      EditorView.updateListener.of(update=>{
-        if(syncing.current)return;
-        if(update.docChanged)current.current.onChange(update.changes);
-        if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to});}
+      EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes);if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
+      EditorView.domEventHandlers({
+        mousedown:event=>{const cut=(event.target as HTMLElement).closest<HTMLElement>('[data-cut]');if(event.button===0&&cut&&current.current.onCut&&!current.current.reviewing){event.preventDefault();current.current.onCut(cut.dataset.cut!);return true;}return false;},
+        mousemove:event=>{hovered.current=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]')?.dataset.variant??null;return false;},
+        mouseleave:()=>{hovered.current=null;return false;},
+        keydown:event=>{if(!event.key.startsWith('Arrow'))hovered.current=null;return false;},
+        click:event=>{const el=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]');if(el)current.current.onVariant(el.dataset.variant!);return false;},
+        contextmenu:(event,editor)=>{event.preventDefault();const range=selectContext(editor,event);current.current.onSelection(range);setMenu({x:event.clientX,y:event.clientY,range});return true;},
       }),
-      EditorView.domEventHandlers({click:(event)=>{const el=(event.target as HTMLElement).closest('[data-variant]');if(el)current.current.onVariant(el.getAttribute('data-variant')!);return false;}}),
     ]})});view.current=v;
-    return ()=>{v.destroy();view.current=null;};
-  },[annotate]);
+    const arrows=(event:KeyboardEvent)=>{
+      if(!current.current.draft.revisionMode||!hovered.current||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey)return;
+      if(event.target instanceof Element&&event.target.closest('input,textarea,[role="menu"],.markdown-field'))return;
+      if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)||!v.state.selection.main.empty)return;
+      event.preventDefault();event.stopPropagation();current.current.onCycle(hovered.current,event.key==='ArrowUp'||event.key==='ArrowLeft'?-1:1);
+    };
+    window.addEventListener('keydown',arrows,true);
+    return()=>{window.removeEventListener('keydown',arrows,true);v.destroy();view.current=null;};
+  },[]);
   useEffect(()=>{
-    const v=view.current;if(!v)return;
-    syncing.current=true;
-    try {
-      const different=v.state.doc.toString()!==props.draft.text;
-      v.dispatch({...(different?{changes:{from:0,to:v.state.doc.length,insert:props.draft.text},selection:{anchor:Math.min(v.state.selection.main.from,props.draft.text.length)}}:{}),effects:annotate.of({draft:props.draft,active:props.active,cuts:props.cuts})});
-      if(different){const {from,to}=v.state.selection.main;props.onSelection({from,to});}
-    }finally{syncing.current=false;}
-  },[props.draft,props.active,props.cuts,annotate]);
-  return <div className="editor-host" ref={host}/>;
+    const v=view.current;if(!v)return;syncing.current=true;
+    try{const before=v.state.doc.toString(),after=props.draft.text;v.dispatch({...(before!==after?{changes:replacement(before,after)}:{}),effects:[annotate.of({draft:props.draft,active:props.active,cuts:props.cuts,reviewing:props.reviewing,focusPassage:props.focusPassage}),showMarkdown.of(!!props.source)]});if(before!==after){const {from,to}=v.state.selection.main;props.onSelection({from,to});}}finally{syncing.current=false;}
+  },[props.draft,props.active,props.cuts,props.reviewing,props.source,props.focusPassage]);
+  return <><div className="editor-host" ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} writingActions revive={props.draft.ghosts.some(g=>overlaps(g,menu.range))} onAction={props.onAction} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
 });
+
+type FieldProps={label:string;value:string;onChange:(value:string)=>void;placeholder?:string;className?:string;source?:boolean};
+export function MarkdownField(props:FieldProps){
+  const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false);current.current=props;
+  const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
+  useEffect(()=>{
+    const v=new EditorView({parent:host.current!,state:EditorState.create({doc:props.value,extensions:[markdownEditing,EditorView.lineWrapping,history(),keymap.of([
+      ...(['b','i','u'] as const).map((key,i)=>({key:`Mod-${key}`,run:(editor:EditorView)=>{try{applyFormat(editor,(['bold','italic','underline'] as const)[i]);}catch{}return true;}})),...historyKeymap,...defaultKeymap,
+    ]),placeholder(props.placeholder??''),EditorView.contentAttributes.of({'aria-label':props.label,role:'textbox','aria-multiline':'true',spellcheck:'true'}),
+    EditorView.updateListener.of(update=>{if(update.docChanged&&!syncing.current)current.current.onChange(update.state.doc.toString());}),
+    EditorView.domEventHandlers({contextmenu:(event,editor)=>{event.preventDefault();selectContext(editor,event);setMenu({x:event.clientX,y:event.clientY});return true;}}),
+    ]})});view.current=v;return()=>{v.destroy();view.current=null;};
+  },[]);
+  useEffect(()=>{const v=view.current;if(!v)return;syncing.current=true;try{const before=v.state.doc.toString();v.dispatch({...(before!==props.value?{changes:replacement(before,props.value)}:{}),effects:showMarkdown.of(!!props.source)});}finally{syncing.current=false;}},[props.value,props.source]);
+  return <><div className={`markdown-field ${props.className??''}`} ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
+}

@@ -75,6 +75,7 @@ Draft began with [Jason Fried’s writing-editor demonstration](https://x.com/ja
 - [Full timestamped transcript](sources/transcript.md), [plain text](sources/transcript.txt), and [all 120 timed segments](sources/transcript.json).
 - [Initial product spec — October 22, 2026](docs/initial-product-spec.md), preserved unchanged from the first build.
 - [Accepted Draft baseline — October 24, 2026](docs/draft-product-spec-2026-10-24.md), including macOS, local agents, feature comparison, and the update interaction.
+- [Writing baseline correction — October 26, 2026](docs/video-parity-2026-10-26.md), checked against the video and Jason’s follow-up notes.
 - [Provenance](provenance.json) and [reference-file checksums](SHA256SUMS).
 
 The automated English transcript was generated locally with [toscript](https://github.com/eabnelson/toscript) using `mlx-community/whisper-large-v3-turbo`. The spoken material remains attributed to Jason Fried; see [NOTICE](NOTICE.md).

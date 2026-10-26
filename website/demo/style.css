@@ -14,3 +14,5 @@ input,textarea,input:focus,input:focus-visible,textarea:focus,textarea:focus-vis
 }
 @keyframes tools-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.side-panel{animation:none}}
+.demo-focus .workspace{grid-template-columns:0 minmax(0,1fr) 0}
+.demo-focus .writing-controls{height:0;border:0;opacity:0;overflow:hidden;pointer-events:none}

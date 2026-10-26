@@ -1,38 +1,45 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.5",
+  "appVersion": "0.2.0-alpha.6",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
-      "description": "A focused editor with word count, clean reading, and undo.",
-      "updatedAt": "2026-10-26T14:02:28.277340Z",
+      "description": "Write in Markdown, format selected text, and keep a clean reading view.",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
         "src/Editor.tsx",
         "src/model.ts",
-        "src/App.tsx"
+        "src/App.tsx",
+        "src/WritingPanels.tsx",
+        "src/markdown.ts",
+        "src/editor-markdown.ts",
+        "src/TextMenu.tsx"
       ]
     },
     {
       "id": "alternatives",
       "title": "Alternate wording",
-      "description": "Compare words, sentences, and paragraphs in context.",
-      "updatedAt": "2026-10-22T16:00:00Z",
+      "description": "Compare wordings in place, with a sound when you return to the original.",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
         "src/model.ts",
-        "src/App.tsx"
+        "src/App.tsx",
+        "src/WritingPanels.tsx",
+        "src/Editor.tsx",
+        "src/comparison-sound.ts"
       ]
     },
     {
       "id": "ghosts",
       "title": "Set aside & revive",
-      "description": "Hide a passage without losing it.",
-      "updatedAt": "2026-10-22T16:00:00Z",
+      "description": "Fade uncertain passages and revive them in place.",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -43,20 +50,25 @@
     {
       "id": "overflow",
       "title": "Overflow",
-      "description": "Keep spare writing and notes beside the draft.",
-      "updatedAt": "2026-10-22T16:00:00Z",
+      "description": "Keep Markdown notes and spare writing beside your draft.",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
         "src/model.ts",
-        "src/App.tsx"
+        "src/App.tsx",
+        "src/WritingPanels.tsx",
+        "src/markdown.ts",
+        "src/Editor.tsx",
+        "src/editor-markdown.ts",
+        "src/TextMenu.tsx"
       ]
     },
     {
       "id": "documents",
       "title": "Local documents",
       "description": "Save, reopen, and export writing as files on your Mac.",
-      "updatedAt": "2026-10-24T16:00:00Z",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -67,13 +79,14 @@
     {
       "id": "assistance",
       "title": "Writing assistance",
-      "description": "Alternatives, cut previews, and review through your connected agent.",
-      "updatedAt": "2026-10-24T16:00:00Z",
+      "description": "Ask for ideas with ??, preview cuts, and review writing with your connected agent.",
+      "updatedAt": "2026-10-26T17:04:28Z",
       "origin": "official",
       "state": "active",
       "code": [
         "desktop/agents.ts",
-        "src/App.tsx"
+        "src/App.tsx",
+        "src/WritingPanels.tsx"
       ]
     },
     {
