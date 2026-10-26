@@ -1,0 +1,62 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Draft walkthrough regression check</title>
+<style>html,body{height:100%;margin:0;font:12px system-ui;background:#f5f5f5}body{display:flex;flex-direction:column}header{height:72px;flex:none;padding:12px 16px;display:flex;gap:20px;align-items:center}h1,h2{font-size:13px;margin:0}#result{margin:0;white-space:pre-wrap;max-height:64px;overflow:auto}#cases{display:flex;gap:16px;padding:0 16px 16px;flex:1;min-height:0}.case{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}.case:first-child{flex:3}.viewport{position:relative;flex:1;min-height:0;overflow:hidden;background:#fff;border:1px solid #ddd}iframe{position:absolute;left:0;top:0;border:0;transform-origin:top left}</style>
+<header><h1>Full walkthrough · all screen layouts</h1><pre id="result">Starting</pre></header>
+<div id="cases"><section class="case"><h2>Desktop</h2><div class="viewport"><iframe title="Desktop walkthrough" data-case="desktop" width="1280" height="900" src="/"></iframe></div></section><section class="case"><h2>Mobile</h2><div class="viewport"><iframe title="Mobile walkthrough" data-case="mobile" width="390" height="844" src="/"></iframe></div></section><section class="case"><h2>Compact landscape</h2><div class="viewport"><iframe title="Landscape walkthrough" data-case="landscape" width="640" height="390" src="/"></iframe></div></section></div>
+<script>
+const cases={},result=document.getElementById('result');
+function report(){result.textContent=JSON.stringify({status:Object.values(cases).some(c=>c.error)?'FAIL':Object.values(cases).length===document.querySelectorAll('iframe').length&&Object.values(cases).every(c=>c.complete)?'PASS':'RUNNING',cases},null,1);}
+function fail(state,message){state.error=message;report();}
+for(const frame of document.querySelectorAll('iframe')){
+ const name=frame.dataset.case,state=cases[name]={scene:'Loading',wordings:[],sidebarOpen:false,sidebarClosed:false,queued:0,ready:false,readingTime:false,focus:false,customFeatures:false,scrolled:false,complete:false};
+ const fit=()=>{const r=frame.parentElement.getBoundingClientRect();frame.style.transform=`scale(${Math.min(r.width/Number(frame.width),r.height/Number(frame.height))})`;};new ResizeObserver(fit).observe(frame.parentElement);fit();
+ let doc,observer,inner,scheduled=false;
+ function sample(){
+  scheduled=false;if(!doc||state.error||state.complete)return;
+  const toggle=doc.querySelector('.panel-toggle');if(toggle){
+   const open=toggle.getAttribute('aria-expanded')==='true',path=toggle.querySelector('path')?.getAttribute('d');
+   if(getComputedStyle(toggle).backgroundColor!=='rgba(0, 0, 0, 0)')return fail(state,'Sidebar button has a background.');
+   if(path!==(open?'M9 3.5v17':'M6.5 7v10'))return fail(state,'Sidebar icon does not match its state.');
+   if(open){state.sidebarOpen=true;const logo=doc.querySelector('.sidebar-header .brand');if(!logo||logo.getBoundingClientRect().right>toggle.getBoundingClientRect().left)return fail(state,'Sidebar closer is not to the right of Draft.');}else state.sidebarClosed=true;
+  }
+  const mark=doc.querySelector('.variant'),dots=doc.querySelector('.wording-dots');
+  // The editor positions a new widget in its next measurement pass.
+  if(mark&&dots&&dots.style.getPropertyValue('--wording-center')){
+   const word=mark.textContent,count=dots.querySelectorAll('i').length,selected=[...dots.querySelectorAll('i')].findIndex(i=>i.classList.contains('is-selected'));
+   if(!state.wordings.some(v=>v.word===word&&v.count===count)){
+    const rect=mark.getBoundingClientRect(),row=dots.querySelector('.wording-options').getBoundingClientRect(),error=Math.abs(row.left+row.width/2-rect.left-rect.width/2);
+    if(error>1)return fail(state,`Wording dots are not centered: ${word}, ${count} options, ${error.toFixed(2)}px.`);
+    state.wordings.push({word,count,selected});
+   }
+  }
+  state.queued=Math.max(state.queued,doc.querySelectorAll('.feature-wishlist li').length);
+  state.ready||=[...doc.querySelectorAll('button')].some(b=>b.textContent.trim()==='Restart to update');
+  state.readingTime||=!!doc.querySelector('.demo-reading-time');
+  state.focus||=doc.body.classList.contains('demo-focus');
+  const titles=[...doc.querySelectorAll('.feature-column:nth-child(2) .feature-row strong')].map(n=>n.textContent);
+  state.customFeatures||=titles.includes('Reading time')&&titles.includes('Focus mode');
+  state.scrolled||=(doc.querySelector('.features-scroll')?.scrollTop??0)>0;
+  const outer=frame.contentDocument,viewer=outer.querySelector('.demo-frame');if(viewer){const r=viewer.getBoundingClientRect();if(r.right>outer.documentElement.clientWidth+1||r.bottom>outer.documentElement.clientHeight+1)return fail(state,'The app is outside the landing-page viewport.');}
+  report();
+ }
+ function schedule(){if(!scheduled){scheduled=true;requestAnimationFrame(sample);}}
+ function attach(){
+  inner=frame.contentDocument.querySelector('#demo');if(!inner)return;
+  const observe=()=>{const next=inner.contentDocument;if(!next?.body||next===doc)return;observer?.disconnect();doc=next;observer=new MutationObserver(schedule);observer.observe(doc.body,{subtree:true,childList:true,attributes:true});schedule();};
+  inner.addEventListener('load',observe);observe();
+  frame.contentWindow.addEventListener('message',event=>{
+   if(event.source!==inner.contentWindow||event.data?.channel!=='draft-demo'||!event.data.headline)return;
+   state.scene=event.data.headline;sample();
+   if(state.scene==='Replay the walkthrough.')return fail(state,'The tour stopped before completing.');
+   if(event.data.scene==='Home'){
+    const words=state.wordings,verified=words.some(v=>v.word==='paperclip'&&v.count===3&&v.selected===0)&&words.some(v=>v.word==='thumbtack'&&v.count===3&&v.selected===1)&&words.some(v=>v.word==='eraser'&&v.count===3&&v.selected===2);
+    if(!verified||!state.sidebarOpen||!state.sidebarClosed||state.queued!==2||!state.ready||!state.readingTime||!state.focus||!state.customFeatures||!state.scrolled)return fail(state,'A required walkthrough step was not observed.');
+    state.complete=true;frame.contentDocument.querySelector('#toggle')?.click();observer?.disconnect();report();
+   }
+  });
+ }
+ frame.addEventListener('load',attach);setTimeout(()=>{if(!state.complete&&!state.error)fail(state,'The full walkthrough did not finish within 210 seconds.');},210000);
+}
+report();
+</script>

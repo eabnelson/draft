@@ -1,7 +1,7 @@
 import {EditorView} from '@codemirror/view';
 import type {DemoStore} from './store';
 
-const sample='Good writing needs room.\n\nA first draft is a place to begin. Try a different word. Give an idea a little room to breathe.\n\nThis thought can wait while the rest of the piece finds its shape.\n\nA note for another day.';
+const sample='Good writing needs room.\n\nA first draft is a place to begin. Use a paperclip to keep these ideas together.\n\nThis thought can wait while the rest of the piece finds its shape.\n\nA note for another day.';
 const ease=(t:number)=>t*t*(3-2*t);
 type Point={x:number;y:number};
 type Caret={left:number;top:number;bottom:number};
@@ -73,7 +73,16 @@ export class Tour{
     await this.wait(transition?180:260,signal);if(transition)await this.fade(1,signal);
     await this.wait(400,signal);
   }
-  private async mobilePanel(open:boolean,signal:AbortSignal){if(!this.mobile)return;const label=open?'Open side panel':'Close side panel';if(this.findButton(label))await this.click(label,signal,true);}
+  private async sidebar(open:boolean,signal:AbortSignal){const label=open?'Open side panel':'Close side panel';if(this.findButton(label))await this.click(label,signal,this.mobile);}
+  private async compare(direction:-1|1,word:string,signal:AbortSignal){
+    const control=this.findButton(direction<0?'Previous wording':'Next wording');if(!control)throw Error('The wording comparison control is unavailable.');
+    const before=this.editor().contentDOM.querySelector<HTMLElement>('.variant');if(!before)throw Error('The marked wording is unavailable.');
+    await this.pointAt(before,signal);control.focus({preventScroll:true});
+    control.dispatchEvent(new KeyboardEvent('keydown',{key:direction<0?'ArrowLeft':'ArrowRight',bubbles:true,cancelable:true}));
+    await this.until(()=>this.editor().contentDOM.querySelector('.variant')?.textContent===word,signal);
+    const after=this.editor().contentDOM.querySelector<HTMLElement>('.variant')!;
+    await this.move(this.center(after),signal,250);await this.wait(1400,signal);this.mark();
+  }
   private editorBounds(view:EditorView){const scroller=view.dom.closest<HTMLElement>('.writing-area')!,bounds=scroller.getBoundingClientRect(),toolbar=scroller.querySelector('.draft-toolbar')?.getBoundingClientRect().height??0;return {scroller,top:bounds.top+toolbar+12,bottom:bounds.bottom-12};}
   private async revealRange(view:EditorView,from:number,to:number,signal:AbortSignal){
     const start=view.coordsAtPos(from),end=view.coordsAtPos(to);if(!start||!end)throw Error('The walkthrough passage is unavailable.');
@@ -132,20 +141,24 @@ export class Tour{
       this.position={x:80,y:40};this.pointer('hide');this.mark();await this.fade(0,signal);this.reset();await this.wait(150,signal);await this.until(()=>!!document.querySelector('.cm-editor'),signal);if(this.mobile){this.findButton('Close side panel')?.click();await this.wait(80,signal);}await this.fade(1,signal);
       if(completed){await this.step('Home','Your writing. Your app.',signal);await this.wait(5000,signal);}
       await this.step('Write','Write your first draft.',signal);await this.typeDraft(signal);
-      await this.step('Refine','Try a different wording.',signal);await this.click('Toggle editing tools',signal);await this.select('a little room to breathe',signal);await this.click('Alternative',signal);
-      await this.field('New alternative wording','space to find its shape',signal);await this.click('Add alternative',signal);
-      await this.step('Refine','Choose the words you like.',signal);await this.click('Use alternative 1',signal);await this.wait(2200,signal);await this.mobilePanel(false,signal);
+      await this.step('Refine','Try a different word.',signal);await this.click('Toggle editing tools',signal);await this.select('paperclip',signal);await this.click('Alternative',signal);
+      await this.field('New alternative wording','thumbtack',signal);await this.click('Add alternative',signal);
+      await this.step('Refine','Keep a few options.',signal);await this.field('New alternative wording','eraser',signal);await this.click('Add alternative',signal);
+      await this.step('Refine','Compare with ← →.',signal);await this.compare(-1,'thumbtack',signal);await this.compare(-1,'paperclip',signal);await this.compare(1,'thumbtack',signal);await this.compare(1,'eraser',signal);await this.sidebar(false,signal);
       await this.step('Refine','Set a thought aside.',signal);await this.select('This thought can wait while the rest of the piece finds its shape.',signal);await this.click('Set aside',signal);await this.wait(1800,signal);
-      await this.step('Refine','Bring it back anytime.',signal);await this.mobilePanel(true,signal);await this.click('Revive',signal);await this.wait(1600,signal);await this.mobilePanel(false,signal);
+      await this.step('Refine','Bring it back anytime.',signal);await this.sidebar(true,signal);await this.click('Revive',signal);await this.wait(1600,signal);await this.sidebar(false,signal);
       await this.step('Write','Keep spare ideas nearby.',signal);await this.select('A note for another day.',signal);await this.click('Overflow',signal);if(this.mobile){const notes=document.querySelector<HTMLElement>('.overflow-editor');if(notes)await this.pointAt(notes,signal);}await this.wait(2200,signal);
-      await this.step('Customize','Make Draft your own.',signal);await this.click('Features',signal,true);await this.wait(900,signal);
+      await this.step('Customize','See what Draft can do.',signal);await this.click('Features',signal,true);await this.wait(900,signal);
+      const lastOfficial=document.querySelector<HTMLElement>('.feature-column:first-child .feature-row:last-child');if(!lastOfficial)throw Error('The official feature list is unavailable.');
+      await this.pointAt(lastOfficial,signal);await this.wait(1800,signal);
+      await this.step('Customize','Make Draft your own.',signal);
       await this.field('Feature request','Show reading time beside the word count.',signal);await this.click('Add to your list',signal);await this.wait(1100,signal);
       await this.step('Customize','Keep a list of features.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add to your list',signal);await this.wait(2000,signal);
       await this.step('Update','Download your changes together.',signal);await this.click('Download update',signal);await this.until(()=>!!this.findButton('Restart to update'),signal);await this.wait(1300,signal);
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
       await this.step('Customize','See what you’ve added.',signal);await this.click(['Features','Update ready'],signal,true);
       const lastChange=document.querySelector<HTMLElement>('.feature-column:nth-child(2) .feature-row:last-child');if(!lastChange)throw Error('The walkthrough update did not add its features.');
-      await this.pointAt(lastChange,signal);await this.wait(3200,signal);await this.click('Writing',signal,true);await this.mobilePanel(false,signal);
+      await this.pointAt(lastChange,signal);await this.wait(3200,signal);await this.click('Writing',signal,true);await this.sidebar(false,signal);
       await this.step('Write','Your new features, ready to use.',signal);
       const reading=document.querySelector<HTMLElement>('.demo-reading-time');if(!reading)throw Error('Reading time was not activated.');await this.pointAt(reading,signal);await this.wait(2300,signal);
       await this.step('Focus','Write without distractions.',signal);await this.click('Focus',signal);await this.wait(3200,signal);

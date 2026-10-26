@@ -6,6 +6,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:Number(process.env.DRAFT_WEBSI
   // Local browser checks exercise layout against the built site without shipping
   // test pages in the static website output.
   if(pathname==='/__checks__/resize.html')return new Response(Bun.file(resolve(import.meta.dir,'../tests/fixtures/website-resize.html')),{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
+  if(pathname==='/__checks__/walkthrough.html')return new Response(Bun.file(resolve(import.meta.dir,'../tests/fixtures/website-walkthrough.html')),{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
   if(pathname.endsWith('/'))pathname+='index.html';const path=resolve(root,`.${pathname}`);
   if(!path.startsWith(root+sep)||pathname.includes('\0')||!await Bun.file(path).exists())return new Response('Not found',{status:404});
   const types:Record<string,string>={'.js':'text/javascript','.css':'text/css','.html':'text/html; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.mp4':'video/mp4','.txt':'text/plain'};
