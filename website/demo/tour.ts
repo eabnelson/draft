@@ -52,7 +52,7 @@ export class Tour{
     if(element.closest('.features-top'))return;
     for(let parent=element.parentElement;parent&&parent!==document.body;parent=parent.parentElement){
       if(!['auto','scroll'].includes(getComputedStyle(parent).overflowY)||parent.scrollHeight<=parent.clientHeight)continue;
-      const bounds=parent.getBoundingClientRect(),rect=element.getBoundingClientRect(),inset=parent.classList.contains('features-page')?62:20;
+      const bounds=parent.getBoundingClientRect(),rect=element.getBoundingClientRect(),inset=parent.classList.contains('features-scroll')?62:20;
       let destination=parent.scrollTop;
       if(rect.top<bounds.top+inset)destination+=rect.top-bounds.top-inset;
       else if(rect.bottom>bounds.bottom-20)destination+=rect.bottom-bounds.bottom+20;

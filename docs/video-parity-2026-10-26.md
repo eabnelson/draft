@@ -39,3 +39,5 @@ In alpha 8, center the indicator beneath the marked wording (beneath the final l
 In alpha 9, place the sidebar close control immediately to the right of the Draft wordmark. With the sidebar closed, show only the open control at the far left.
 
 In alpha 10, use plain rounded sidebar icons without arrows: a full divider when open and a short inset bar when closed. Keep the toggle background transparent in both states, including hover.
+
+In alpha 11, give Features its own full-width scroll area beneath the fixed app header. The writing layout had constrained the app height while allowing Features to grow beyond it, clipping lower feature rows and update history. Verify actual wheel scrolling to the footer and keyboard navigation in the browser; the unit suite does not emulate browser layout. Keep the website walkthrough on the same scroll container.

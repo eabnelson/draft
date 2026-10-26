@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.10",
+  "appVersion": "0.2.0-alpha.11",
   "name": "Draft",
   "features": [
     {
@@ -93,7 +93,7 @@
       "id": "personal-updates",
       "title": "Make Draft yours",
       "description": "Keep a feature list, download an update, and restart to make it yours.",
-      "updatedAt": "2026-10-24T23:12:00Z",
+      "updatedAt": "2026-10-26T19:06:35.581Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -101,7 +101,9 @@
         "desktop/handoff.ts",
         "src/Features.tsx",
         "src/FeatureHandoff.tsx",
-        "desktop/feature-queue.ts"
+        "desktop/feature-queue.ts",
+        "src/App.tsx",
+        "src/writing.css"
       ]
     }
   ]

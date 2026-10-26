@@ -16,3 +16,4 @@ input,textarea,input:focus,input:focus-visible,textarea:focus,textarea:focus-vis
 @media(prefers-reduced-motion:reduce){.side-panel{animation:none}}
 .demo-focus .workspace{grid-template-columns:0 minmax(0,1fr) 0}
 .demo-focus .writing-controls{height:0;border:0;opacity:0;overflow:hidden;pointer-events:none}
+.features-scroll{scrollbar-width:none}.features-scroll>.features-page{overflow:visible}
