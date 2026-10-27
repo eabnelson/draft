@@ -1,8 +1,11 @@
 import {cp,mkdir,rm,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {latestMacDownload} from './download';
 const root=import.meta.dir;
 await rm(join(root,'dist'),{recursive:true,force:true});await mkdir(join(root,'dist'),{recursive:true});
-await cp(join(root,'index.html'),join(root,'dist/index.html'));await cp(join(root,'assets'),join(root,'dist/assets'),{recursive:true});
+const download=await latestMacDownload();
+const html=new HTMLRewriter().on('a[data-mac-download]',{element(element){element.setAttribute('href',download);}}).transform(new Response(await readFile(join(root,'index.html'),'utf8')));
+await writeFile(join(root,'dist/index.html'),await html.text());await cp(join(root,'assets'),join(root,'dist/assets'),{recursive:true});
 await cp(join(root,'share'),join(root,'dist/share'),{recursive:true});
 const player=await Bun.build({entrypoints:[join(root,'player.ts')],outdir:join(root,'dist'),target:'browser',minify:true});if(!player.success)throw Error('The walkthrough player could not be built.');
 const child=Bun.spawn([process.execPath,join(root,'../node_modules/vite/bin/vite.js'),'build','--config',join(root,'vite.config.ts')],{cwd:join(root,'..'),stdout:'inherit',stderr:'inherit'});if(await child.exited)process.exit(1);

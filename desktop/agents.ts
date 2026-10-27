@@ -25,7 +25,7 @@ export function builderSandbox(workspace:string,protectedRoot:string){
   const quote=(v:string)=>JSON.stringify(v);
   // The coding process can use its own auth/config, but never real documents or
   // the controller's activation records. Source candidates live in Caches.
-  const privateRoots=[join(protectedRoot,'Documents'),join(protectedRoot,'state.json'),join(homedir(),'Desktop'),join(homedir(),'Downloads'),join(homedir(),'Pictures'),join(homedir(),'Library/Messages'),join(homedir(),'Library/Mail')];
+  const privateRoots=[join(protectedRoot,'Documents'),join(protectedRoot,'state.json'),join(homedir(),'Desktop'),join(homedir(),'Downloads'),join(homedir(),'Pictures'),join(homedir(),'Library/Messages'),join(homedir(),'Library/Mail'),join(homedir(),'Library/Application Support/DraftSigning'),join(homedir(),'.appstoreconnect/private_keys')];
   const runtime=resolve(import.meta.dir,'..');
   return `(version 1) (allow default) (deny file-write*) (allow file-write* (subpath ${quote(workspace)}) (subpath ${quote(realpathSync(tmpdir()))}) (subpath "/private/tmp") (subpath ${quote(join(homedir(),'.claude'))}) (subpath ${quote(join(homedir(),'.codex'))}) (subpath ${quote(join(homedir(),'.cache'))}) (literal "/dev/null")) (deny file-read* (require-all (subpath ${quote(join(homedir(),'Documents'))}) (require-not (subpath ${quote(runtime)})))) ${privateRoots.map(p=>`(deny file-read* file-write* (subpath ${quote(p)}))`).join(' ')}`;
 }

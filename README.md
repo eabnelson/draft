@@ -10,7 +10,7 @@ A local writing app you can make your own. Write, compare alternate wording, set
 
 ## Use Draft
 
-Download the Apple Silicon macOS build from Releases, extract it, and move Draft to Applications. macOS 13 or later is required. This alpha is not notarized; a signed, notarized distribution is a remaining release requirement. Building from source is supported below.
+Use **Download for Mac** on [the website](https://draft.studiofour.io/), open the disk image, and drag Draft to Applications. Apple Silicon and macOS 13 or later are required. From alpha.19, public releases must pass Developer ID signing, Apple notarization, and a fresh-Mac installation check before publication. Older alpha downloads remain in the release history. Building from source is supported below.
 
 Writing works without an AI connection. For assistance and personal updates, install and sign in to [Claude Code](https://claude.com/product/claude-code) or [Codex](https://developers.openai.com/codex/cli). Draft discovers those installations and their available models. It reuses their normal login flow and does not copy tokens into its settings. When available, Claude Opus 5.5 is the default. Model settings lets you change it.
 

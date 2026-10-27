@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.18",
+  "appVersion": "0.2.0-alpha.19",
   "name": "Draft",
   "features": [
     {
@@ -116,7 +116,7 @@
       "id": "personal-updates",
       "title": "Make Draft yours",
       "description": "Create your own features, keep them through official updates, and undo an update any time.",
-      "updatedAt": "2026-10-27T20:00:00Z",
+      "updatedAt": "2026-10-27T18:04:48.671485+00:00",
       "origin": "official",
       "state": "active",
       "code": [

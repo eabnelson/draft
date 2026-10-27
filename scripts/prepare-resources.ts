@@ -2,6 +2,7 @@ import {mkdir,cp,rm,readFile} from 'node:fs/promises';
 import {join,resolve,relative} from 'node:path';
 import {copySource,exists} from '../desktop/files';
 import {build} from 'vite';
+import {signBundledCode} from './mac-distribution';
 const root=resolve(import.meta.dir,'..'),resources=join(root,'resources');
 await rm(resources,{recursive:true,force:true});
 await mkdir(resources,{recursive:true});
@@ -24,4 +25,5 @@ await cp(join(root,'node_modules'),join(resources,'node_modules'),{recursive:tru
   const p=relative(join(root,'node_modules'),path);
   return !p.startsWith('@tauri-apps')&&!p.startsWith('@anthropic-ai/claude-agent-sdk-')&&!p.startsWith('.cache');
 }});
+if(process.platform==='darwin')await signBundledCode(resources,process.env.APPLE_SIGNING_IDENTITY??'-');
 console.log('Desktop runtime, editable source, and build tools prepared.');

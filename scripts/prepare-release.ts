@@ -3,6 +3,7 @@ import {join,resolve} from 'node:path';
 import {createPublicKey,sign} from 'node:crypto';
 import {fileDigest} from '../desktop/native-update';
 import type {ReleaseManifest} from '../desktop/official-release';
+import {verifyMacApp,macCommand} from './mac-distribution';
 const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'package.json')).json()).version;
 const output=join(root,'release'),tag=`v${version}`,base=`https://github.com/eabnelson/draft/releases/download/${tag}`;
 const keyPath=process.env.DRAFT_UPDATE_SIGNING_KEY_PATH;if(!keyPath)throw Error('Set DRAFT_UPDATE_SIGNING_KEY_PATH to the private release key outside this repository.');
@@ -12,6 +13,10 @@ await mkdir(output,{recursive:true});
 async function run(args:string[]){const child=Bun.spawn(args,{stdout:'ignore',stderr:'inherit'});if(await child.exited)throw Error('The release could not be packaged.');}
 const source=join(output,`Draft-${version}-source.tar.gz`),desktop=join(output,`Draft-${version}-macos-${process.arch}.zip`);
 const app=join(root,'src-tauri/target/release/bundle/macos/Draft.app');
+if(!process.env.APPLE_TEAM_ID)throw Error('Set APPLE_TEAM_ID to verify the public distribution signature.');
+await verifyMacApp(app,process.env.APPLE_TEAM_ID);
+const report=await Bun.file(join(output,'distribution-report.json')).json();
+if(report.version!==version||report.team!==process.env.APPLE_TEAM_ID||report.notarized!==true)throw Error('Notarize this version before preparing public downloads.');
 for(const [key,expected] of [['CFBundleIdentifier','com.eriknelson.draft'],['CFBundleShortVersionString',version]]){
  const child=Bun.spawn(['/usr/libexec/PlistBuddy','-c',`Print :${key}`,join(app,'Contents/Info.plist')],{stdout:'pipe',stderr:'inherit'});
  if(await child.exited||(await new Response(child.stdout).text()).trim()!==expected)throw Error('The packaged app does not match this release.');
@@ -22,11 +27,12 @@ await run(['/usr/bin/tar','-czf',source,'-C',join(root,'resources/source-templat
 await run(['/usr/bin/ditto','-c','-k','--keepParent',app,desktop]);
 const notes=await Bun.file(join(root,'release-notes.json')).json() as string[];
 const artifact=async(path:string)=>({url:`${base}/${path.split('/').at(-1)}`,sha256:await fileDigest(path),size:(await stat(path)).size});
-const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.eriknelson.draft',arch:process.arch as 'arm64'|'x64'}};
+const dmg=join(root,'src-tauri/target/release/bundle/dmg',`Draft_${version}_${process.arch==='arm64'?'aarch64':'x64'}.dmg`);
+await macCommand(['xcrun','stapler','validate',dmg]);
+const installer=join(output,`Draft-${version}-macos-${process.arch}.dmg`);await copyFile(dmg,installer);
+const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.eriknelson.draft',arch:process.arch as 'arm64'|'x64'},installer:await artifact(installer)};
 const payload=JSON.stringify(manifest),signature=sign(null,Buffer.from(payload),key).toString('base64');
 await Bun.write(join(output,'draft-update.json'),JSON.stringify({payload,signature},null,2)+'\n');
-const dmg=join(root,'src-tauri/target/release/bundle/dmg',`Draft_${version}_${process.arch==='arm64'?'aarch64':'x64'}.dmg`);
-await copyFile(dmg,join(output,`Draft-${version}-macos-${process.arch}.dmg`));
-const names=[source,desktop,join(output,`Draft-${version}-macos-${process.arch}.dmg`),join(output,'draft-update.json')];
+const names=[source,desktop,join(output,`Draft-${version}-macos-${process.arch}.dmg`),join(output,'draft-update.json'),join(output,'distribution-report.json')];
 await Bun.write(join(output,'SHA256SUMS'),(await Promise.all(names.map(async path=>`${await fileDigest(path)}  ${path.split('/').at(-1)}`))).join('\n')+'\n');
 console.log(`Signed desktop and matching source prepared for ${tag}.`);

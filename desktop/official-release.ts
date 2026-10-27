@@ -4,7 +4,7 @@ import {join,dirname} from 'node:path';
 import {atomicWrite,within} from './files';
 
 export type ReleaseArtifact={url:string;sha256:string;size:number};
-export type ReleaseManifest={schemaVersion:2;version:string;publishedAt:string;notes:string[];nativeHostVersion:string;source:ReleaseArtifact;desktop:ReleaseArtifact&{bundleId:string;arch:'arm64'|'x64'}};
+export type ReleaseManifest={schemaVersion:2;version:string;publishedAt:string;notes:string[];nativeHostVersion:string;source:ReleaseArtifact;desktop:ReleaseArtifact&{bundleId:string;arch:'arm64'|'x64'};installer?:ReleaseArtifact};
 export type SignedRelease=ReleaseManifest&{envelope:{payload:string;signature:string};releaseUrl:string};
 type ChannelOptions={feed?:string;publicKey:string;allowLocal?:boolean;bundleId?:string;arch?:string};
 const defaultFeed='https://api.github.com/repos/eabnelson/draft/releases?per_page=20';
@@ -33,7 +33,7 @@ export class ReleaseChannel {
       const value=JSON.parse(envelope.payload) as ReleaseManifest;
       if(value.schemaVersion!==2||value.version!==String(release.tag_name).replace(/^v/,'')||!Number.isFinite(Date.parse(value.publishedAt))||!Array.isArray(value.notes)||value.notes.length>12||value.notes.some(note=>typeof note!=='string'||note.length>300))throw Error('The update information is incomplete.');
       Bun.semver.order(value.nativeHostVersion,value.nativeHostVersion);
-      for(const [artifact,limit] of [[value.source,15_000_000],[value.desktop,350_000_000]] as const){
+      for(const [artifact,limit] of [...[[value.source,15_000_000],[value.desktop,350_000_000]],...(value.installer?[[value.installer,350_000_000]]:[])] as [ReleaseArtifact,number][]){
         if(!artifact||!/^[a-f0-9]{64}$/.test(artifact.sha256)||!Number.isSafeInteger(artifact.size)||artifact.size<1||artifact.size>limit)throw Error('The update download could not be verified.');this.url(artifact.url);
       }
       if(value.desktop.bundleId!==(this.options.bundleId??'com.eriknelson.draft')||value.desktop.arch!==(this.options.arch??process.arch)){unsupported=true;continue;}

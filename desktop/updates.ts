@@ -12,7 +12,7 @@ import {prepareOfficialMerge,verifyPreservedFeatures,sourceFiles,type ConflictCh
 import {NativeUpdates,rememberPreviousApp} from './native-update';
 import type {HostState,Version,Update,UpdateKind,FeaturesState,AgentSelection,Catalog,Handoff,HandoffPrompt,QueuedFeature} from './types';
 
-const nativeHostVersion='0.2.0-alpha.18';
+const nativeHostVersion='0.2.0-alpha.19';
 const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['implemented','already_exists','failed']},title:{type:'string',maxLength:80},summary:{type:'string',maxLength:360},featureId:{type:'string'}},required:['outcome','title','summary','featureId'],additionalProperties:false};
 export type AgentConnection=Pick<Agents,'discover'|'login'|'select'|'run'>;
 export function parseAgentResult(text:string){let value;try{value=JSON.parse(text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw Error('The coding agent did not return a valid completion result.');}if(!['implemented','already_exists','failed'].includes(value.outcome)||typeof value.title!=='string'||typeof value.summary!=='string'||typeof value.featureId!=='string')throw Error('The coding agent returned an incomplete result.');return value as {outcome:'implemented'|'already_exists'|'failed';title:string;summary:string;featureId:string};}
