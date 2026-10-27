@@ -1,5 +1,5 @@
 // Runs on a fresh Mac runner with no release signing keychain or Apple credentials.
-import {readFile,writeFile,mkdir,mkdtemp,rm,symlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,mkdtemp,rm,symlink,realpath} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
 import {tmpdir,homedir} from 'node:os';
 import {verify} from 'node:crypto';
@@ -13,7 +13,9 @@ for(const artifact of [release.installer,release.desktop]){
  if(!artifact?.url)throw Error('The signed release is missing a download.');const name=new URL(artifact.url).pathname.split('/').at(-1)!;
  if(!/^[-a-zA-Z0-9_.]+$/.test(name)||await fileDigest(join(assets,name))!==artifact.sha256||(await Bun.file(join(assets,name)).size)!==artifact.size)throw Error('The downloaded installer does not match the signed release.');
 }
-const stage=await mkdtemp(join(tmpdir(),'draft-download-check-')),mount=join(stage,'volume');await mkdir(mount);
+// macOS exposes /var as a symlink. Tauri deliberately rejects an executable
+// launched through it; use the canonical installation path, as /Applications does.
+const stage=await realpath(await mkdtemp(join(tmpdir(),'draft-download-check-'))),mount=join(stage,'volume');await mkdir(mount);
 const installer=join(assets,new URL(release.installer.url).pathname.split('/').at(-1)!);
 await macCommand(['xcrun','stapler','validate',installer]);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
 let mounted=false,child:ReturnType<typeof Bun.spawn>|undefined,output='';const data=join(stage,'profile');
@@ -62,7 +64,7 @@ try{
  const info=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleExecutable',join(app,'Contents/Info.plist')]);
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
  const environment={...process.env,DRAFT_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
- child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'pipe',stderr:'pipe'});
+ const started=Date.now();child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'pipe',stderr:'pipe'});
  void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  let launched=false;for(let i=0;i<300;i++){
   if(child.exitCode!==null)throw Error('The downloaded app stopped during first launch.');
@@ -70,6 +72,7 @@ try{
   await new Promise(resolve=>setTimeout(resolve,100));
  }
  if(!launched)throw Error('The fresh Mac launch did not open its local document library.');
+ console.log('FIRST_LAUNCH_MS',Date.now()-started);
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
  console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic download, Apple approval, Gatekeeper, installed app, bundled feature tools, first launch, local writing.`);
