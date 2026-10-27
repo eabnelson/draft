@@ -27,7 +27,7 @@ for(const frame of document.querySelectorAll('iframe')){
    if(!state.wordings.some(v=>v.word===word&&v.count===count)){
     const rect=mark.getBoundingClientRect(),row=dots.querySelector('.wording-options').getBoundingClientRect(),error=Math.abs(row.left+row.width/2-rect.left-rect.width/2);
     if(error>1)return fail(state,`Wording dots are not centered: ${word}, ${count} options, ${error.toFixed(2)}px.`);
-    if(state.scene==='Compare with ← →.'){
+    if(word==='paperclip'&&count===2){
      const disc=frame.contentDocument.querySelector('.glass-cursor.visible .cursor-disc');if(disc){
       const pointer=disc.getBoundingClientRect(),canvas=inner.getBoundingClientRect(),scale=canvas.width/doc.documentElement.clientWidth;
       const covered=[rect,row].some(r=>pointer.left<canvas.left+r.right*scale&&pointer.right>canvas.left+r.left*scale&&pointer.top<canvas.top+r.bottom*scale&&pointer.bottom>canvas.top+r.top*scale);
@@ -39,6 +39,7 @@ for(const frame of document.querySelectorAll('iframe')){
   }
   state.queued=Math.max(state.queued,doc.querySelectorAll('.feature-wishlist li').length);
   const buttons=[...doc.querySelectorAll('button')],ready=buttons.some(b=>b.textContent.trim()==='Restart to update');
+  if(doc.querySelector('.features-page .tour-target,.demo-reading-time.tour-target'))return fail(state,'Feature cards and update areas should have no tour attention outline.');
   state.preferences||=buttons.some(b=>b.textContent.trim()==='Preferences');
   if(state.scene!=='Reset')state.ready||=ready;
   if(state.scene==='Reset'){state.resetRequested||=!!doc.querySelector('.wishlist-download .spin');state.resetReady||=ready;}

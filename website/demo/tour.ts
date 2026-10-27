@@ -47,7 +47,7 @@ export class Tour{
     const from={...this.position},dx=point.x-from.x,dy=point.y-from.y,arc=curve?Math.min(18,Math.hypot(dx,dy)*.025):0;
     await this.animate(this.reduced?0:duration,t=>{const p=ease(t);this.position={x:from.x+dx*p,y:from.y+dy*p-Math.sin(Math.PI*p)*arc};this.pointer('move',this.position);onProgress?.(p);},signal);
   }
-  private mark(element?:HTMLElement){this.target?.classList.remove('tour-target');this.target=element;element?.classList.add('tour-target');}
+  private mark(element?:HTMLElement){this.target?.classList.remove('tour-target');this.target=element?.closest('.features-page,.demo-reading-time')?undefined:element;this.target?.classList.add('tour-target');}
   private async reveal(element:HTMLElement,signal:AbortSignal){
     if(element.closest('.features-top'))return;
     for(let parent=element.parentElement;parent&&parent!==document.body;parent=parent.parentElement){
@@ -151,13 +151,13 @@ export class Tour{
       await this.step('Write','Write your first draft.',signal);await this.typeDraft(signal);
       await this.step('Refine','Try a different word.',signal);await this.click('Toggle editing tools',signal);await this.select('paperclip',signal);await this.click('Alternative',signal);
       await this.field('New alternative wording','eraser',signal);await this.click('Add alternative',signal);
-      await this.step('Refine','Compare with ← →.',signal);await this.compare(-1,'paperclip',signal);await this.compare(1,'eraser',signal);await this.sidebar(false,signal);
+      await this.compare(-1,'paperclip',signal);await this.compare(1,'eraser',signal);await this.sidebar(false,signal);
       await this.step('Write','Keep spare ideas nearby.',signal);await this.select('Keep a spare thought nearby.',signal);await this.click('Overflow',signal);await this.wait(1000,signal);
       await this.step('Customize','Want something else? Ask for it.',signal);await this.click('Preferences',signal,true);
       const writing=JSON.stringify(this.store.library);
       await this.field('Feature request','Show reading time beside the word count.',signal);await this.click('Add to your list',signal);await this.wait(1200,signal);
       await this.step('Customize','Stack up your ideas.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add to your list',signal);await this.wait(1800,signal);
-      await this.step('Build','Your AI builds the update.',signal);await this.click('Download update',signal);await this.updateReady(signal);
+      await this.step('Build','Build the update',signal);await this.click('Download update',signal);await this.updateReady(signal);
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
       await this.step('Use','Reading time. Made for you.',signal);
       const reading=document.querySelector<HTMLElement>('.demo-reading-time');if(!reading)throw Error('Reading time was not activated.');await this.pointAt(reading,signal);
