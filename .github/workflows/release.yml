@@ -140,6 +140,7 @@ jobs:
 
   publish:
     needs: clean-mac
+    if: ${{ always() && needs.clean-mac.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
