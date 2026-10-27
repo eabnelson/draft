@@ -1,7 +1,7 @@
 // Runs on a fresh Mac runner with no release signing keychain or Apple credentials.
-import {readFile,mkdir,mkdtemp,rm,symlink} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
-import {tmpdir} from 'node:os';
+import {readFile,writeFile,mkdir,mkdtemp,rm,symlink} from 'node:fs/promises';
+import {join,resolve,dirname} from 'node:path';
+import {tmpdir,homedir} from 'node:os';
 import {verify} from 'node:crypto';
 import {macCommand,verifyMacApp} from './mac-distribution';
 import {fileDigest} from '../desktop/native-update';
@@ -32,8 +32,14 @@ try{
  const runtime=join(app,'Contents/Resources/runtime'),workspace=join(stage,'editable-source');
  await macCommand(['/usr/bin/ditto',join(runtime,'source-template'),workspace]);
  await symlink(join(runtime,'node_modules'),join(workspace,'node_modules'),'dir');
- await macCommand([join(runtime,'bun'),'test',join(workspace,'tests'),join(workspace,'host-tests/official-update.test.ts')]);
- console.log('BUNDLED_TOOLS_PASSED: document checks, personal feature builds, official merges and conflict choices using the shipped runtime.');
+ // This directory comes first in the host's tool lookup. Fail any accidental
+ // system-Node dependency without nesting or weakening the feature sandbox.
+ const node=join(homedir(),'.local/bin/node');await mkdir(dirname(node),{recursive:true});
+ await writeFile(node,'#!/bin/sh\necho "External Node is unavailable in this installation check." >&2\nexit 123\n',{flag:'wx',mode:0o755});
+ try{
+  await macCommand(['/usr/bin/env',`PATH=${dirname(node)}:${process.env.PATH??'/usr/bin:/bin'}`,join(runtime,'bun'),'test',join(workspace,'tests'),join(workspace,'host-tests/official-update.test.ts')]);
+ }finally{await rm(node);}
+ console.log('BUNDLED_TOOLS_PASSED: document checks, personal feature builds, official merges and conflict choices using the shipped runtime without Node on PATH.');
  const info=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleExecutable',join(app,'Contents/Info.plist')]);
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
  const environment={...process.env,DRAFT_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];

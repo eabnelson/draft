@@ -98,7 +98,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     permissions:
-      contents: read
+      # GitHub only exposes unpublished draft releases to identities with push access.
+      # The token is supplied solely to the download step, never the app or its tests.
+      contents: write
     env:
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
     steps:
