@@ -75,6 +75,12 @@ const decorations=StateField.define<DecorationSet>({
   },provide:field=>EditorView.decorations.from(field)
 });
 export type EditorHandle={focus:()=>void;select:(range:Span)=>void};
+const writingScrollRoom=ViewPlugin.define(view=>{
+  const area=view.dom.closest<HTMLElement>('.writing-area');if(!area)return {};
+  const measure=()=>{if(!area.clientHeight)return;const toolbar=area.querySelector('.draft-toolbar')?.getBoundingClientRect().height??0;area.style.setProperty('--writing-room',`${Math.max(0,area.clientHeight-toolbar-32)}px`);};
+  const observer=new ResizeObserver(measure);observer.observe(area);measure();
+  return {destroy(){observer.disconnect();area.style.removeProperty('--writing-room');}};
+});
 type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
 
 function replacement(before:string,after:string){let from=0,oldTo=before.length,newTo=after.length;while(from<oldTo&&from<newTo&&before[from]===after[from])from++;while(oldTo>from&&newTo>from&&before[oldTo-1]===after[newTo-1]){oldTo--;newTo--;}return {from,to:oldTo,insert:after.slice(from,newTo)};}
@@ -92,7 +98,7 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
-      markdownEditing,decorations,centerWordingDots,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
+      markdownEditing,decorations,centerWordingDots,writingScrollRoom,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
       EditorView.contentAttributes.of({'aria-label':'Draft body',role:'textbox','aria-multiline':'true',spellcheck:'true',autocapitalize:'sentences'}),
       Prec.highest(keymap.of([
         {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},{key:'Mod-Shift-z',run:()=>{current.current.onAction('redo');return true;}},

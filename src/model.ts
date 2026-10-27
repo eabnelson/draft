@@ -141,6 +141,14 @@ export function validateQuotes(d:Draft,items:{text:string;reason?:string;replace
   }
   return cuts.sort((a,b)=>a.from-b.from);
 }
+export function applyReviewFix(d:Draft,cuts:Cut[],cutId:string):{draft:Draft;cuts:Cut[]} {
+  const cut=cuts.find(c=>c.id===cutId),stale=()=>Error('This suggestion no longer matches your writing. Ask for fresh suggestions.');
+  if(!cut||typeof cut.replacement!=='string'||d.text.slice(cut.from,cut.to)!==cut.text)throw stale();
+  const remaining=cuts.filter(c=>c.id!==cutId);
+  if(boundaryError(d,cut)||remaining.some(c=>overlaps(c,cut)||d.text.slice(c.from,c.to)!==c.text))throw stale();
+  const changes=ChangeSet.of({from:cut.from,to:cut.to,insert:cut.replacement},d.text.length);
+  return {draft:applyChanges(d,changes),cuts:remaining.map(c=>({...c,from:changes.mapPos(c.from,1),to:changes.mapPos(c.to,-1)}))};
+}
 export function makeCuts(d:Draft,cuts:Cut[]):Draft {
   let next=d;
   for(const cut of cuts.filter(c=>c.accepted).sort((a,b)=>b.from-a.from)){

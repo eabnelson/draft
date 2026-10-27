@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.15",
+  "appVersion": "0.2.0-alpha.16",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
       "description": "Write in Markdown, format selected text, and keep a clean reading view.",
-      "updatedAt": "2026-10-26T21:55:47.067691Z",
+      "updatedAt": "2026-10-27T13:39:53.211425Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -92,20 +92,22 @@
       "id": "assistance",
       "title": "Writing assistance",
       "description": "Ask for ideas with ??, preview cuts, and review writing with your connected agent.",
-      "updatedAt": "2026-10-26T17:04:28Z",
+      "updatedAt": "2026-10-27T13:39:53.211425Z",
       "origin": "official",
       "state": "active",
       "code": [
         "desktop/agents.ts",
         "src/App.tsx",
-        "src/WritingPanels.tsx"
+        "src/WritingPanels.tsx",
+        "src/model.ts",
+        "src/writing.css"
       ]
     },
     {
       "id": "personal-updates",
       "title": "Make Draft yours",
       "description": "Keep a feature list, download an update, and restart to make it yours.",
-      "updatedAt": "2026-10-26T21:18:24.063734Z",
+      "updatedAt": "2026-10-27T13:43:26.198230Z",
       "origin": "official",
       "state": "active",
       "code": [

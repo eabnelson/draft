@@ -76,7 +76,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
     <div className="features-heading"><div><h1>Make Draft yours.</h1><p>Keep a list. Update when you’re ready.</p></div><span className="version-label">Draft {data?.appVersion??'…'}</span></div>
     <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
       <textarea aria-label="Feature request" placeholder="What would you like Draft to do?" value={request} onChange={event=>setRequest(event.target.value)} disabled={submitting||applying} rows={2}/>
-      <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add to your list</Button></div>
+      <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add feature</Button></div>
     </form>
     <section className="feature-wishlist" aria-label="Your feature list">
       <header><h2>Your next update</h2><span>{ideas.length} {ideas.length===1?'idea':'ideas'}</span></header>

@@ -10,7 +10,7 @@ import { Input } from './components/ui/input';
 import { Features } from './Features';
 import { ModelSettings } from './ModelSettings';
 import { api } from './client';
-import { type Draft, type Span, type Cut, fresh, changed, words, cleanText, applyChanges, addVariant, addCandidate, choose, ghost, stash, replace, parseDraft, overlaps, validateQuotes, variantContext, variantScope, makeCuts } from './model';
+import { type Draft, type Span, type Cut, fresh, changed, words, cleanText, applyChanges, addVariant, addCandidate, choose, ghost, stash, replace, parseDraft, overlaps, validateQuotes, variantContext, variantScope, makeCuts, applyReviewFix } from './model';
 
 const NO_CUTS:Cut[]=[];
 type Library={active:string;drafts:Draft[];archived?:Draft[]};
@@ -209,7 +209,10 @@ export default function App(){
     setReview(value=>value?{...value,cuts:value.kind==='trim'?value.cuts.map(c=>c.id===id?{...c,accepted:!c.accepted}:c):value.cuts.filter(c=>c.id!==id)}:null);
   }
   function walkCuts(){if(!liveReview?.cuts.length)return;editor.current?.select(liveReview.cuts[walkIndex.current++%liveReview.cuts.length]);}
-  function fix(cut:Cut){if(liveReview?.revision===draft.revision&&cut.replacement!==undefined)safely(()=>commit(replace(draft,cut.from,cut.to,cut.replacement!)));}
+  function fix(cut:Cut){
+    if(!liveReview||liveReview.revision!==draftRef.current.revision)return;
+    safely(()=>{const next=applyReviewFix(draftRef.current,liveReview.cuts,cut.id);commit(next.draft);setReview({...liveReview,revision:next.draft.revision,cuts:next.cuts});});
+  }
 
   return <><div className={`app ${panel&&draft.revisionMode?'with-panel':'without-panel'} ${overflowOpen&&draft.revisionMode?'with-overflow':''}`} inert={updating}>
     <header className="topbar">

@@ -155,8 +155,8 @@ export class Tour{
       await this.step('Write','Keep spare ideas nearby.',signal);await this.select('Keep a spare thought nearby.',signal);await this.click('Overflow',signal);await this.wait(1000,signal);
       await this.step('Customize','Want something else? Ask for it.',signal);await this.click('Preferences',signal,true);
       const writing=JSON.stringify(this.store.library);
-      await this.field('Feature request','Show reading time beside the word count.',signal);await this.click('Add to your list',signal);await this.wait(1200,signal);
-      await this.step('Customize','Stack up your ideas.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add to your list',signal);await this.wait(1800,signal);
+      await this.field('Feature request','Show reading time beside the word count.',signal);await this.click('Add feature',signal);await this.wait(1200,signal);
+      await this.step('Customize','Stack up your ideas.',signal);await this.field('Feature request','Add a focus mode that hides the controls.',signal);await this.click('Add feature',signal);await this.wait(1800,signal);
       await this.step('Build','Build the update',signal);await this.click('Download update',signal);await this.updateReady(signal);
       await this.step('Update','Restart with your new features.',signal);await this.click('Restart to update',signal,true);await this.wait(1400,signal);
       await this.step('Use','Reading time. Made for you.',signal);

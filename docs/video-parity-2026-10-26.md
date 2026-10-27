@@ -51,3 +51,7 @@ Alpha 13 treats hidden link wrappers as a single caret boundary. Applying a link
 ## Sidebar caret correction — October 26, 2026
 
 Alpha 15 uses the same measured text-caret renderer in editable alternatives and overflow as in the main draft. These fields previously used the browser’s native contenteditable caret, which filled their generous line spacing. The caret now follows the rendered text height without changing line spacing or showing a cursor for a nonempty selection.
+
+## Suggestions and scrolling — October 27, 2026
+
+Alpha 16 shows the proposed wording alongside each fix in the suggestions popover. Applying a fix keeps the remaining suggestions open and maps their positions through the edit. Unrelated typing and undo still invalidate the review to prevent stale corrections. The writing canvas measures its available height and leaves visual space below the document, including when panels or the window change size. This space is padding rather than document content. Clean Markdown and plain-text exports continue to trim trailing blank space; native backups preserve the complete document and its annotations.
