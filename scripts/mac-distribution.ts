@@ -1,4 +1,4 @@
-import {open,readdir,mkdir,mkdtemp,rm,symlink} from 'node:fs/promises';
+import {open,readdir,mkdir,mkdtemp,rm,symlink,realpath} from 'node:fs/promises';
 import {join,dirname,resolve,relative} from 'node:path';
 import {tmpdir} from 'node:os';
 
@@ -9,9 +9,15 @@ export async function macCommand(args:string[]){
  return {stdout,stderr};
 }
 async function machFiles(root:string):Promise<string[]>{
- const paths:string[]=[];
+ const paths:string[]=[],base=await realpath(root);
  async function visit(folder:string){for(const entry of await readdir(folder,{withFileTypes:true})){
-  const path=join(folder,entry.name);if(entry.isSymbolicLink())continue;if(entry.isDirectory()){await visit(path);continue;}if(!entry.isFile())continue;
+  const path=join(folder,entry.name);
+  if(entry.isSymbolicLink()){
+   const target=relative(base,await realpath(path));
+   if(target==='..'||target.startsWith('../')||target.startsWith('/'))throw Error(`Bundled tool points outside the shipped runtime: ${relative(root,path)}`);
+   continue;
+  }
+  if(entry.isDirectory()){await visit(path);continue;}if(!entry.isFile())continue;
   const file=await open(path,'r'),bytes=Buffer.alloc(4);try{await file.read(bytes,0,4,0);}finally{await file.close();}
   if(['cffaedfe','cefaedfe','feedface','feedfacf','cafebabe','bebafeca','cafebabf','bfbafeca'].includes(bytes.toString('hex')))paths.push(path);
  }}await visit(root);return paths.sort((a,b)=>b.split('/').length-a.split('/').length||a.localeCompare(b));
@@ -28,7 +34,7 @@ export async function signBundledCode(resources:string,identity:string){
 }
 export async function requireDeveloperIdCode(path:string,team:string){
  const {stderr}=await macCommand(['/usr/bin/codesign','-d','--verbose=4',path]);
- if(!stderr.includes('Authority=Developer ID Application:')||!stderr.includes(`TeamIdentifier=${team}\n`))throw Error('Public downloads require a Developer ID Application signature from the release team.');
+ if(!stderr.includes('Authority=Developer ID Application:')||!stderr.includes(`TeamIdentifier=${team}\n`))throw Error(`Public downloads require a Developer ID Application signature from the release team: ${path}`);
  if(!/flags=.*\bruntime\b/.test(stderr)||!/^Timestamp=.+/m.test(stderr))throw Error('The signed executable needs hardened runtime and a secure timestamp.');
  await macCommand(['/usr/bin/codesign','--verify','--deep','--strict',path]);
  const entitlements=await macCommand(['/usr/bin/codesign','-d','--entitlements',':-',path]);

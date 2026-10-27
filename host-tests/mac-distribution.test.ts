@@ -16,3 +16,8 @@ test('public distribution rejects ad-hoc code even when its signature is valid',
   assert.equal(await Bun.file(join(root,'vendor/source.js')).text(),before);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('bundled runtime signing rejects shortcuts to files outside the shipped tools',{skip:process.platform!=='darwin'},async()=>{
+ const {symlink}=await import('node:fs/promises');const root=await mkdtemp(join(tmpdir(),'draft-signing-links-'));
+ try{await symlink('/usr/bin/true',join(root,'external-tool'));await assert.rejects(signBundledCode(root,'-'),/outside/);}finally{await rm(root,{recursive:true,force:true});}
+});

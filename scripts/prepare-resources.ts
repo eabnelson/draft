@@ -21,9 +21,9 @@ if(process.platform==='darwin'){
   const installer=Bun.spawn(['xcrun','swiftc','-O','-target',`${process.arch==='arm64'?'arm64':'x86_64'}-apple-macos13.0`,join(root,'native/InstallUpdate.swift'),'-o',join(resources,'draft-install')],{stdout:'inherit',stderr:'inherit'});
   if(await installer.exited)throw Error('The desktop update helper could not be built.');
 }
-await cp(join(root,'node_modules'),join(resources,'node_modules'),{recursive:true,dereference:false,filter:path=>{
+await cp(join(root,'node_modules'),join(resources,'node_modules'),{recursive:true,dereference:false,verbatimSymlinks:true,filter:path=>{
   const p=relative(join(root,'node_modules'),path);
-  return !p.startsWith('@tauri-apps')&&!p.startsWith('@anthropic-ai/claude-agent-sdk-')&&!p.startsWith('.cache');
+  return p!=='.bin/tauri'&&!p.startsWith('@tauri-apps')&&!p.startsWith('@anthropic-ai/claude-agent-sdk-')&&!p.startsWith('.cache');
 }});
 if(process.platform==='darwin')await signBundledCode(resources,process.env.APPLE_SIGNING_IDENTITY??'-');
 console.log('Desktop runtime, editable source, and build tools prepared.');
