@@ -21,8 +21,10 @@ const session=process.env.DRAFT_SESSION_TOKEN;
 if(!dev&&!session)throw Error('Start Draft through the desktop app.');
 const documents=new DocumentStore(join(root,'Documents'));
 const spelling=new NativeSpelling(spellingExecutable(runtime));
-const updates=new Updates(root,template,dependencies,process.execPath);
+const testHost=process.env.DRAFT_BUNDLE_ID?.endsWith('.update-check')===true;
+const updates=new Updates(root,template,dependencies,process.execPath,{appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID,hostVersion:process.env.DRAFT_HOST_VERSION,...(testHost?{feed:process.env.DRAFT_UPDATE_FEED,allowLocal:true}:{} )});
 await updates.initialize();
+if(!dev)updates.startAutomaticChecks();
 let recoveryCounter=0,closeReady=false,restartRequested=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 function authorized(request:Request){if(dev)return true;const cookie=request.headers.get('cookie')??'';return cookie.split(';').some(s=>s.trim()===`draft_session=${session}`)||request.headers.get('authorization')===`Bearer ${session}`;}
@@ -51,9 +53,10 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
         if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
-        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested});
+        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested,...(restartRequested?{nativeInstallPlan:updates.state.nativeInstallPlan}:{})});
         if(url.pathname==='/api/links/open'&&request.method==='POST'){await openExternalLink(input.url);return json({opened:true});}
         if(url.pathname==='/api/close/ready'&&request.method==='POST'){closeReady=true;return json({ready:true});}
+        if(url.pathname==='/api/close/reset'&&request.method==='POST'){closeReady=false;return json({ready:false});}
         if(url.pathname==='/api/providers'&&request.method==='GET'){const providers=await updates.agents.discover(url.searchParams.has('refresh'));const selected=await updates.defaultSelection();return json({providers,selection:selected});}
         if(url.pathname==='/api/providers/select'&&request.method==='POST'){await updates.select(input as AgentSelection);return json({saved:true});}
         if(url.pathname==='/api/providers/login'&&request.method==='POST'){if(!['claude','codex'].includes(input.provider))throw Error('Choose Claude Code or Codex.');return json({providers:await updates.agents.login(input.provider)});}
@@ -67,7 +70,9 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/updates/discard'&&request.method==='POST'){await updates.discard(input.id);return json({discarded:true});}
         if(url.pathname==='/api/updates/apply'&&request.method==='POST'){const restart=!dev&&input.restart===true;const result=await updates.apply(input.id,restart);restartRequested=restart;return json({...result,restart});}
         if(url.pathname==='/api/updates/confirm'&&request.method==='POST'){await updates.confirm(input.version);return json({confirmed:true});}
-        if(url.pathname==='/api/updates/check'&&request.method==='POST')return json(await updates.checkOfficial());
+        if(url.pathname==='/api/updates/check'&&request.method==='POST')return json(await updates.checkOfficial(input.background!==true));
+        if(url.pathname==='/api/updates/resolve'&&request.method==='POST')return json(await updates.resolveOfficial(input.id,input.choices));
+        if(url.pathname==='/api/updates/abort'&&request.method==='POST'){restartRequested=false;await updates.abortActivation();return json({restored:true});}
         if(url.pathname==='/api/updates/handoff'&&request.method==='POST')return json(await updates.handoff({updateId:input.updateId,featureId:input.featureId}));
         if(url.pathname==='/api/updates/handoff/check'&&request.method==='POST')return json(await updates.checkHandoff(input.id));
         if(url.pathname==='/api/reveal'&&request.method==='POST'){
@@ -93,10 +98,14 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
       }catch(error){return json({error:error instanceof Error?error.message:'The request failed.'},400);}
     }
     let decoded:string;try{decoded=decodeURIComponent(url.pathname);}catch{return new Response('Invalid path',{status:400});}
-    const path=resolve(updates.active.dist,decoded==='/'?'index.html':`.${decoded}`);
-    if(!within(updates.active.dist,path)||decoded.includes('\0'))return new Response('Not found',{status:404});
+    const hostUI=decoded==='/updates'||decoded.startsWith('/host-ui/')||decoded==='/host-updates.js';
+    const base=hostUI?join(runtime,'host-ui'):updates.active.dist;
+    const path=resolve(base,decoded==='/updates'?'host-ui/index.html':decoded==='/host-updates.js'?'bridge.js':decoded.startsWith('/host-ui/')?`.${decoded.slice('/host-ui'.length)}`:decoded==='/'?'index.html':`.${decoded}`);
+    if(!within(base,path)||decoded.includes('\0'))return new Response('Not found',{status:404});
     if(!await exists(path))return new Response('Not found',{status:404});
-    return new Response(Bun.file(path),{headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}});
+    if(decoded==='/')closeReady=false;
+    const html=extname(path)==='.html';
+    return new Response(html?(await Bun.file(path).text()).replace('</head>','<script src="/host-updates.js" defer></script></head>'):Bun.file(path),{headers:{...(html?{'Content-Type':'text/html; charset=utf-8'}:{}),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}});
   }
 });
 setInterval(()=>{void updates.recoverIfNeeded().then(recovered=>{if(recovered)recoveryCounter++;});},2000).unref();

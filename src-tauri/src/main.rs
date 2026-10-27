@@ -96,6 +96,13 @@ struct Connection {
     port: u16,
     token: String,
 }
+fn abort_update(port:u16, token:&str) {
+    if let Ok(mut stream)=TcpStream::connect(("127.0.0.1",port)) {
+        let _=write!(stream,"POST /api/updates/abort HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}");
+        let _=stream.set_read_timeout(Some(Duration::from_secs(3)));
+        let mut response=String::new();let _=stream.read_to_string(&mut response);
+    }
+}
 fn request_close(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.eval("window.dispatchEvent(new Event('draft:save-and-close'))");
@@ -121,12 +128,18 @@ fn main() {
     .plugin(tauri_plugin_single_instance::init(|app,_,_|{if let Some(window)=app.get_webview_window("main"){let _=window.show();let _=window.set_focus();}}))
     .setup(|app| {
       let resource=if let Ok(path)=std::env::var("DRAFT_RUNTIME_ROOT"){std::path::PathBuf::from(path)}else{app.path().resource_dir()?.join("runtime")};
-      let data=std::env::var("DRAFT_DATA_ROOT").map(std::path::PathBuf::from).unwrap_or(app.path().data_dir()?.join("Draft"));
+      let identifier=app.config().identifier.clone();
+      let qa=if identifier.ends_with(".update-check"){std::fs::read(resource.join("update-test-config.json")).ok().and_then(|bytes|serde_json::from_slice::<serde_json::Value>(&bytes).ok())}else{None};
+      let data=qa.as_ref().and_then(|value|value["dataRoot"].as_str()).map(std::path::PathBuf::from).or_else(||std::env::var("DRAFT_DATA_ROOT").ok().map(std::path::PathBuf::from)).unwrap_or(app.path().data_dir()?.join("Draft"));
+      let app_path=std::env::current_exe()?.parent().and_then(|path|path.parent()).and_then(|path|path.parent()).ok_or("Draft could not locate its application.")?.to_path_buf();
       let token=format!("{}{}",uuid::Uuid::new_v4().simple(),uuid::Uuid::new_v4().simple());
       let mut command=Command::new(resource.join("bun"));
-      command.arg(resource.join("desktop/server.ts")).env("DRAFT_RUNTIME_ROOT",&resource).env("DRAFT_DATA_ROOT",data).env("DRAFT_SESSION_TOKEN",&token)
+      command.arg(resource.join("desktop/server.ts")).env("DRAFT_RUNTIME_ROOT",&resource).env("DRAFT_DATA_ROOT",&data).env("DRAFT_SESSION_TOKEN",&token).env("DRAFT_APP_PATH",&app_path).env("DRAFT_BUNDLE_ID",&identifier).env("DRAFT_HOST_VERSION",app.config().version.as_deref().unwrap_or("0.0.0"))
         .stdout(Stdio::piped()).stderr(Stdio::inherit()).stdin(Stdio::null()).process_group(0);
+      if let Some(feed)=qa.as_ref().and_then(|value|value["feed"].as_str()){command.env("DRAFT_UPDATE_FEED",feed);}
       let mut child=command.spawn()?;
+      std::fs::create_dir_all(&data)?;
+      std::fs::write(data.join("runtime-info.json"),serde_json::to_vec(&serde_json::json!({"hostPid":std::process::id(),"runtimePid":child.id()}))?)?;
       let stdout=child.stdout.take().ok_or("Draft's local runtime did not open its output.")?;
       let reader=BufReader::new(stdout);
       let mut port=0u16;
@@ -135,6 +148,12 @@ fn main() {
       app.manage(LocalRuntime(Mutex::new(Some(child))));
       app.manage(Shutdown(AtomicBool::new(false)));app.manage(Connection{port,token:token.clone()});
       install_quit_guard(app.handle())?;
+      use tauri::menu::{Menu,Submenu,MenuItem,PredefinedMenuItem};
+      let check=MenuItem::with_id(app,"check-updates","Check for Updates…",true,None::<&str>)?;
+      let app_menu=Submenu::with_items(app,"Draft",true,&[&PredefinedMenuItem::about(app,None,None)?,&check,&PredefinedMenuItem::separator(app)?,&PredefinedMenuItem::hide(app,None)?,&PredefinedMenuItem::hide_others(app,None)?,&PredefinedMenuItem::show_all(app,None)?,&PredefinedMenuItem::separator(app)?,&PredefinedMenuItem::quit(app,None)?])?;
+      let edit=Submenu::with_items(app,"Edit",true,&[&PredefinedMenuItem::undo(app,None)?,&PredefinedMenuItem::redo(app,None)?,&PredefinedMenuItem::separator(app)?,&PredefinedMenuItem::cut(app,None)?,&PredefinedMenuItem::copy(app,None)?,&PredefinedMenuItem::paste(app,None)?,&PredefinedMenuItem::select_all(app,None)?])?;
+      app.set_menu(Menu::with_items(app,&[&app_menu,&edit])?)?;
+      app.on_menu_event(|handle,event|{if event.id().as_ref()=="check-updates"{if let Some(window)=handle.get_webview_window("main"){let _=window.eval("window.dispatchEvent(new Event('draft:open-updates'))");}}});
       let origin=format!("http://127.0.0.1:{port}");let allowed=origin.clone();
       WebviewWindowBuilder::new(app,"main",WebviewUrl::External(format!("{origin}/?token={token}").parse()?))
         .title("Draft").inner_size(1200.0,820.0).min_inner_size(780.0,560.0).center()
@@ -146,6 +165,12 @@ fn main() {
         loop {std::thread::sleep(Duration::from_secs(3));if handle.get_webview_window("main").is_none(){break;}
           if let Some(value)=health(port,&token) {
             if value["restartRequested"].as_bool()==Some(true) {
+              if let Some(plan)=value["nativeInstallPlan"].as_str() {
+                match Command::new(resource.join("draft-install")).arg(plan).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0).spawn() {
+                  Ok(_)=>{handle.state::<Shutdown>().0.store(true,Ordering::SeqCst);handle.exit(0);break;},
+                  Err(_)=>{abort_update(port,&token);if let Some(window)=handle.get_webview_window("main"){let _=window.eval("window.dispatchEvent(new Event('draft:update-failed'))");}continue;}
+                }
+              }
               handle.state::<Shutdown>().0.store(true,Ordering::SeqCst);
               handle.request_restart();
               break;

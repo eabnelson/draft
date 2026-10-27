@@ -5,6 +5,7 @@ import './studio-theme.css';
 import './style.css';
 import './writing.css';
 import {api} from './client';
+(window as any).__draftUpdateUI=true;
 try {
   const [library,health]=await Promise.all([api('/api/library'),api('/api/health')]);
   window.draftBoot={library,version:health.version};

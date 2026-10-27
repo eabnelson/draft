@@ -1,5 +1,7 @@
 # Alpha status — October 24, 2026
 
+Update: the official release synchronization, conflict resolution, and native recovery flow were implemented and tested on October 27. See [the dated verification](official-updates-2026-10-27.md).
+
 The accepted product baseline describes the intended product. This first alpha is a testable implementation, rather than a declaration that every release criterion is finished.
 
 ## Verified
@@ -18,7 +20,6 @@ The accepted product baseline describes the intended product. This first alpha i
 
 - Developer ID signing, notarization, and stapling for a trusted consumer download. The alpha is ad-hoc signed.
 - Performance budgets and measurements across representative Macs, Intel packaging, and broader accessibility verification.
-- A live official-release synchronization/conflict test with multiple personal features. The signature verification and integration path exist, but the first alpha is not a stable release to offer through that channel.
 - English article assistance from the optional P1 scope is not implemented yet.
 - Native-shell/controller customization needs a full desktop package; the in-app builder currently supports renderer and local-runtime changes.
 

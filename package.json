@@ -1,11 +1,12 @@
 {
   "name": "draft",
-  "version": "0.2.0-alpha.17",
+  "version": "0.2.0-alpha.18",
   "type": "module",
   "scripts": {
     "dev": "bun desktop/server.ts --dev",
     "build": "tsc -b && vite build",
     "test": "bun test ./tests",
+    "test:host": "bun test ./host-tests",
     "desktop:dev": "bun run scripts/desktop-dev.ts",
     "desktop:build": "bun run scripts/package-desktop.ts",
     "source:bundle": "bun run scripts/prepare-resources.ts",
@@ -23,6 +24,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
+    "node-diff3": "3.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwind-merge": "^3.7.0"

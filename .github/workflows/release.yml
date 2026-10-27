@@ -1,0 +1,41 @@
+name: Release Mac app
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: draft-mac-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify release version and architecture
+        run: |
+          test "$(uname -m)" = arm64
+          test "$GITHUB_REF_NAME" = "v$(bun -p 'require("./package.json").version')"
+      - run: bun install --frozen-lockfile
+      - run: shasum -a 256 -c SHA256SUMS
+      - run: bun run desktop:build
+      - name: Sign official update metadata
+        env:
+          DRAFT_UPDATE_SIGNING_KEY: ${{ secrets.DRAFT_UPDATE_SIGNING_KEY }}
+        run: |
+          umask 077
+          key_path="$RUNNER_TEMP/draft-release-key.pem"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s' "$DRAFT_UPDATE_SIGNING_KEY" > "$key_path"
+          DRAFT_UPDATE_SIGNING_KEY_PATH="$key_path" bun run release:prepare
+      - name: Publish matching app and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bun -e 'for (const note of await Bun.file("release-notes.json").json()) console.log("- " + note)' > "$RUNNER_TEMP/draft-release-notes.md"
+          gh release create "$GITHUB_REF_NAME" release/Draft-* release/draft-update.json release/SHA256SUMS --title "Draft $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/draft-release-notes.md" --prerelease

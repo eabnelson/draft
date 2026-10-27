@@ -4,7 +4,7 @@ A local writing app you can make your own. Write, compare alternate wording, set
 
 **macOS first · MIT · Early alpha**
 
-[Verified behavior and remaining release work](docs/alpha-status-2026-10-24.md).
+[Official update flow and end-to-end verification](docs/official-updates-2026-10-27.md) · [Earlier alpha verification](docs/alpha-status-2026-10-24.md).
 
 [Download the latest build](https://github.com/eabnelson/draft/releases) · [Product spec — October 24, 2026](docs/draft-product-spec-2026-10-24.md) · [Original inspiration](https://x.com/jasonfried/status/2105403067793584590)
 
@@ -18,11 +18,15 @@ Your provider processes the writing context or feature request you submit. Provi
 
 ## Make it yours
 
-Open **Features** to compare **Official Draft** with **Your changes**. Every high-level feature has a date. Add ideas to your list, choose which ones you want, then choose **Download update**. Draft checks for an existing equivalent, creates a separate source workspace, asks your selected agent to implement all selected changes together, then runs independent document tests, type checks, and builds.
+Open **Preferences** to compare **Official Draft** with **Your changes**. Every high-level feature has a date. Add ideas to your list, choose which ones you want, then choose **Download update**. Draft checks for an existing equivalent, creates a separate source workspace, asks your selected agent to implement all selected changes together, then runs independent document tests, type checks, and builds.
 
 The download shows an estimated wait based on recent preparations. When those checks succeed, choose **Restart to update**. The editor saves your writing before restarting into the new version. Ideas added during a download stay in your list for next time. A failed or interrupted preparation leaves the current version running. If the updated renderer fails to start, Draft restores the previous version.
 
-Removing a feature and returning to official Draft use the same prepare → update flow. Official source updates are checked against signed release metadata and can be integrated with personal changes by your agent. An unresolved conflict produces a failed preparation rather than replacing the working app.
+Removing a feature and returning to official Draft use the same prepare → update flow. Draft checks for official updates on opening, periodically while running, and when you return to the app. An update appears in the header and Preferences. **Draft → Check for Updates…** is always available, including with an older personal interface.
+
+**Download update** brings in the matching signed app and source. Independent changes combine automatically. If changes overlap, choose **Keep mine**, **Use Draft’s**, or **Combine both** for each high-level feature. Draft uses your connected model when integration needs work, then checks the result before offering **Restart to update**. Personal features and features you turned off remain recorded; only changes you explicitly replace are dropped. Missing model access, interrupted downloads, or unresolved checks keep the current app running.
+
+The native app and personal source update together after saving. A failed startup restores the previous app. **Undo last update** in Preferences returns to the previous working app while keeping your current documents and queued ideas. These controls are owned by the desktop host so personal interface changes cannot hide the recovery route. Versions before 0.2.0-alpha.18 need a one-time desktop download to gain this updater.
 
 The alpha supports changes to the editor and its local runtime. Changes to the native shell or update controller require a new packaged desktop build. Automated checks reduce mistakes; they cannot prove every generated feature is correct. Keep a backup before relying on an experimental feature.
 
@@ -38,7 +42,7 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 - `state.json`: model choice, queued ideas, feature-update history, and active/previous version pointers.
 - `Exports/`: plain text, Markdown, and complete draft exports.
 
-**Your source code** and **Your documents** in Features open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its build dependencies; ordinary personal updates do not require Node, Rust, Xcode, Git, or a GitHub account.
+**Your source code** and **Your documents** in Preferences open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its build dependencies; ordinary personal updates do not require Node, Rust, Xcode, Git, or a GitHub account.
 
 The update builder edits candidate source rather than live files. Its process is restricted from the document store and activation record; verification also runs without network access. New package dependencies are installed in the candidate with lifecycle scripts disabled. Personal backend code runs as part of the app after you apply it, so request features you trust.
 

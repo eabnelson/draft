@@ -4,6 +4,7 @@ import {Button} from './components/ui/button';
 import {api,restartApp} from './client';
 import {ModelSettings} from './ModelSettings';
 import {FeatureHandoff,type HandoffTarget} from './FeatureHandoff';
+import {OfficialUpdate} from './OfficialUpdate';
 import {timeRemaining} from '../desktop/feature-queue';
 import type {FeaturesState,Feature,Update,UpdateKind} from '../desktop/types';
 
@@ -17,6 +18,7 @@ function status(u:Update){
     case 'applying':return 'Restarting Draft…';
     case 'applied':return u.kind==='reset'?'Back to official Draft':'Your app is up to date';
     case 'failed':return 'This update needs a little more work.';
+    case 'needs-attention':return 'A few choices for your update.';
     case 'cancelled':return 'Update cancelled';
     case 'already-exists':return 'Draft already does this.';
   }
@@ -27,6 +29,8 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null);
   async function refresh(){try{const value=await api<FeaturesState>('/api/features');if(mounted.current){setData(value);setLoadError('');}}catch{if(mounted.current)setLoadError('Draft couldn’t load your features. Try again in a moment.');}}
   useEffect(()=>{mounted.current=true;void refresh();const interval=setInterval(()=>void refresh(),1000);return()=>{mounted.current=false;clearInterval(interval);};},[]);
+  useEffect(()=>{const check=()=>void checkOfficial();window.addEventListener('draft:check-updates',check);if(new URLSearchParams(location.search).has('check'))check();return()=>window.removeEventListener('draft:check-updates',check);},[]);
+  useEffect(()=>{const failed=()=>{setApplying(false);onUpdating(false);setError('Draft restored your previous app. Your writing is safe.');void refresh();};window.addEventListener('draft:update-failed',failed);return()=>window.removeEventListener('draft:update-failed',failed);},[onUpdating]);
   async function prepare(kind:UpdateKind,text='',featureId?:string){
     setError('');setNotice('');setSubmitting(true);
     try{await api('/api/updates/request',{kind,request:text,featureId});await refresh();}
@@ -47,7 +51,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   async function discard(update:Update){try{await api('/api/updates/discard',{id:update.id});await refresh();}catch{setError('Draft couldn’t stop this update. Try again.');}}
   async function checkOfficial(){
     setError('');setSubmitting(true);
-    try{const result=await api('/api/updates/check',{});setNotice(result.available?'A new Draft update is available.':'You’re up to date.');await refresh();}
+    try{const result=await api('/api/updates/check',{});setNotice(result.message);await refresh();}
     catch{setError('Draft couldn’t look for updates. Try again in a moment.');}finally{setSubmitting(false);}
   }
   async function checkChanges(id:string){
@@ -58,9 +62,12 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   }
   function openHandoff(target:HandoffTarget){handoffTrigger.current=document.activeElement as HTMLElement;setHandoffTarget(target);}
   function closeHandoff(){setHandoffTarget(undefined);requestAnimationFrame(()=>handoffTrigger.current?.focus());}
-  const pending=data?.updates.find(u=>busy(u)||u.state==='ready');
+  const activeUpdate=data?.updates.find(u=>busy(u)||['ready','needs-attention'].includes(u.state));
+  const systemUpdate=activeUpdate&&['official','rollback'].includes(activeUpdate.kind)?activeUpdate:undefined;
+  const pending=systemUpdate?undefined:activeUpdate;
+  const failedOfficial=!activeUpdate?data?.updates.find(u=>u.kind==='official'&&u.state==='failed'&&u.baseVersion===data.activeVersion):undefined;
   const changes=data?.current.features.filter(f=>f.origin==='personal'||f.state==='removed'||(()=>{const base=data.official.features.find(x=>x.id===f.id);return !base||f.updatedAt!==base.updatedAt||f.description!==base.description;})())??[];
-  const blocked=!!pending||submitting||applying,ideas=data?.featureQueue??[],selected=ideas.filter(q=>q.selected).length;
+  const blocked=!!activeUpdate||submitting||applying,ideas=data?.featureQueue??[],selected=ideas.filter(q=>q.selected).length;
   const locked=new Set(pending?.requests?.map(r=>r.id)),handoff=data?.handoffs?.at(-1);
   function featureRow(feature:Feature,personal=false){return <div className="feature-row" key={feature.id}>
     <div className="feature-row-main"><strong>{feature.title}</strong>{personal&&<span className="feature-badge">{feature.state==='removed'?'Removed':feature.origin==='personal'?'Added':'Changed'}</span>}</div>
@@ -74,6 +81,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   return <section className="features-page">
     <div className="features-top"><Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14}/>Writing</Button>{!data?.demo&&<Button variant="outline" size="sm" onClick={()=>setSettings(true)}>Model settings</Button>}</div>
     <div className="features-heading"><div><h1>Make Draft yours.</h1><p>Keep a list. Update when you’re ready.</p></div><span className="version-label">Draft {data?.appVersion??'…'}</span></div>
+    {data&&!data.demo&&<OfficialUpdate data={data} update={systemUpdate??failedOfficial} blocked={blocked} applying={applying} onPrepare={kind=>void prepare(kind)} onApply={update=>void apply(update)} onDiscard={update=>void discard(update)} onRefresh={()=>void refresh()} onSettings={()=>setSettings(true)}/>}
     <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
       <textarea aria-label="Feature request" placeholder="What would you like Draft to do?" value={request} onChange={event=>setRequest(event.target.value)} disabled={submitting||applying} rows={2}/>
       <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add feature</Button></div>
@@ -91,22 +99,21 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
       </div>
       {pending&&canContinue(pending)&&!data?.demo&&<div className="wishlist-handoff"><span>Want to work on this more?</span><Button variant="ghost" size="xs" onClick={()=>openHandoff({updateId:pending.id})}><Copy size={12}/>Get a prompt for your agent</Button></div>}
     </section>
-    {!pending&&data?.updates[0]?.state==='failed'&&data.updates[0].baseVersion===data.activeVersion&&<div className="handoff-card" role="status"><div><strong>This update needs a little more work.</strong><p>Your ideas are still in your list. Your app is unchanged.</p></div>{!data.demo&&canContinue(data.updates[0])&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:data.updates[0].id})}>Get a prompt for your agent</Button>}</div>}
+    {!activeUpdate&&data?.updates[0]?.state==='failed'&&data.updates[0].kind!=='official'&&data.updates[0].baseVersion===data.activeVersion&&<div className="handoff-card" role="status"><div><strong>This update needs a little more work.</strong><p>Your ideas are still in your list. Your app is unchanged.</p></div>{!data.demo&&canContinue(data.updates[0])&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:data.updates[0].id})}>Get a prompt for your agent</Button>}</div>}
     {!pending&&data?.updates[0]?.state==='already-exists'&&<p className="feature-notice" role="status">Draft already does this. You’re ready to keep writing.</p>}
     {handoff&&<div className="handoff-card"><div><strong>Working with your agent?</strong><p>Bring the changes back when you’re happy with them.</p></div><div className="handoff-card-actions"><Button variant="ghost" size="sm" onClick={()=>openHandoff({updateId:handoff.updateId})}>Copy prompt</Button><Button variant="outline" size="sm" disabled={submitting||applying||!!pending&&pending.state!=='ready'} onClick={()=>void checkChanges(handoff.id)}>Check my changes</Button></div></div>}
     {(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}
     <div className="features-columns">
       <section className="feature-column"><header><div><h2>Official Draft</h2><span>{data?.official.features.length??0} features</span></div>{!data?.demo&&<Button variant="ghost" size="icon-sm" aria-label="Check official updates" title="Check for updates" disabled={blocked} onClick={()=>void checkOfficial()}><RefreshCw size={15}/></Button>}</header>
-        {data?.latestOfficial&&<div className="official-available"><span>A new update is available.</span><Button variant="outline" size="xs" disabled={blocked} onClick={()=>void prepare('official','Update official Draft and preserve my personal changes.')}>Get update</Button></div>}
         {data?.official.features.map(feature=>featureRow(feature))}
       </section>
       <section className="feature-column"><header><div><h2>Your changes</h2><span>{changes.length} {changes.length===1?'change':'changes'}</span></div>{!!changes.length&&<Button variant="ghost" size="icon-sm" aria-label="Return to official Draft" title="Return to official Draft" disabled={blocked} onClick={()=>void prepare('reset','Return to official Draft and preserve all document files.')}><RotateCcw size={15}/></Button>}</header>
         {changes.length?changes.map(feature=>featureRow(feature,true)):<div className="features-empty"><Check size={21}/><p>You’re using official Draft.</p><span>Your updates will appear here.</span></div>}
       </section>
     </div>
-    {!data?.demo&&<div className="features-footer"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button></div>}
-    {!!data?.updates.some(u=>!busy(u)&&u.state!=='ready')&&<details className="update-history"><summary>Update history</summary>
-      {data.updates.filter(u=>!busy(u)&&u.state!=='ready').map(u=><div className="history-row" key={u.id}>
+    {!data?.demo&&<div className="features-footer"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button>{data?.canUndo&&<Button variant="ghost" size="sm" disabled={blocked} onClick={()=>void prepare('rollback')}><RotateCcw size={13}/>Undo last update</Button>}</div>}
+    {!!data?.updates.some(u=>!busy(u)&&!['ready','needs-attention'].includes(u.state))&&<details className="update-history"><summary>Update history</summary>
+      {data.updates.filter(u=>!busy(u)&&!['ready','needs-attention'].includes(u.state)).map(u=><div className="history-row" key={u.id}>
         <div><strong>{u.title}</strong><span>{status(u)} · {date(u.updatedAt,true)}</span>{u.state==='failed'&&<p>Your app is unchanged. Your ideas are still in your list.</p>}</div>
         {!data.demo&&canContinue(u)&&<Button variant="ghost" size="xs" disabled={!!pending&&busy(pending)} onClick={()=>openHandoff({updateId:u.id})}>Keep working on this</Button>}
       </div>)}

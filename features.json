@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.17",
+  "appVersion": "0.2.0-alpha.18",
   "name": "Draft",
   "features": [
     {
@@ -115,8 +115,8 @@
     {
       "id": "personal-updates",
       "title": "Make Draft yours",
-      "description": "Keep a feature list, download an update, and restart to make it yours.",
-      "updatedAt": "2026-10-27T13:43:26.198230Z",
+      "description": "Create your own features, keep them through official updates, and undo an update any time.",
+      "updatedAt": "2026-10-27T20:00:00Z",
       "origin": "official",
       "state": "active",
       "code": [
@@ -126,7 +126,13 @@
         "src/FeatureHandoff.tsx",
         "desktop/feature-queue.ts",
         "src/App.tsx",
-        "src/writing.css"
+        "src/writing.css",
+        "src/OfficialUpdate.tsx",
+        "host-ui",
+        "desktop/official-release.ts",
+        "desktop/official-merge.ts",
+        "desktop/native-update.ts",
+        "native/InstallUpdate.swift"
       ]
     }
   ]
