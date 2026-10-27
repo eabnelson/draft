@@ -1,4 +1,4 @@
-export const downloadFallback='https://github.com/eabnelson/draft/releases/download/v0.2.0-alpha.18/Draft-0.2.0-alpha.18-macos-arm64.dmg';
+export const downloadFallback='https://github.com/eabnelson/draft/releases/download/v0.2.0-alpha.20/Draft-0.2.0-alpha.20-macos-arm64.dmg';
 export function resolveMacDownload(releases:unknown){
  if(!Array.isArray(releases))return downloadFallback;
  const candidates=releases.flatMap(release=>{
