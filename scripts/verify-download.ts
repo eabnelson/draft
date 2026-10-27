@@ -16,7 +16,26 @@ for(const artifact of [release.installer,release.desktop]){
 const stage=await mkdtemp(join(tmpdir(),'draft-download-check-')),mount=join(stage,'volume');await mkdir(mount);
 const installer=join(assets,new URL(release.installer.url).pathname.split('/').at(-1)!);
 await macCommand(['xcrun','stapler','validate',installer]);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
-let mounted=false,child:ReturnType<typeof Bun.spawn>|undefined;const data=join(stage,'profile');
+let mounted=false,child:ReturnType<typeof Bun.spawn>|undefined,output='';const data=join(stage,'profile');
+const capture=async(stream:ReadableStream<Uint8Array>)=>{for await(const bytes of stream)output=(output+new TextDecoder().decode(bytes)).slice(-12000);};
+async function startupDiagnostics(){
+ const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);
+ const state=await Bun.file(join(data,'state.json')).json().catch(()=>undefined);
+ console.log('DRAFT_STARTUP_CHECK',JSON.stringify({runtimeStarted:!!runtime,stateCreated:!!state,activeVersion:state?.activeVersion,appExit:child?.exitCode,output:output.replace(/([?&]token=|DRAFT_SESSION_TOKEN=)[a-f0-9]+/g,'$1<REDACTED>')}));
+ if(runtime&&child&&runtime.hostPid===child.pid){
+  const listeners=await macCommand(['/usr/sbin/lsof','-a','-p',String(runtime.runtimePid),'-iTCP','-sTCP:LISTEN','-Fn']).catch(()=>undefined);
+  const port=listeners?.stdout.match(/127\.0\.0\.1:(\d+)/)?.[1];
+  const process=await macCommand(['/bin/ps','eww','-p',String(runtime.runtimePid)]).catch(()=>undefined);
+  const token=process?.stdout.match(/DRAFT_SESSION_TOKEN=([a-f0-9]{64})/)?.[1];
+  if(port&&token){
+   const origin=`http://127.0.0.1:${port}`,headers={Authorization:`Bearer ${token}`};
+   const health=await fetch(origin+'/api/health',{headers}).then(r=>r.json()).catch(()=>undefined);
+   const root=await fetch(origin+'/',{headers});const html=await root.text();const script=html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/)?.[1];
+   const asset=script?await fetch(new URL(script,origin),{headers}):undefined;
+   console.log('DRAFT_STARTUP_HTTP',JSON.stringify({health,htmlStatus:root.status,moduleStatus:asset?.status,moduleType:asset?.headers.get('content-type')}));
+  }
+ }
+}
 try{
  const updater=join(stage,'updater');await mkdir(updater);
  await macCommand(['/usr/bin/ditto','-x','-k',join(assets,new URL(release.desktop.url).pathname.split('/').at(-1)!),updater]);
@@ -43,7 +62,8 @@ try{
  const info=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleExecutable',join(app,'Contents/Info.plist')]);
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
  const environment={...process.env,DRAFT_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
- child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'ignore',stderr:'ignore'});
+ child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'pipe',stderr:'pipe'});
+ void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  let launched=false;for(let i=0;i<300;i++){
   if(child.exitCode!==null)throw Error('The downloaded app stopped during first launch.');
   try{const library=await Bun.file(join(data,'Documents/library.json')).json();if(library.version===1&&library.drafts.length){launched=true;break;}}catch{}
@@ -53,7 +73,7 @@ try{
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
  console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic download, Apple approval, Gatekeeper, installed app, bundled feature tools, first launch, local writing.`);
-}catch(error){throw error;}
+}catch(error){await startupDiagnostics().catch(diagnostic=>console.log('DRAFT_STARTUP_CHECK',String(diagnostic)));throw error;}
 finally{
  const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);
  if(runtime&&child&&runtime.hostPid===child.pid&&runtime.runtimePid>1)try{process.kill(-runtime.runtimePid,'SIGTERM');}catch{}

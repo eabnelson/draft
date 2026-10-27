@@ -3,13 +3,25 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      verify_existing:
+        description: Verify an already uploaded private candidate without rebuilding it
+        type: boolean
+        default: false
+      tag:
+        description: Existing candidate tag (verification only)
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
   group: draft-mac-release
   cancel-in-progress: false
+env:
+  DRAFT_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 jobs:
   release:
+    if: ${{ !inputs.verify_existing }}
     runs-on: macos-15
     timeout-minutes: 90
     permissions:
@@ -29,6 +41,7 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           test "$GITHUB_REF_NAME" = "v$(bun -p 'require("./package.json").version')"
+          test "$DRAFT_RELEASE_TAG" = "$GITHUB_REF_NAME"
           test -n "$APPLE_TEAM_ID"
           test -n "$APPLE_SIGNING_IDENTITY"
       - run: bun install --frozen-lockfile --ignore-scripts
@@ -95,6 +108,7 @@ jobs:
 
   clean-mac:
     needs: release
+    if: ${{ always() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.verify_existing)) }}
     runs-on: macos-15
     timeout-minutes: 15
     permissions:
@@ -111,6 +125,8 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify candidate matches this source version
+        run: test "$DRAFT_RELEASE_TAG" = "v$(bun -p 'require("./package.json").version')"
       - name: Require normal Gatekeeper enforcement on the clean Mac
         run: |
           sudo /usr/sbin/spctl --global-enable
@@ -118,7 +134,7 @@ jobs:
       - name: Download the exact release assets on a fresh Mac
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/draft-downloads" --pattern '*.dmg' --pattern '*macos-arm64.zip' --pattern 'draft-update.json'
+        run: gh release download "$DRAFT_RELEASE_TAG" --dir "$RUNNER_TEMP/draft-downloads" --pattern '*.dmg' --pattern '*macos-arm64.zip' --pattern 'draft-update.json'
       - name: Verify browser-style download, Gatekeeper, installation and first launch
         run: bun scripts/verify-download.ts "$RUNNER_TEMP/draft-downloads"
 
@@ -134,5 +150,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release edit "$DRAFT_RELEASE_TAG" --draft=false
           gh workflow run pages.yml --ref main
