@@ -17,7 +17,7 @@ const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['impl
 export type AgentConnection=Pick<Agents,'discover'|'login'|'select'|'run'>;
 export function parseAgentResult(text:string){let value;try{value=JSON.parse(text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw Error('The coding agent did not return a valid completion result.');}if(!['implemented','already_exists','failed'].includes(value.outcome)||typeof value.title!=='string'||typeof value.summary!=='string'||typeof value.featureId!=='string')throw Error('The coding agent returned an incomplete result.');return value as {outcome:'implemented'|'already_exists'|'failed';title:string;summary:string;featureId:string};}
 export class Updates {
-  state!:HostState;private controller?:AbortController;private runningId?:string;private saving:Promise<unknown>=Promise.resolve();
+  state!:HostState;private controller?:AbortController;private runningId?:string;private preparation?:Promise<void>;private saving:Promise<unknown>=Promise.resolve();
   readonly agents:AgentConnection;readonly builds:string;
   private channel?:ReleaseChannel;private checking?:Promise<{available:boolean;message:string}>;private automatic?:ReturnType<typeof setInterval>;
   readonly hostVersion:string;
@@ -86,7 +86,7 @@ export class Updates {
     const now=new Date().toISOString();const update:Update={id:crypto.randomUUID(),kind,request:request.trim(),featureId,title:kind==='reset'?'Return to official Draft':kind==='official'?'Update official Draft':kind==='remove'?`Remove ${this.active.catalog.features.find(f=>f.id===featureId)?.title}`:'Your new feature',state:'checking',stage:'Checking request',createdAt:now,updatedAt:now,baseVersion:this.active.id};
     if(requests){update.requests=requests;update.title=`${requests.length} ${requests.length===1?'change':'changes'} for your Draft`;update.estimatedSeconds=estimateSeconds(this.state.updates,requests.length);}
     this.state.updates.push(update);this.controller=new AbortController();this.runningId=update.id;await this.save();
-    void this.prepare(update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
+    this.preparation=this.prepare(update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
   }
   async discard(id:string){const update=this.state.updates.find(u=>u.id===id);if(!update||!['checking','preparing','building','needs-attention','ready','failed'].includes(update.state))throw Error('This update can no longer be discarded.');if(this.runningId===id)this.controller?.abort();update.state='cancelled';update.stage='Discarded';update.updatedAt=new Date().toISOString();await this.save();}
   private async progress(update:Update,state:Update['state'],stage:string){if(update.state==='cancelled')throw Error('Cancelled.');update.state=state;update.stage=stage;update.updatedAt=new Date().toISOString();if(state==='ready')update.preparedAt=update.updatedAt;await this.save();}
@@ -183,7 +183,7 @@ export class Updates {
     if(this.controller||this.state.updates.some(u=>u.state==='applying'||(u.state==='ready'&&u.id!==handoff.updateId&&u.id!==handoff.lastUpdateId)))throw Error('Finish or cancel your other update first.');
     const now=new Date().toISOString(),update:Update={id:crypto.randomUUID(),kind:original.kind,request:original.request,featureId:original.featureId,requests:original.requests,featureResults:original.featureResults,title:original.title,state:'building',stage:'Getting your changes ready',createdAt:now,updatedAt:now,baseVersion:this.active.id,handoffId:handoff.id};
     this.state.updates.push(update);handoff.lastUpdateId=update.id;this.controller=new AbortController();this.runningId=update.id;await this.save();
-    void this.prepareHandoff(handoff,update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
+    this.preparation=this.prepareHandoff(handoff,update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
   }
   private async prepareHandoff(handoff:Handoff,update:Update,signal:AbortSignal){
     try{
@@ -291,12 +291,14 @@ export class Updates {
   }
   async resolveOfficial(id:string,choices:Record<string,ConflictChoice>){
     const update=this.state.updates.find(update=>update.id===id);
+    // The waiting state becomes visible while its last disk save is finishing.
+    if(update?.state==='needs-attention'&&this.runningId===id)await this.preparation;
     if(!update?.official||update.state!=='needs-attention'||this.controller)throw Error('Choose the update that needs your attention.');
     if(update.baseVersion!==this.active.id||await sourceHash(this.active.source)!==update.official.currentSourceHash||await sourceHash(this.official.source)!==update.official.baseSourceHash)throw Error('Your app changed while this update was waiting. Cancel it and check again.');
     if(!choices||typeof choices!=='object'||Array.isArray(choices)||Object.keys(choices).length!==update.official.conflicts.length||update.official.conflicts.some(conflict=>!Object.hasOwn(choices,conflict.id)||!['keep-mine','use-official','combine'].includes(choices[conflict.id])))throw Error('Choose what you’d like to keep for each change.');
     update.official.choices={...choices};delete update.error;this.controller=new AbortController();this.runningId=id;
     await this.progress(update,'preparing','Putting your choices together');
-    void this.finishOfficial(update,this.controller.signal).catch(async error=>{if(update.state!=='cancelled'){update.state='needs-attention';update.stage='Your choices need a little more work';update.error=error instanceof Error?error.message:String(error);await this.save();}}).finally(()=>{this.controller=undefined;this.runningId=undefined;});
+    this.preparation=this.finishOfficial(update,this.controller.signal).catch(async error=>{if(update.state!=='cancelled'){update.state='needs-attention';update.stage='Your choices need a little more work';update.error=error instanceof Error?error.message:String(error);await this.save();}}).finally(()=>{this.controller=undefined;this.runningId=undefined;});
     return update;
   }
   private async finishOfficial(update:Update,signal:AbortSignal){
