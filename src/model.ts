@@ -2,7 +2,8 @@ import { ChangeSet, Text } from '@codemirror/state';
 import {plainText,balancedRange,inferWordingScope,type WordingScope} from './markdown';
 
 export type Span = {from:number; to:number};
-export type Candidate = {id:string; text:string; origin:'human'|'ai'; humanEdited?:boolean};
+export type AIProvider = 'claude'|'codex';
+export type Candidate = {id:string; text:string; origin:'human'|'ai'; provider?:AIProvider; humanEdited?:boolean};
 export type Variant = Span & {id:string; original:string; candidates:Candidate[]; active:string|null;scope?:WordingScope};
 export const variantScope=(variant:Pick<Variant,'original'|'scope'>):WordingScope=>variant.scope??inferWordingScope(variant.original);
 export type Ghost = Span & {id:string};
@@ -58,9 +59,9 @@ export function addVariant(d:Draft, range:Span,scope?:WordingScope):{draft:Draft
   const original=d.text.slice(range.from,range.to),v:Variant={...range,id:id(),original,candidates:[],active:null,scope:scope??inferWordingScope(original)};
   return {draft:changed(d,{variants:[...d.variants,v]}),variantId:v.id};
 }
-export function addCandidate(d:Draft,variantId:string,text:string,origin:'human'|'ai'='human'):Draft {
+export function addCandidate(d:Draft,variantId:string,text:string,origin:'human'|'ai'='human',provider?:AIProvider):Draft {
   if(!text.trim())throw new Error('Give this alternative some words.');
-  return changed(d,{variants:d.variants.map(v=>v.id===variantId?{...v,candidates:[...v.candidates,{id:id(),text,origin}]}:v)});
+  return changed(d,{variants:d.variants.map(v=>v.id===variantId?{...v,candidates:[...v.candidates,{id:id(),text,origin,...(origin==='ai'&&provider?{provider}:{})}]}:v)});
 }
 export function choose(d:Draft,variantId:string,candidateId:string|null):Draft {
   const v=d.variants.find(v=>v.id===variantId);if(!v)return d;
@@ -123,7 +124,7 @@ export function parseDraft(raw:string):Draft {
   const ids=new Set<string>();
   if(x.variants.some((v:any)=>v?.scope!==undefined&&!['word','sentence','paragraph'].includes(v.scope)))fail();
   const span=(r:any)=>{if(!r||!Number.isInteger(r.from)||!Number.isInteger(r.to)||r.from<0||r.to<=r.from||r.to>x.text.length||typeof r.id!=='string'||ids.has(r.id))fail();ids.add(r.id);};
-  x.variants.forEach((v:any)=>{span(v);if(typeof v.original!=='string'||!Array.isArray(v.candidates))fail();const cids=new Set<string>();v.candidates.forEach((c:any)=>{if(!c||typeof c.id!=='string'||cids.has(c.id)||typeof c.text!=='string'||!c.text||!['human','ai'].includes(c.origin)||(c.humanEdited!==undefined&&typeof c.humanEdited!=='boolean'))fail();cids.add(c.id);});if(v.active!==null&&!cids.has(v.active))fail();const active=v.active===null?v.original:v.candidates.find((c:any)=>c.id===v.active).text;if(x.text.slice(v.from,v.to)!==active)fail();});
+  x.variants.forEach((v:any)=>{span(v);if(typeof v.original!=='string'||!Array.isArray(v.candidates))fail();const cids=new Set<string>();v.candidates.forEach((c:any)=>{if(!c||typeof c.id!=='string'||cids.has(c.id)||typeof c.text!=='string'||!c.text||!['human','ai'].includes(c.origin)||(c.humanEdited!==undefined&&typeof c.humanEdited!=='boolean')||(c.provider!==undefined&&(c.origin!=='ai'||!['claude','codex'].includes(c.provider))))fail();cids.add(c.id);});if(v.active!==null&&!cids.has(v.active))fail();const active=v.active===null?v.original:v.candidates.find((c:any)=>c.id===v.active).text;if(x.text.slice(v.from,v.to)!==active)fail();});
   x.ghosts.forEach(span);
   for(const ranges of [x.variants,x.ghosts]){const sorted=[...ranges].sort((a:any,b:any)=>a.from-b.from);if(sorted.some((r:any,i:number)=>i>0&&overlaps(r,sorted[i-1])))fail();}
   if(x.ghosts.some((g:any)=>x.variants.some((v:any)=>overlaps(g,v)&&!contains(g,v))))fail();

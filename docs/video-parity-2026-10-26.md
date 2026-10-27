@@ -55,3 +55,11 @@ Alpha 15 uses the same measured text-caret renderer in editable alternatives and
 ## Suggestions and scrolling — October 27, 2026
 
 Alpha 16 shows the proposed wording alongside each fix in the suggestions popover. Applying a fix keeps the remaining suggestions open and maps their positions through the edit. Unrelated typing and undo still invalidate the review to prevent stale corrections. The writing canvas measures its available height and leaves visual space below the document, including when panels or the window change size. This space is padding rather than document content. Clean Markdown and plain-text exports continue to trim trailing blank space; native backups preserve the complete document and its annotations.
+
+## Provider labels and Mac spelling — October 27, 2026
+
+Alternatives now retain the provider that suggested them and display Claude or Codex with the corresponding logo. Older alternatives without source metadata remain readable without guessing their author.
+
+Mac spelling checks run locally against the system dictionaries as you type in the draft, alternatives, and overflow. Misspellings have red underlines, and right-click offers corrections alongside formatting. Code and link addresses are excluded; corrections participate in undo and retain writing annotations.
+
+Opening a side panel centers the current passage or caret in the available writing area. Sentence dots replace a portion of the underline rather than reserving space beyond the text; larger lists fit within the final text line and keep one dot per option.

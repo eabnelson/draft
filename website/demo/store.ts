@@ -77,6 +77,7 @@ export class DemoStore{
       if(u){u.state='applied';const ids=new Set(u.requests?.map(q=>q.id));this.queue=this.queue.filter(q=>!ids.has(q.id));this.emit();}return {};
     }
     if(path.startsWith('/api/providers'))return {providers:[],demo:true};
+    if(path==='/api/spelling')return {available:false,words:[]};
     if(path==='/api/assist')throw Error('Writing assistance is unavailable right now.');
     if(path==='/api/export'){
       const draft=input.draft,kind=input.kind,blob=new Blob([kind==='native'?JSON.stringify(draft,null,2):cleanText(draft)],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${draft.title}.${kind==='native'?'draft.json':kind}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return {};

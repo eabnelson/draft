@@ -39,8 +39,9 @@
 .wording-options{position:absolute;left:var(--wording-center,0px);top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;white-space:nowrap}
 .wording-options i{flex:none;width:3px;height:3px;box-sizing:border-box;border:1px solid transparent;border-radius:50%;background:#bbb}
 .wording-options .is-selected{background:transparent;border-color:#777}.is-alternate .wording-options .is-selected{background:#555;border-color:#555}
-.sentence-ending{white-space:nowrap}.wording-dots.is-sentence{display:inline-block;width:calc(var(--wording-count)*6px + 4px);height:0;vertical-align:baseline}
-.is-sentence .wording-options{left:6px;top:4px;transform:none}
+.wording-dots.is-sentence{display:inline;height:0;vertical-align:baseline}
+.is-sentence .wording-options{left:var(--wording-center,0px);top:4px;transform:translateX(-100%);gap:var(--wording-dot-gap,3px);background:var(--background)}
+.is-sentence .wording-options i{width:var(--wording-dot-size,3px);height:var(--wording-dot-size,3px);border-width:min(1px,calc(var(--wording-dot-size,3px)/3))}
 .variant-paragraph{text-decoration:none}.wording-dots.is-paragraph{color:#a3a3a3}.wording-dots.is-paragraph.is-alternate{color:#555}
 .wording-rail{position:absolute;left:calc(var(--wording-center,0px) - 3px);top:var(--wording-top,0px);overflow:hidden;fill:none;stroke:currentColor;stroke-width:1}
 .is-paragraph .wording-options{top:calc(var(--wording-top,0px) + var(--wording-height,0px)/2);transform:translate(-50%,-50%);flex-direction:column;padding:2px 1px;background:var(--background)}
@@ -82,3 +83,10 @@
 @media(max-width:760px){.sidebar-header{min-width:0;gap:8px}}
 @media(max-width:1100px){.with-panel .workspace{grid-template-columns:235px minmax(0,1fr) 0}.with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 250px}.with-panel.with-overflow .workspace{grid-template-columns:235px minmax(0,1fr) 250px}.paper{padding:40px 32px 80px}.panel-scroll{padding:18px 14px}}
 @media(max-width:760px){.workspace,.with-panel .workspace,.with-overflow .workspace,.with-panel.with-overflow .workspace{display:flex;flex-direction:column;min-height:0}.writing-area{flex:1;min-height:120px}.side-panel{flex:0 0 min(300px,38dvh);height:min(300px,38dvh);border:0;border-top:1px solid #e8e8e8}.panel-scroll{overflow-y:auto;padding:16px 22px}.alternatives-panel{order:1}.overflow-panel{order:2}.paper{padding:25px 24px 55px}.writing-controls{padding:0 12px}.draft-toolbar{min-height:44px;height:auto;padding:6px 12px}.selection-tools{order:initial;width:auto;gap:0}.selection-tools [data-slot=button]{font-size:10px;padding:0 5px}.word-count{font-size:10px}.word-count-mode,.toggle-track{display:none}.new-option{margin-top:12px}.top-actions{gap:3px}.top-actions>[aria-label="Keyboard shortcuts"]{display:none}.brand-wordmark{font-size:16px}}
+.provider-mark { width:14px; height:14px; object-fit:contain; flex-shrink:0 }
+.provider-codex { filter:invert(1) }
+.dark .provider-codex { filter:none }
+.spelling-word { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:#d34545; text-decoration-thickness:1px; text-underline-offset:3px }
+.spelling-suggestions { display:flex; flex-direction:column; border-bottom:1px solid var(--border); padding:2px 0 6px; margin-bottom:6px }
+.spelling-suggestions [data-slot=button] { justify-content:flex-start; padding:6px 10px; height:auto }
+.spelling-suggestions > span { padding:6px 10px; color:var(--muted-foreground); font-size:12px }

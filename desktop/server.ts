@@ -5,6 +5,7 @@ import {spawn} from 'node:child_process';
 import {DocumentStore} from './documents';
 import {Updates} from './updates';
 import {writingSchema} from './writing';
+import {NativeSpelling,spellingExecutable} from './spelling';
 import {openExternalLink} from './links';
 import {within,exists,atomicWrite} from './files';
 import {cleanText,parseDraft} from '../src/model';
@@ -19,6 +20,7 @@ const dependencies=join(runtime,'node_modules');
 const session=process.env.DRAFT_SESSION_TOKEN;
 if(!dev&&!session)throw Error('Start Draft through the desktop app.');
 const documents=new DocumentStore(join(root,'Documents'));
+const spelling=new NativeSpelling(spellingExecutable(runtime));
 const updates=new Updates(root,template,dependencies,process.execPath);
 await updates.initialize();
 let recoveryCounter=0,closeReady=false,restartRequested=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
@@ -38,6 +40,14 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
       if(request.method==='POST'&&request.headers.get('content-type')!=='application/json')return json({error:'Expected a JSON request.'},415);
       try{
         const input=request.method==='POST'&&!url.pathname.startsWith('/api/custom/')?await request.json() as any:{};
+        if(url.pathname==='/api/spelling'&&request.method==='POST'){
+          if(typeof input.text!=='string'||input.text.length>200000)throw Error('Choose a shorter passage to check.');
+          return json(await spelling.request({text:input.text}));
+        }
+        if(url.pathname==='/api/spelling/suggestions'&&request.method==='POST'){
+          if(typeof input.word!=='string'||input.word.length>100)throw Error('Choose a word to check.');
+          return json(await spelling.request({word:input.word}));
+        }
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
         if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
@@ -50,7 +60,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/assist'&&request.method==='POST'){
           if(typeof input.prompt!=='string'||input.prompt.length>100000)throw Error('The writing request is too large.');
           const selected=await updates.defaultSelection();if(!selected)throw Error('Connect Claude Code or Codex in Model settings.');
-          return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)})});
+          return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)}),provider:selected.provider});
         }
         if(url.pathname==='/api/updates/request'&&request.method==='POST')return json(await updates.request(input.kind as UpdateKind,String(input.request??''),input.featureId));
         if(url.pathname==='/api/features/queue'&&request.method==='POST')return json(await updates.queue(input));
@@ -92,4 +102,4 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
 setInterval(()=>{void updates.recoverIfNeeded().then(recovered=>{if(recovered)recoveryCounter++;});},2000).unref();
 console.log(`DRAFT_READY ${server.port}`);
 if(dev)console.log(`Local app: http://127.0.0.1:${server.port}`);
-process.on('SIGTERM',()=>{server.stop();process.exit(0);});
+process.on('SIGTERM',()=>{spelling.close();server.stop();process.exit(0);});

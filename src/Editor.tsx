@@ -1,11 +1,12 @@
 import {useEffect,useRef,useState,forwardRef,useImperativeHandle} from 'react';
-import {EditorState,StateEffect,StateField,ChangeSet,Prec} from '@codemirror/state';
+import {EditorState,EditorSelection,StateEffect,StateField,ChangeSet,Prec} from '@codemirror/state';
 import {EditorView,Decoration,keymap,placeholder,drawSelection,WidgetType,ViewPlugin,type DecorationSet} from '@codemirror/view';
 import {defaultKeymap,history,historyKeymap} from '@codemirror/commands';
 import {type Draft,type Span,type Cut,overlaps,contains,variantScope} from './model';
 import {formatMarkdown,type TextFormat,type WordingScope} from './markdown';
 import {markdownEditing,showMarkdown} from './editor-markdown';
 import {TextMenu} from './TextMenu';
+import {nativeSpelling,spellingAt,correctSpelling,type SpellingWord} from './editor-spelling';
 
 type Annotations={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;focusPassage?:boolean};
 const annotate=StateEffect.define<Annotations>();
@@ -34,20 +35,21 @@ const centerWordingDots=ViewPlugin.define(view=>{
         rects.push(...Array.from(mark.getClientRects()).filter(r=>r.width>0));passages.set(id,rects);
       }
       return Array.from(view.contentDOM.querySelectorAll<HTMLElement>('.wording-dots'),dot=>{
-        if(dot.dataset.wordingScope==='sentence')return {dot,offset:0,top:0,height:0};
         const rects=passages.get(dot.dataset.variant!)??[],last=rects.at(-1);
-        if(!last)return {dot,offset:0,top:0,height:0};
+        if(!last)return {dot,offset:0,top:0,height:0,width:0};
         if(dot.dataset.wordingScope==='paragraph'){
           const top=Math.min(...rects.map(r=>r.top)),bottom=Math.max(...rects.map(r=>r.bottom)),anchor=dot.getBoundingClientRect();
-          return {dot,offset:(Math.min(...rects.map(r=>r.left))-18-anchor.left)/view.scaleX,top:(top-anchor.top)/view.scaleY,height:(bottom-top)/view.scaleY};
+          return {dot,offset:(Math.min(...rects.map(r=>r.left))-18-anchor.left)/view.scaleX,top:(top-anchor.top)/view.scaleY,height:(bottom-top)/view.scaleY,width:0};
         }
         const line=rects.filter(r=>r.top<last.bottom&&r.bottom>last.top);
-        const center=(Math.min(...line.map(r=>r.left))+Math.max(...line.map(r=>r.right)))/2;
-        return {dot,offset:(center-dot.getBoundingClientRect().left)/view.scaleX,top:0,height:0};
+        const left=Math.min(...line.map(r=>r.left)),right=Math.max(...line.map(r=>r.right));
+        const sentence=dot.dataset.wordingScope==='sentence',anchor=sentence?right:(left+right)/2;
+        return {dot,offset:(anchor-dot.getBoundingClientRect().left)/view.scaleX,top:0,height:0,width:sentence?(right-left)/view.scaleX:0};
       });
     },
-    write(positions:{dot:HTMLElement;offset:number;top:number;height:number}[]){for(const {dot,offset,top,height} of positions){
+    write(positions:{dot:HTMLElement;offset:number;top:number;height:number;width:number}[]){for(const {dot,offset,top,height,width} of positions){
       dot.style.setProperty('--wording-center',`${offset}px`);dot.style.setProperty('--wording-top',`${top}px`);dot.style.setProperty('--wording-height',`${height}px`);
+      if(width){const count=dot.querySelectorAll('i').length,size=Math.min(3,width/count),gap=count>1?Math.max(0,Math.min(3,(width-count*size)/(count-1))):0;dot.style.setProperty('--wording-dot-size',`${size}px`);dot.style.setProperty('--wording-dot-gap',`${gap}px`);}
       const rail=dot.querySelector('svg');if(rail){rail.setAttribute('height',String(height));let path='M3 0';for(let y=0;y<height;y+=4)path+=`Q${y%8?6:0} ${y+2} 3 ${y+4}`;rail.querySelector('path')!.setAttribute('d',path);}
     }},
   };
@@ -81,7 +83,7 @@ const writingScrollRoom=ViewPlugin.define(view=>{
   const observer=new ResizeObserver(measure);observer.observe(area);measure();
   return {destroy(){observer.disconnect();area.style.removeProperty('--writing-room');}};
 });
-type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
+type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;panelsOpen?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
 
 function replacement(before:string,after:string){let from=0,oldTo=before.length,newTo=after.length;while(from<oldTo&&from<newTo&&before[from]===after[from])from++;while(oldTo>from&&newTo>from&&before[oldTo-1]===after[newTo-1]){oldTo--;newTo--;}return {from,to:oldTo,insert:after.slice(from,newTo)};}
 function selectContext(view:EditorView,event:MouseEvent):Span {
@@ -94,11 +96,11 @@ function applyFormat(view:EditorView,format:TextFormat,href?:string){const edit=
 
 export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
   const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false),hovered=useRef<string|null>(null);
-  const [menu,setMenu]=useState<{x:number;y:number;range:Span}|null>(null);current.current=props;
+  const [menu,setMenu]=useState<{x:number;y:number;range:Span;spelling?:SpellingWord}|null>(null);current.current=props;
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
-      markdownEditing,decorations,centerWordingDots,writingScrollRoom,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
+      markdownEditing,nativeSpelling,decorations,centerWordingDots,writingScrollRoom,EditorView.lineWrapping,placeholder('Start writing…'),drawSelection({drawRangeCursor:false}),
       EditorView.contentAttributes.of({'aria-label':'Draft body',role:'textbox','aria-multiline':'true',spellcheck:'true',autocapitalize:'sentences'}),
       Prec.highest(keymap.of([
         {key:'Mod-z',run:()=>{current.current.onAction('undo');return true;}},{key:'Mod-Shift-z',run:()=>{current.current.onAction('redo');return true;}},
@@ -111,14 +113,14 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
         if(invalid){queueMicrotask(()=>current.current.onError('Select the whole marked passage, or edit within it.'));return [];}
         return tr;
       }),
-      EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes,update.transactions.some(tr=>tr.isUserEvent('input.format')));if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
+      EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes,update.transactions.some(tr=>tr.isUserEvent('input.format')||tr.isUserEvent('input.spelling')));if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
       EditorView.domEventHandlers({
         mousedown:event=>{const cut=(event.target as HTMLElement).closest<HTMLElement>('[data-cut]');if(event.button===0&&cut&&current.current.onCut&&!current.current.reviewing){event.preventDefault();current.current.onCut(cut.dataset.cut!);return true;}return false;},
         mousemove:event=>{hovered.current=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]')?.dataset.variant??null;return false;},
         mouseleave:()=>{hovered.current=null;return false;},
         keydown:event=>{if(!event.key.startsWith('Arrow'))hovered.current=null;return false;},
         click:event=>{const el=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]');if(el)current.current.onVariant(el.dataset.variant!);return false;},
-        contextmenu:(event,editor)=>{event.preventDefault();const range=selectContext(editor,event);current.current.onSelection(range);setMenu({x:event.clientX,y:event.clientY,range});return true;},
+        contextmenu:(event,editor)=>{event.preventDefault();const spelling=spellingAt(editor,event),range=selectContext(editor,event);current.current.onSelection(range);setMenu({x:event.clientX,y:event.clientY,range,spelling});return true;},
       }),
     ]})});view.current=v;
     const arrows=(event:KeyboardEvent)=>{
@@ -134,21 +136,27 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
     const v=view.current;if(!v)return;syncing.current=true;
     try{const before=v.state.doc.toString(),after=props.draft.text;v.dispatch({...(before!==after?{changes:replacement(before,after)}:{}),effects:[annotate.of({draft:props.draft,active:props.active,cuts:props.cuts,reviewing:props.reviewing,focusPassage:props.focusPassage}),showMarkdown.of(!!props.source)]});if(before!==after){const {from,to}=v.state.selection.main;props.onSelection({from,to});}}finally{syncing.current=false;}
   },[props.draft,props.active,props.cuts,props.reviewing,props.source,props.focusPassage]);
-  return <><div className="editor-host" ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} writingActions revive={props.draft.ghosts.some(g=>overlaps(g,menu.range))} onAction={props.onAction} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
+  useEffect(()=>{
+    const v=view.current,area=v?.dom.closest<HTMLElement>('.writing-area');
+    if(!v||!area||!props.panelsOpen)return;
+    const center=()=>{if(!area.clientHeight)return;const selected=current.current.draft.variants.find(variant=>variant.id===current.current.active)??v.state.selection.main;v.dispatch({effects:EditorView.scrollIntoView(EditorSelection.range(selected.from,selected.to),{y:'center',x:'nearest'})});};
+    const observer=new ResizeObserver(center);observer.observe(area);center();return()=>observer.disconnect();
+  },[props.active,props.panelsOpen,props.draft.variants.find(variant=>variant.id===props.active)?.active]);
+  return <><div className="editor-host" ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} spelling={menu.spelling} onSpellingFix={text=>menu.spelling&&correctSpelling(view.current!,menu.spelling,text)} writingActions revive={props.draft.ghosts.some(g=>overlaps(g,menu.range))} onAction={props.onAction} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
 });
 
 type FieldProps={label:string;value:string;onChange:(value:string)=>void;placeholder?:string;className?:string;source?:boolean};
 export function MarkdownField(props:FieldProps){
   const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false);current.current=props;
-  const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
+  const [menu,setMenu]=useState<{x:number;y:number;spelling?:SpellingWord}|null>(null);
   useEffect(()=>{
-    const v=new EditorView({parent:host.current!,state:EditorState.create({doc:props.value,extensions:[markdownEditing,EditorView.lineWrapping,drawSelection({drawRangeCursor:false}),history(),keymap.of([
+    const v=new EditorView({parent:host.current!,state:EditorState.create({doc:props.value,extensions:[markdownEditing,nativeSpelling,EditorView.lineWrapping,drawSelection({drawRangeCursor:false}),history(),keymap.of([
       ...(['b','i','u'] as const).map((key,i)=>({key:`Mod-${key}`,run:(editor:EditorView)=>{try{applyFormat(editor,(['bold','italic','underline'] as const)[i]);}catch{}return true;}})),...historyKeymap,...defaultKeymap,
     ]),placeholder(props.placeholder??''),EditorView.contentAttributes.of({'aria-label':props.label,role:'textbox','aria-multiline':'true',spellcheck:'true'}),
     EditorView.updateListener.of(update=>{if(update.docChanged&&!syncing.current)current.current.onChange(update.state.doc.toString());}),
-    EditorView.domEventHandlers({contextmenu:(event,editor)=>{event.preventDefault();selectContext(editor,event);setMenu({x:event.clientX,y:event.clientY});return true;}}),
+    EditorView.domEventHandlers({contextmenu:(event,editor)=>{event.preventDefault();const spelling=spellingAt(editor,event);selectContext(editor,event);setMenu({x:event.clientX,y:event.clientY,spelling});return true;}}),
     ]})});view.current=v;return()=>{v.destroy();view.current=null;};
   },[]);
   useEffect(()=>{const v=view.current;if(!v)return;syncing.current=true;try{const before=v.state.doc.toString();v.dispatch({...(before!==props.value?{changes:replacement(before,props.value)}:{}),effects:showMarkdown.of(!!props.source)});}finally{syncing.current=false;}},[props.value,props.source]);
-  return <><div className={`markdown-field ${props.className??''}`} ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
+  return <><div className={`markdown-field ${props.className??''}`} ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} spelling={menu.spelling} onSpellingFix={text=>menu.spelling&&correctSpelling(view.current!,menu.spelling,text)} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
 }

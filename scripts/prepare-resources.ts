@@ -10,6 +10,10 @@ await cp(join(root,'desktop'),join(resources,'desktop'),{recursive:true});
 await mkdir(join(resources,'src'),{recursive:true});await cp(join(root,'src/model.ts'),join(resources,'src/model.ts'));
 await cp(join(root,'src/markdown.ts'),join(resources,'src/markdown.ts'));
 await cp(process.execPath,join(resources,'bun'));
+if(process.platform==='darwin'){
+  const native=Bun.spawn(['xcrun','swiftc','-O','-target',`${process.arch==='arm64'?'arm64':'x86_64'}-apple-macos13.0`,join(root,'native/Spelling.swift'),'-o',join(resources,'draft-spelling')],{stdout:'inherit',stderr:'inherit'});
+  if(await native.exited)throw Error('The Mac spelling helper could not be built.');
+}
 await cp(join(root,'node_modules'),join(resources,'node_modules'),{recursive:true,dereference:false,filter:path=>{
   const p=relative(join(root,'node_modules'),path);
   return !p.startsWith('@tauri-apps')&&!p.startsWith('@anthropic-ai/claude-agent-sdk-')&&!p.startsWith('.cache');

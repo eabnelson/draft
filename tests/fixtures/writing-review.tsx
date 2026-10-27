@@ -25,6 +25,7 @@ configureDemo(async(path,input)=>{
   if(path==='/api/library'){if(input)library=structuredClone(input) as typeof library;return structuredClone(library);}
   if(path==='/api/features')return {official,current:official,activeVersion:'writing-check',updates:[],featureQueue:[],handoffs:[],appVersion:official.appVersion,demo:true};
   if(path==='/api/assist')return {response:JSON.stringify({flags})};
+  if(path==='/api/spelling')return {available:false,words:[]};
   if(path==='/api/updates/confirm'||path==='/api/close/ready')return {};
   throw Error('This local check does not use that action.');
 },()=>{});
