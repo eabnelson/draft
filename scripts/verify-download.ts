@@ -1,5 +1,5 @@
 // Runs on a fresh Mac runner with no release signing keychain or Apple credentials.
-import {readFile,mkdir,mkdtemp,rm} from 'node:fs/promises';
+import {readFile,mkdir,mkdtemp,rm,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {verify} from 'node:crypto';
@@ -29,6 +29,11 @@ try{
  const codeHash=async(path:string)=>(await macCommand(['/usr/bin/codesign','-d','--verbose=4',path])).stderr.match(/^CDHash=(.+)$/m)?.[1];
  if(await codeHash(app)!==await codeHash(join(updater,'Draft.app')))throw Error('The installer and in-app update contain different applications.');
  if(process.env.CI!=='true')throw Error('Run fresh-profile app launch verification on the isolated CI Mac.');
+ const runtime=join(app,'Contents/Resources/runtime'),workspace=join(stage,'editable-source');
+ await macCommand(['/usr/bin/ditto',join(runtime,'source-template'),workspace]);
+ await symlink(join(runtime,'node_modules'),join(workspace,'node_modules'),'dir');
+ await macCommand([join(runtime,'bun'),'test',join(workspace,'tests'),join(workspace,'host-tests/official-update.test.ts')]);
+ console.log('BUNDLED_TOOLS_PASSED: document checks, personal feature builds, official merges and conflict choices using the shipped runtime.');
  const info=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleExecutable',join(app,'Contents/Info.plist')]);
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
  const environment={...process.env,DRAFT_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
@@ -41,7 +46,7 @@ try{
  if(!launched)throw Error('The fresh Mac launch did not open its local document library.');
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
- console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic download, Apple approval, Gatekeeper, installed app, first launch, local writing.`);
+ console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic download, Apple approval, Gatekeeper, installed app, bundled feature tools, first launch, local writing.`);
 }catch(error){throw error;}
 finally{
  const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);
