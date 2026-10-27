@@ -19,7 +19,11 @@ const stage=await realpath(await mkdtemp(join(tmpdir(),'draft-download-check-'))
 const installer=join(assets,new URL(release.installer.url).pathname.split('/').at(-1)!);
 await macCommand(['xcrun','stapler','validate',installer]);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
 let mounted=false,child:ReturnType<typeof Bun.spawn>|undefined,output='';const data=join(stage,'profile');
-const capture=async(stream:ReadableStream<Uint8Array>)=>{for await(const bytes of stream)output=(output+new TextDecoder().decode(bytes)).slice(-12000);};
+const capture=async(stream:ReadableStream<Uint8Array>)=>{
+ const reader=stream.getReader(),decoder=new TextDecoder();
+ try{for(;;){const {done,value}=await reader.read();if(done)break;output=(output+decoder.decode(value,{stream:true})).slice(-12000);}}
+ finally{reader.releaseLock();}
+};
 async function startupDiagnostics(){
  const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);
  const state=await Bun.file(join(data,'state.json')).json().catch(()=>undefined);
