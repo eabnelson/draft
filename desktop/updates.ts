@@ -160,6 +160,7 @@ export class Updates {
   async handoff(input:{updateId?:string;featureId?:string}):Promise<HandoffPrompt>{
     const update=input.updateId?this.state.updates.find(u=>u.id===input.updateId):this.state.updates.findLast(u=>(u.featureId===input.featureId||u.featureResults?.some(f=>f.featureId===input.featureId))&&u.state==='applied');
     if(!update||!['add','remove','batch'].includes(update.kind))throw Error('Choose a feature to keep working on.');
+    if(this.runningId===update.id&&!['checking','preparing','building'].includes(update.state))await this.preparation;
     if(['checking','preparing','building','applying'].includes(update.state)||this.runningId===update.id)throw Error('Wait for this update to finish or stop it first.');
     this.state.handoffs??=[];
     let handoff=this.state.handoffs.findLast(h=>(h.updateId===update.id||h.lastUpdateId===update.id)&&h.baseVersion===this.active.id&&h.hostVersion===nativeHostVersion);
