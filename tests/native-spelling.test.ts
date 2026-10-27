@@ -15,7 +15,7 @@ test('Markdown spelling keeps visible labels and UTF-16 offsets but skips code a
   assert.ok(!masked.includes('https:'));assert.ok(!masked.includes('mispelled'));assert.ok(!masked.includes('recieve()'));assert.ok(!masked.includes('<u>'));
 });
 
-test('macOS dictionaries find typing errors and return corrections at JavaScript offsets', {skip:process.platform!=='darwin'},async()=>{
+test('macOS dictionaries find typing errors and return corrections at JavaScript offsets', {skip:process.platform!=='darwin',timeout:120000},async()=>{
   const folder=await mkdtemp(join(tmpdir(),'draft-spelling-')),binary=join(folder,'draft-spelling');
   const build=Bun.spawn(['xcrun','swiftc',join(import.meta.dir,'../native/Spelling.swift'),'-o',binary],{stdout:'ignore',stderr:'pipe'});
   assert.equal(await build.exited,0,await new Response(build.stderr).text());
