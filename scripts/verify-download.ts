@@ -45,7 +45,7 @@ try{
 }catch(error){throw error;}
 finally{
  const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);
- if(runtime?.hostPid===child?.pid&&runtime.runtimePid>1)try{process.kill(-runtime.runtimePid,'SIGTERM');}catch{}
- child?.kill('SIGTERM');if(child)await child.exited;
- if(mounted)await macCommand(['/usr/bin/hdiutil','detach',mount]);await rm(stage,{recursive:true,force:true});
+ if(runtime&&child&&runtime.hostPid===child.pid&&runtime.runtimePid>1)try{process.kill(-runtime.runtimePid,'SIGTERM');}catch{}
+ try{child?.kill('SIGTERM');}catch{}if(child)await child.exited;
+ if(mounted)await macCommand(['/usr/bin/hdiutil','detach',mount]).catch(error=>console.warn(String(error)));await rm(stage,{recursive:true,force:true});
 }

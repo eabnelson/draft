@@ -109,6 +109,10 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Require normal Gatekeeper enforcement on the clean Mac
+        run: |
+          sudo /usr/sbin/spctl --global-enable
+          /usr/sbin/spctl --status | grep -F 'assessments enabled'
       - name: Download the exact release assets on a fresh Mac
         env:
           GH_TOKEN: ${{ github.token }}

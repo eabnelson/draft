@@ -40,7 +40,8 @@ export async function verifyMacApp(app:string,team:string,notarized=true){
  for(const path of await machFiles(join(app,'Contents/Resources/runtime')))await requireDeveloperIdCode(path,team);
  if(notarized){
   await macCommand(['xcrun','stapler','validate',app]);
-  await macCommand(['/usr/sbin/spctl','--assess','--type','execute','--verbose=2',app]);
+  const assessment=await macCommand(['/usr/sbin/spctl','--assess','--type','execute','--verbose=2',app]);
+  if(!/source=Notarized Developer ID/.test(assessment.stdout+assessment.stderr))throw Error('Gatekeeper did not confirm a notarized Developer ID application.');
   await macCommand(['/usr/bin/syspolicy_check','distribution',app]);
  }
  return {team,signed:true,notarized};
