@@ -2,7 +2,7 @@
 
 Your writing, your app.
 
-https://github.com/user-attachments/assets/440c3ebe-c1ce-4ebf-9792-f01ad656001b
+https://github.com/user-attachments/assets/7ecb99c3-e39d-4a54-becb-ffd9857f4692
 
 A local writing app you can make your own. Write, compare alternate wording, set passages aside, and keep spare ideas in overflow. Ask your connected coding agent for a feature, then apply the finished work with **Restart to update**.
 
