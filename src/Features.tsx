@@ -10,14 +10,14 @@ import type {FeaturesState,Feature,Update,UpdateKind} from '../desktop/types';
 
 const date=(value:string,time=false)=>new Date(value).toLocaleString(undefined,time?{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}:{month:'short',day:'numeric',year:'numeric'});
 const busy=(u:Update)=>['checking','preparing','building','applying'].includes(u.state);
-const canContinue=(u:Update)=>['add','remove','batch'].includes(u.kind)&&!busy(u);
+const canContinue=(u:Update)=>['add','remove','batch'].includes(u.kind)&&!busy(u)&&!u.reconnectProvider;
 function status(u:Update){
   switch(u.state){
     case 'checking':case 'preparing':case 'building':return timeRemaining(u);
     case 'ready':return 'Ready when you are.';
     case 'applying':return 'Restarting Draft…';
     case 'applied':return u.kind==='reset'?'Back to official Draft':'Your app is up to date';
-    case 'failed':return 'This update needs a little more work.';
+    case 'failed':return u.reconnectProvider?u.reconnectedAt?'Signed in again.':'Sign-in needed.':'This update needs a little more work.';
     case 'needs-attention':return 'A few choices for your update.';
     case 'cancelled':return 'Update cancelled';
     case 'already-exists':return 'Draft already does this.';
@@ -26,6 +26,7 @@ function status(u:Update){
 export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBeforeApply:()=>Promise<boolean>;onUpdating:(value:boolean)=>void}){
   const [data,setData]=useState<FeaturesState>(),[request,setRequest]=useState(''),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[settings,setSettings]=useState(false),[submitting,setSubmitting]=useState(false),[applying,setApplying]=useState(false);
   const [handoffTarget,setHandoffTarget]=useState<HandoffTarget>();
+  const [reconnecting,setReconnecting]=useState('');
   const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null);
   async function refresh(){try{const value=await api<FeaturesState>('/api/features');if(mounted.current){setData(value);setLoadError('');}}catch{if(mounted.current)setLoadError('Draft couldn’t load your features. Try again in a moment.');}}
   useEffect(()=>{mounted.current=true;void refresh();const interval=setInterval(()=>void refresh(),1000);return()=>{mounted.current=false;clearInterval(interval);};},[]);
@@ -49,6 +50,12 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
     catch(e){setError(e instanceof Error&&e.message==='save'?'Your writing couldn’t be saved. Try saving again before updating.':'Draft couldn’t apply this update. Try again in a moment.');setApplying(false);onUpdating(false);}
   }
   async function discard(update:Update){try{await api('/api/updates/discard',{id:update.id});await refresh();}catch{setError('Draft couldn’t stop this update. Try again.');}}
+  async function reconnect(update:Update){
+    setError('');setNotice('');setSubmitting(true);setReconnecting(update.id);
+    try{const result=await api<{message:string}>('/api/updates/reconnect',{id:update.id});if(mounted.current)setNotice(result.message);}
+    catch(error){if(mounted.current)setError(error instanceof Error?error.message:'Sign-in didn’t finish. Your feature is still in your list.');}
+    finally{if(mounted.current){setSubmitting(false);setReconnecting('');void refresh();}}
+  }
   async function checkOfficial(){
     setError('');setSubmitting(true);
     try{const result=await api('/api/updates/check',{});setNotice(result.message);await refresh();}
@@ -66,10 +73,10 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   const systemUpdate=activeUpdate&&['official','rollback'].includes(activeUpdate.kind)?activeUpdate:undefined;
   const pending=systemUpdate?undefined:activeUpdate;
   const failedOfficial=!activeUpdate?data?.updates.find(u=>u.kind==='official'&&u.state==='failed'&&u.baseVersion===data.activeVersion):undefined;
-  const failedUpdate=!activeUpdate&&data?.updates[0]?.state==='failed'&&data.updates[0].kind!=='official'&&data.updates[0].baseVersion===data.activeVersion?data.updates[0]:undefined;
+  const failedUpdate=!activeUpdate&&data?.updates[0]?.state==='failed'&&!data.updates[0].reconnectedAt&&data.updates[0].kind!=='official'&&data.updates[0].baseVersion===data.activeVersion?data.updates[0]:undefined;
   const changes=data?.current.features.filter(f=>f.origin==='personal'||f.state==='removed'||(()=>{const base=data.official.features.find(x=>x.id===f.id);return !base||f.updatedAt!==base.updatedAt||f.description!==base.description;})())??[];
   const blocked=!!activeUpdate||submitting||applying,ideas=data?.featureQueue??[],selected=ideas.filter(q=>q.selected).length;
-  const locked=new Set(pending?.requests?.map(r=>r.id)),handoff=data?.handoffs?.at(-1);
+  const locked=new Set(pending?.requests?.map(r=>r.id)),handoff=data?.handoffs?.findLast(handoff=>!data.updates.some(update=>update.id===handoff.updateId&&update.reconnectProvider));
   function featureRow(feature:Feature,personal=false){return <div className="feature-row" key={feature.id}>
     <div className="feature-row-main"><strong>{feature.title}</strong>{personal&&<span className="feature-badge">{feature.state==='removed'?'Removed':feature.origin==='personal'?'Added':'Changed'}</span>}</div>
     <p>{feature.description}</p>
@@ -80,7 +87,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
     {personal&&!data?.demo&&<Button variant="ghost" size="xs" className="feature-more" disabled={!!pending&&busy(pending)} onClick={()=>openHandoff({featureId:feature.id})}>Keep working on this</Button>}
   </div>;}
   return <section className="features-page">
-    <div className="features-top"><Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14}/>Writing</Button>{!data?.demo&&<Button variant="outline" size="sm" onClick={()=>setSettings(true)}>Model settings</Button>}</div>
+    <div className="features-top"><Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14}/>Writing</Button>{!data?.demo&&<Button variant="outline" size="sm" disabled={!!reconnecting} onClick={()=>setSettings(true)}>Model settings</Button>}</div>
     <div className="features-heading"><div><h1>Make Draft yours.</h1><p>Keep a list. Update when you’re ready.</p></div><span className="version-label">Draft {data?.appVersion??'…'}</span></div>
     {data&&!data.demo&&<OfficialUpdate data={data} update={systemUpdate??failedOfficial} blocked={blocked} applying={applying} onPrepare={kind=>void prepare(kind)} onApply={update=>void apply(update)} onDiscard={update=>void discard(update)} onRefresh={()=>void refresh()} onSettings={()=>setSettings(true)}/>}
     <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
@@ -95,12 +102,12 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
       </li>)}</ul>:<p className="wishlist-empty">Add the changes you have in mind.</p>}
       <div className="wishlist-download" role="status"><span>{pending?pending.state==='ready'?'Your update is ready.':'You can keep writing while it downloads.':selected?`${selected} ${selected===1?'change':'changes'} selected`:'Choose what goes into your next update.'}</span>
         <div>{pending&&<Button variant="ghost" size="sm" disabled={applying} onClick={()=>void discard(pending)}>{pending.state==='ready'?'Discard':'Cancel'}</Button>}
-          {pending?.state==='ready'?<Button disabled={applying} onClick={()=>void apply(pending)}><RotateCcw size={14}/>{applying?'Restarting…':'Restart to update'}</Button>:pending?<Button disabled><LoaderCircle size={14} className="spin"/>{status(pending)}</Button>:<Button disabled={blocked||!selected} onClick={()=>void prepare('batch')}><Download size={14}/>Download update</Button>}
+          {pending?.state==='ready'?<Button disabled={applying} onClick={()=>void apply(pending)}><RotateCcw size={14}/>{applying?'Restarting…':'Restart to update'}</Button>:pending?<Button disabled><LoaderCircle size={14} className="spin"/>{status(pending)}</Button>:<Button disabled={blocked||!selected||!!failedUpdate?.reconnectProvider} onClick={()=>void prepare('batch')}><Download size={14}/>Download update</Button>}
         </div>
       </div>
       {pending&&canContinue(pending)&&!data?.demo&&<div className="wishlist-handoff"><span>Want to work on this more?</span><Button variant="ghost" size="xs" onClick={()=>openHandoff({updateId:pending.id})}><Copy size={12}/>Get a prompt for your agent</Button></div>}
     </section>
-    {failedUpdate&&<div className="handoff-card" role="status"><div><strong>{failedUpdate.reconnectProvider?'Your coding agent needs you to sign in again.':'This update needs a little more work.'}</strong><p>{failedUpdate.reconnectProvider?failedUpdate.error:'Your ideas are still in your list. Your app is unchanged.'}</p></div>{!data?.demo&&(failedUpdate.reconnectProvider?<Button variant="outline" size="sm" onClick={()=>setSettings(true)}>Model settings</Button>:canContinue(failedUpdate)&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:failedUpdate.id})}>Get a prompt for your agent</Button>)}</div>}
+    {failedUpdate&&<div className="handoff-card" role="status"><div><strong>{failedUpdate.reconnectProvider?`${failedUpdate.reconnectProvider==='claude'?'Claude':'Codex'} needs you to sign in again`:'This update needs a little more work.'}</strong><p>{failedUpdate.reconnectProvider?`Your ${failedUpdate.requests&&failedUpdate.requests.length>1?'features are':'feature is'} still in your list. Your writing is safe.`:'Your ideas are still in your list. Your app is unchanged.'}</p></div>{!data?.demo&&(failedUpdate.reconnectProvider?<Button variant="outline" size="sm" disabled={blocked} onClick={()=>void reconnect(failedUpdate)}>{reconnecting===failedUpdate.id?<><LoaderCircle size={14} className="spin"/>Signing in…</>:'Sign in again'}</Button>:canContinue(failedUpdate)&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:failedUpdate.id})}>Get a prompt for your agent</Button>)}</div>}
     {!pending&&data?.updates[0]?.state==='already-exists'&&<p className="feature-notice" role="status">Draft already does this. You’re ready to keep writing.</p>}
     {handoff&&<div className="handoff-card"><div><strong>Working with your agent?</strong><p>Bring the changes back when you’re happy with them.</p></div><div className="handoff-card-actions"><Button variant="ghost" size="sm" onClick={()=>openHandoff({updateId:handoff.updateId})}>Copy prompt</Button><Button variant="outline" size="sm" disabled={submitting||applying||!!pending&&pending.state!=='ready'} onClick={()=>void checkChanges(handoff.id)}>Check my changes</Button></div></div>}
     {(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}

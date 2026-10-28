@@ -26,6 +26,8 @@ Open **Preferences** to compare **Official Draft** with **Your changes**. Every 
 
 The download shows an estimated wait based on recent preparations. When those checks succeed, choose **Restart to update**. The editor saves your writing before restarting into the new version. Ideas added during a download stay in your list for next time. A failed or interrupted preparation leaves the current version running. If the updated renderer fails to start, Draft restores the previous version.
 
+If Claude needs you to sign in again, the update card explains what happened and offers **Sign in again**. Draft keeps your feature queued and retries after the connection is restored. If your app, model, or selected ideas changed during sign-in, review your list before downloading again. Model settings shows **Sign-in needed** until you reconnect.
+
 Removing a feature and returning to official Draft use the same prepare → update flow. Draft checks for official updates on opening, periodically while running, and when you return to the app. An update appears in the header and Preferences. **Draft → Check for Updates…** is always available, including with an older personal interface.
 
 **Download update** brings in the matching signed app and source. Independent changes combine automatically. If changes overlap, choose **Keep mine**, **Use Draft’s**, or **Combine both** for each high-level feature. Draft uses your connected model when integration needs work, then checks the result before offering **Restart to update**. Personal features and features you turned off remain recorded; only changes you explicitly replace are dropped. Missing model access, interrupted downloads, or unresolved checks keep the current app running.

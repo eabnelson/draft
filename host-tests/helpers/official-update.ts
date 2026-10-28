@@ -9,7 +9,7 @@ import {DocumentStore} from '../../desktop/documents';
 import {fresh} from '../../src/model';
 import type {Catalog,Version} from '../../desktop/types';
 
-export async function officialFixture(options:{conflict?:boolean;agent?:AgentConnection['run'];noModel?:boolean}={}){
+export async function officialFixture(options:{conflict?:boolean;agent?:AgentConnection['run'];login?:AgentConnection['login'];noModel?:boolean}={}){
  const root=await mkdtemp(join(tmpdir(),'draft-official-flow-')),template=join(root,'template'),incoming=join(root,'release'),data=join(root,'data'),keys=generateKeyPairSync('ed25519');
  const catalog:Catalog={schemaVersion:1,name:'Draft',appVersion:'1.0.0',features:[{id:'writing',title:'Writing',description:'Write locally.',origin:'official',state:'active',updatedAt:'2026-10-24T00:00:00Z',code:['src/writing.ts']}]};
  const files:Record<string,string>={
@@ -36,7 +36,7 @@ export async function officialFixture(options:{conflict?:boolean;agent?:AgentCon
   if(path==='/manifest'){const payload=JSON.stringify({schemaVersion:2,version:'1.1.0',publishedAt:'2026-10-27T16:00:00Z',notes:['Spelling help is now included.'],nativeHostVersion:'1.1.0',source:{url:origin+'/source',size:archive.length,sha256:digest},desktop:{url:origin+'/desktop.zip',size:1,sha256:'b'.repeat(64),arch:process.arch,bundleId:'com.eriknelson.draft'}});return Response.json({payload,signature:sign(null,Buffer.from(payload),keys.privateKey).toString('base64')});}
   return Response.json([{tag_name:'v1.1.0',draft:false,prerelease:false,html_url:'https://github.com/eabnelson/draft/releases/tag/v1.1.0',assets:[{name:'draft-update.json',browser_download_url:origin+'/manifest'}]}]);
  }});
- const agents:AgentConnection={discover:async()=>[],login:async()=>[],select:async()=>options.noModel?undefined:{provider:'claude',model:'fixture'},run:options.agent??(async()=>{throw Error('The independent merge should not need a model.');})};
+ const agents:AgentConnection={discover:async()=>[],login:options.login??(async()=>[]),select:async()=>options.noModel?undefined:{provider:'claude',model:'fixture'},run:options.agent??(async()=>{throw Error('The independent merge should not need a model.');})};
  const dependencies=resolve(import.meta.dir,'../../node_modules');
  const host=new Updates(data,template,dependencies,process.execPath,{feed:`http://127.0.0.1:${server.port}/releases`,allowLocal:true,builds:join(root,'builds'),hostVersion:'1.1.0',agents});await host.initialize();
  const customSource=join(root,'personal/source'),customDist=join(root,'personal/dist');await copySource(host.active.source,customSource);await cp(host.active.dist,customDist,{recursive:true});

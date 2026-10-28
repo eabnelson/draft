@@ -57,15 +57,16 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/links/open'&&request.method==='POST'){await openExternalLink(input.url);return json({opened:true});}
         if(url.pathname==='/api/close/ready'&&request.method==='POST'){closeReady=true;return json({ready:true});}
         if(url.pathname==='/api/close/reset'&&request.method==='POST'){closeReady=false;return json({ready:false});}
-        if(url.pathname==='/api/providers'&&request.method==='GET'){const providers=await updates.agents.discover(url.searchParams.has('refresh'));const selected=await updates.defaultSelection();return json({providers,selection:selected});}
+        if(url.pathname==='/api/providers'&&request.method==='GET'){const providers=await updates.providers(url.searchParams.has('refresh'));const selected=await updates.defaultSelection();return json({providers,selection:selected});}
         if(url.pathname==='/api/providers/select'&&request.method==='POST'){await updates.select(input as AgentSelection);return json({saved:true});}
-        if(url.pathname==='/api/providers/login'&&request.method==='POST'){if(!['claude','codex'].includes(input.provider))throw Error('Choose Claude Code or Codex.');return json({providers:await updates.agents.login(input.provider)});}
+        if(url.pathname==='/api/providers/login'&&request.method==='POST'){if(!['claude','codex'].includes(input.provider))throw Error('Choose Claude Code or Codex.');return json({providers:await updates.login(input.provider)});}
         if(url.pathname==='/api/assist'&&request.method==='POST'){
           if(typeof input.prompt!=='string'||input.prompt.length>100000)throw Error('The writing request is too large.');
           const selected=await updates.defaultSelection();if(!selected)throw Error('Connect Claude Code or Codex in Model settings.');
-          return json({response:await updates.agents.run(selected,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)}),provider:selected.provider});
+          const response=await updates.agents.run(selected,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)});await updates.rememberConnection(selected.provider);return json({response,provider:selected.provider});
         }
         if(url.pathname==='/api/updates/request'&&request.method==='POST')return json(await updates.request(input.kind as UpdateKind,String(input.request??''),input.featureId));
+        if(url.pathname==='/api/updates/reconnect'&&request.method==='POST')return json(await updates.reconnect(input.id));
         if(url.pathname==='/api/features/queue'&&request.method==='POST')return json(await updates.queue(input));
         if(url.pathname==='/api/updates/discard'&&request.method==='POST'){await updates.discard(input.id);return json({discarded:true});}
         if(url.pathname==='/api/updates/apply'&&request.method==='POST'){const restart=!dev&&input.restart===true;const result=await updates.apply(input.id,restart);restartRequested=restart;return json({...result,restart});}
