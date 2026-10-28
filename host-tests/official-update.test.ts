@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {officialFixture,settled} from './helpers/official-update';
+import {readClaudeResult} from '../desktop/agents';
+import type {SDKMessage} from '@anthropic-ai/claude-agent-sdk';
+
+test('a revoked Claude login preserves a personal feature request and identifies the sign-in recovery',async()=>{
+ const f=await officialFixture({agent:async()=>{
+  async function* revoked(){yield {type:'result',subtype:'success',is_error:true,result:'Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator.'} as SDKMessage;}
+  return readClaudeResult(revoked());
+ }});try{
+  await f.host.queue({action:'add',request:'command + F to trigger searching words in a draft'});
+  const request=await f.host.request('batch','');const failed=await settled(f.host,request.id);
+  assert.equal(failed.state,'failed');assert.equal(failed.reconnectProvider,'claude');
+  assert.match(failed.error!,/Sign in to Claude Code again in Model settings/);
+  assert.equal(f.host.view().activeVersion,'personal-start');assert.equal(f.host.view().featureQueue?.length,1);assert.equal(f.host.view().featureQueue?.[0].selected,true);
+  assert.equal((await f.docs.load()).drafts[0].text,'My writing stays on this Mac.');
+ }finally{await f.close();}
+});
 
 test('automatic discovery, download, real build, restart confirmation and undo preserve custom features and documents',{timeout:30000},async()=>{
  const f=await officialFixture();try{

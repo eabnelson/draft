@@ -66,6 +66,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   const systemUpdate=activeUpdate&&['official','rollback'].includes(activeUpdate.kind)?activeUpdate:undefined;
   const pending=systemUpdate?undefined:activeUpdate;
   const failedOfficial=!activeUpdate?data?.updates.find(u=>u.kind==='official'&&u.state==='failed'&&u.baseVersion===data.activeVersion):undefined;
+  const failedUpdate=!activeUpdate&&data?.updates[0]?.state==='failed'&&data.updates[0].kind!=='official'&&data.updates[0].baseVersion===data.activeVersion?data.updates[0]:undefined;
   const changes=data?.current.features.filter(f=>f.origin==='personal'||f.state==='removed'||(()=>{const base=data.official.features.find(x=>x.id===f.id);return !base||f.updatedAt!==base.updatedAt||f.description!==base.description;})())??[];
   const blocked=!!activeUpdate||submitting||applying,ideas=data?.featureQueue??[],selected=ideas.filter(q=>q.selected).length;
   const locked=new Set(pending?.requests?.map(r=>r.id)),handoff=data?.handoffs?.at(-1);
@@ -99,7 +100,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
       </div>
       {pending&&canContinue(pending)&&!data?.demo&&<div className="wishlist-handoff"><span>Want to work on this more?</span><Button variant="ghost" size="xs" onClick={()=>openHandoff({updateId:pending.id})}><Copy size={12}/>Get a prompt for your agent</Button></div>}
     </section>
-    {!activeUpdate&&data?.updates[0]?.state==='failed'&&data.updates[0].kind!=='official'&&data.updates[0].baseVersion===data.activeVersion&&<div className="handoff-card" role="status"><div><strong>This update needs a little more work.</strong><p>Your ideas are still in your list. Your app is unchanged.</p></div>{!data.demo&&canContinue(data.updates[0])&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:data.updates[0].id})}>Get a prompt for your agent</Button>}</div>}
+    {failedUpdate&&<div className="handoff-card" role="status"><div><strong>{failedUpdate.reconnectProvider?'Your coding agent needs you to sign in again.':'This update needs a little more work.'}</strong><p>{failedUpdate.reconnectProvider?failedUpdate.error:'Your ideas are still in your list. Your app is unchanged.'}</p></div>{!data?.demo&&(failedUpdate.reconnectProvider?<Button variant="outline" size="sm" onClick={()=>setSettings(true)}>Model settings</Button>:canContinue(failedUpdate)&&<Button variant="outline" size="sm" onClick={()=>openHandoff({updateId:failedUpdate.id})}>Get a prompt for your agent</Button>)}</div>}
     {!pending&&data?.updates[0]?.state==='already-exists'&&<p className="feature-notice" role="status">Draft already does this. You’re ready to keep writing.</p>}
     {handoff&&<div className="handoff-card"><div><strong>Working with your agent?</strong><p>Bring the changes back when you’re happy with them.</p></div><div className="handoff-card-actions"><Button variant="ghost" size="sm" onClick={()=>openHandoff({updateId:handoff.updateId})}>Copy prompt</Button><Button variant="outline" size="sm" disabled={submitting||applying||!!pending&&pending.state!=='ready'} onClick={()=>void checkChanges(handoff.id)}>Check my changes</Button></div></div>}
     {(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}

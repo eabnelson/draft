@@ -4,7 +4,33 @@ import {readFile,mkdir,realpath,mkdtemp,rm} from 'node:fs/promises';
 import {homedir,tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import type {Provider,AgentSelection,Model} from './types';
+import type {SDKMessage} from '@anthropic-ai/claude-agent-sdk';
 import {exists,within} from './files';
+
+export class AgentSignInError extends Error {
+  constructor(readonly provider:AgentSelection['provider']){
+    super(`Sign in to ${provider==='claude'?'Claude Code':'Codex'} again in Model settings, then try again.`);
+    this.name='AgentSignInError';
+  }
+}
+function authenticationFailure(error:unknown){
+  const message=error instanceof Error?error.message:String(error);
+  return /failed to authenticate|authentication_error|oauth token (?:revoked|expired|invalid)|not (?:logged|signed) in|invalid (?:api key|authentication credentials)/i.test(message);
+}
+export async function readClaudeResult(events:AsyncIterable<SDKMessage>,onProgress?:(message:string)=>void){
+  let text='';try{for await(const event of events){
+    if(event.type==='assistant')onProgress?.('Implementing your update');
+    if(event.type==='result'){
+      if(event.is_error){
+        const reason='result'in event?event.result:'errors'in event?event.errors.join('\n'):'';
+        if(authenticationFailure(reason))throw new AgentSignInError('claude');
+        throw Error('The agent could not complete this request. Try again or choose another model.');
+      }
+      text='structured_output'in event&&event.structured_output?JSON.stringify(event.structured_output):'result'in event?event.result:'';
+    }
+  }}catch(error){if(authenticationFailure(error))throw new AgentSignInError('claude');throw error;}
+  if(!text)throw Error('The agent returned no result.');return text;
+}
 
 export function cleanEnvironment():NodeJS.ProcessEnv {
   const env={...process.env};for(const name of Object.keys(env))if(name.startsWith('DRAFT_'))delete env[name];
@@ -60,10 +86,12 @@ async function claudeModels(binary:string):Promise<Model[]>{
 }
 export class Agents {
   private cache?:{at:number;providers:Provider[]};
+  private authenticationFailures=new Map<AgentSelection['provider'],string>();
   async discover(refresh=false):Promise<Provider[]>{
     if(this.cache&&!refresh&&Date.now()-this.cache.at<60000)return this.cache.providers;
     const providers=await Promise.all((['claude','codex'] as const).map(async id=>{
       const binary=await findBinary(id);const p:Provider={id,name:id==='claude'?'Claude Code':'Codex',installed:!!binary,ready:false,path:binary,models:[]};if(!binary)return p;
+      if(this.authenticationFailures.has(id)){p.error=this.authenticationFailures.get(id);return p;}
       try{
         if(id==='claude'){
           const status=JSON.parse(await boundedRun(binary,['auth','status','--json']));if(!status.loggedIn)throw Error('Sign in to Claude Code.');
@@ -93,7 +121,8 @@ export class Agents {
             const target=String(input.file_path??input.path??options.workspace);let canonical=resolve(options.workspace!,target);try{canonical=await realpath(canonical);}catch{try{canonical=join(await realpath(dirname(canonical)),canonical.split('/').at(-1)!);}catch{}}
             return within(options.workspace!,canonical)?{behavior:'allow',updatedInput:input}:{behavior:'deny',message:'Only the candidate source workspace is available for this change.'};
           }}:{})}});
-      let text='';try{for await(const event of q){if(event.type==='assistant')options.onProgress?.('Implementing your update');if(event.type==='result'){if(event.is_error)throw Error('The agent could not complete this request. Try again or choose another model.');text='structured_output'in event&&event.structured_output?JSON.stringify(event.structured_output):'result'in event?event.result:'';}}if(!text)throw Error('The agent returned no result.');return text;}
+      try{const result=await readClaudeResult(q,options.onProgress);if(this.authenticationFailures.delete('claude'))this.cache=undefined;return result;}
+      catch(error){if(error instanceof AgentSignInError){this.authenticationFailures.set('claude',error.message);this.cache=undefined;}throw error;}
       finally{abort.abort();q.close();options.signal?.removeEventListener('abort',cancel);}
     }
     const writingWorkspace=options.workspace?undefined:await mkdtemp(join(tmpdir(),'draft-writing-'));
@@ -116,6 +145,6 @@ export class Agents {
   }
   async login(provider:'claude'|'codex'){
     const path=await findBinary(provider);if(!path)throw Error(`Install ${provider==='claude'?'Claude Code':'Codex'} first.`);
-    await boundedRun(path,provider==='claude'?['auth','login']:['login'],180000);this.cache=undefined;return this.discover(true);
+    await boundedRun(path,provider==='claude'?['auth','login']:['login'],180000);this.authenticationFailures.delete(provider);this.cache=undefined;return this.discover(true);
   }
 }

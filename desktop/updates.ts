@@ -4,7 +4,7 @@ import {homedir,tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
 import {atomicWrite,copySource,exists,readJSON,safeId,sourceHash,assertContainedFiles} from './files';
 import {validateCatalog,likelyMatch,differences} from './catalog';
-import {Agents,builderSandbox,cleanEnvironment} from './agents';
+import {Agents,AgentSignInError,builderSandbox,cleanEnvironment} from './agents';
 import {featureHandoffPrompt} from './handoff';
 import {batchResultSchema,parseBatchResult,validateFeatureResults,estimateSeconds,locksQueue} from './feature-queue';
 import {ReleaseChannel,type SignedRelease} from './official-release';
@@ -126,7 +126,7 @@ export class Updates {
       if(!result)throw Error('The agent did not complete the update.');
       await this.storeCandidate(update,workspace);
       await this.progress(update,'ready','Update ready');
-    }catch(error){if(update.state!=='cancelled'){update.state=update.kind==='official'&&update.official?'needs-attention':'failed';update.stage='Update couldn’t be prepared';update.error=error instanceof Error?error.message:String(error);update.updatedAt=new Date().toISOString();await this.save();}}
+    }catch(error){if(update.state!=='cancelled'){update.state=update.kind==='official'&&update.official?'needs-attention':'failed';update.stage='Update couldn’t be prepared';update.error=error instanceof Error?error.message:String(error);if(error instanceof AgentSignInError)update.reconnectProvider=error.provider;update.updatedAt=new Date().toISOString();await this.save();}}
   }
   private async registerBundledVersion(){
     const catalog=validateCatalog(await readJSON(join(this.template,'features.json'))),id=`official-${catalog.appVersion}`;
