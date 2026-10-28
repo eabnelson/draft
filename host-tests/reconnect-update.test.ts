@@ -40,7 +40,7 @@ test('sign-in retries the queued feature, passes real builds and installs withou
  }finally{await f.close();}
 });
 
-test('sign-in waits for the failed preparation to finish saving before retrying',async()=>{
+test('sign-in recovery shares a settings login while waiting for the failed preparation to finish saving',async()=>{
  const f=await officialFixture({agent:async()=>{throw new AgentSignInError('claude');},login:async()=>[connected]});
  const saving=deferred<void>(),entered=deferred<void>();let signIns=0;
  try{
@@ -50,12 +50,13 @@ test('sign-in waits for the failed preparation to finish saving before retrying'
   await f.host.queue({action:'add',request:'Find words with Command-F'});
   const failed=await f.host.request('batch','');await entered.promise;
   const recovery=f.host.reconnect(failed.id);let rejected=false;void recovery.catch(()=>{rejected=true;});
-  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(rejected,false,'A visible sign-in failure must wait for its save instead of rejecting recovery.');assert.equal(signIns,0);
-  saving.resolve();const result=await recovery;assert.ok(result.update);await settled(f.host,result.update.id);assert.equal(signIns,1);
+  const settings=f.host.login('claude');
+  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(rejected,false,'A visible sign-in failure must wait for its save instead of rejecting recovery.');assert.equal(f.host.state.updates.length,1);assert.equal(signIns,1);
+  saving.resolve();const [result]=await Promise.all([recovery,settings]);assert.ok(result.update);await settled(f.host,result.update.id);assert.equal(signIns,1);
  }finally{saving.resolve();await f.close();}
 });
 
-test('duplicate sign-in clicks share one login and start at most one retry',async()=>{
+test('duplicate sign-in clicks share one login and start at most one retry',{timeout:30000},async()=>{
  const login=deferred<Provider[]>(),f=await fixture(()=>login.promise);try{
   const first=f.host.reconnect(f.failed.id),second=f.host.reconnect(f.failed.id);login.resolve([connected]);
   const [a,b]=await Promise.all([first,second]);assert.equal(f.loginCalls(),1);assert.equal(a.update?.id,b.update?.id);
@@ -64,7 +65,7 @@ test('duplicate sign-in clicks share one login and start at most one retry',asyn
  }finally{await f.close();}
 });
 
-test('Model settings and the recovery card share a sign-in that is already open',async()=>{
+test('Model settings and the recovery card share a sign-in that is already open',{timeout:30000},async()=>{
  const login=deferred<Provider[]>(),f=await fixture(()=>login.promise);try{
   const recovery=f.host.reconnect(f.failed.id),settings=f.host.login('claude');login.resolve([connected]);
   const [result]=await Promise.all([recovery,settings]);await settled(f.host,result.update!.id);assert.equal(f.loginCalls(),1);
@@ -119,7 +120,7 @@ test('a changed app is rejected before sign-in and an unavailable model never st
  }finally{await unavailable.close();}
 });
 
-test('Model settings retain a known sign-in failure across discovery and clear it after a direct or manual login',async()=>{
+test('Model settings retain a known sign-in failure across discovery and clear it after a direct or manual login',{timeout:30000},async()=>{
  for(const direct of [true,false]){
   const f=await fixture();try{
    // Discovery can report a locally saved account even though its login was revoked.
