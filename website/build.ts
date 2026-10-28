@@ -1,7 +1,9 @@
 import {cp,mkdir,rm,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {latestMacDownload} from './download';
+import {checkDemoParity} from '../scripts/demo-parity';
 const root=import.meta.dir;
+await checkDemoParity(join(root,'..'));
 await rm(join(root,'dist'),{recursive:true,force:true});await mkdir(join(root,'dist'),{recursive:true});
 const download=await latestMacDownload();
 const html=new HTMLRewriter().on('a[data-mac-download]',{element(element){element.setAttribute('href',download);}}).transform(new Response(await readFile(join(root,'index.html'),'utf8')));

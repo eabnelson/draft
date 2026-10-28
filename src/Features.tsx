@@ -89,7 +89,7 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
   return <section className="features-page">
     <div className="features-top"><Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14}/>Writing</Button>{!data?.demo&&<Button variant="outline" size="sm" disabled={!!reconnecting} onClick={()=>setSettings(true)}>Model settings</Button>}</div>
     <div className="features-heading"><div><h1>Make Draft yours.</h1><p>Keep a list. Update when you’re ready.</p></div><span className="version-label">Draft {data?.appVersion??'…'}</span></div>
-    {data&&!data.demo&&<OfficialUpdate data={data} update={systemUpdate??failedOfficial} blocked={blocked} applying={applying} onPrepare={kind=>void prepare(kind)} onApply={update=>void apply(update)} onDiscard={update=>void discard(update)} onRefresh={()=>void refresh()} onSettings={()=>setSettings(true)}/>}
+    {data&&<OfficialUpdate data={data} update={systemUpdate??failedOfficial} blocked={blocked} applying={applying} onPrepare={kind=>void prepare(kind)} onApply={update=>void apply(update)} onDiscard={update=>void discard(update)} onRefresh={()=>void refresh()} onSettings={()=>setSettings(true)}/>}
     <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
       <textarea aria-label="Feature request" placeholder="What would you like Draft to do?" value={request} onChange={event=>setRequest(event.target.value)} disabled={submitting||applying} rows={2}/>
       <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add feature</Button></div>

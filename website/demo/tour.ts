@@ -63,7 +63,7 @@ export class Tour{
   }
   private center(element:Element):Point{const r=element.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}
   private async pointAt(element:HTMLElement,signal:AbortSignal){await this.reveal(element,signal);this.mark(element);await this.move(this.center(element),signal);await this.wait(200,signal);}
-  private findButton(names:string|string[]){const labels=Array.isArray(names)?names:[names];return [...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.getClientRects().length&&labels.some(text=>b.textContent?.trim()===text||b.getAttribute('aria-label')===text));}
+  private findButton(names:string|string[]){const labels=Array.isArray(names)?names:[names];return [...document.querySelectorAll<HTMLButtonElement>('button')].find(b=>!b.disabled&&b.getClientRects().length&&labels.some(text=>b.textContent?.trim()===text||b.getAttribute('aria-label')===text));}
   private async fade(opacity:number,signal:AbortSignal){const root=document.getElementById('root')!,start=Number(getComputedStyle(root).opacity);await this.animate(this.reduced?0:280,p=>{root.style.opacity=String(start+(opacity-start)*ease(p));},signal);}
   private async click(names:string|string[],signal:AbortSignal,transition=false){
     const button=this.findButton(names);if(!button||button.disabled)throw Error(`The walkthrough control is unavailable: ${names}`);
@@ -141,8 +141,8 @@ export class Tour{
       mirror.replaceChildren(document.createTextNode(value),marker);return marker.getBoundingClientRect();
     },signal);}finally{mirror.remove();}
   }
-  private async updateReady(signal:AbortSignal){
-    const download=document.querySelector<HTMLElement>('.wishlist-download');if(!download)throw Error('The update progress is unavailable.');
+  private async updateReady(signal:AbortSignal,selector='.wishlist-download'){
+    const download=document.querySelector<HTMLElement>(selector);if(!download)throw Error('The update progress is unavailable.');
     await this.pointAt(download,signal);await this.until(()=>!!this.findButton('Restart to update'),signal);await this.wait(1000,signal);
   }
   private async loop(signal:AbortSignal){
@@ -168,6 +168,14 @@ export class Tour{
       await this.step('Compare','See exactly what you’ve added.',signal);await this.click('Preferences',signal,true);
       const lastChange=document.querySelector<HTMLElement>('.feature-column:nth-child(2) .feature-row:last-child');if(!lastChange)throw Error('The personal feature list is unavailable.');
       await this.pointAt(lastChange,signal);await this.wait(2600,signal);
+      await this.step('Official','New from Draft. Your features stay.',signal);this.store.offerOfficial();
+      await this.until(()=>!!document.querySelector('.official-update-card'),signal);await this.wait(1400,signal);
+      await this.click('Download update',signal);await this.updateReady(signal,'.official-update-card');
+      const kept=document.querySelector<HTMLElement>('.update-kept');if(!kept?.textContent?.includes('Reading time')||!kept.textContent.includes('Focus mode'))throw Error('The official update did not keep the personal features.');
+      await this.step('Official','The latest Draft. Still yours.',signal);await this.pointAt(kept,signal);await this.wait(1500,signal);
+      await this.click('Restart to update',signal,true);await this.wait(1000,signal);
+      if(!this.store.hasReadingTime||!this.store.hasFocus||JSON.stringify(this.store.library)!==writing)throw Error('The official update changed personal features or writing.');
+      await this.click('Preferences',signal,true);
       await this.step('Reset','Back to the original. Anytime.',signal);await this.click('Return to official Draft',signal);await this.updateReady(signal);
       await this.step('Reset','Apply it just like any update.',signal);await this.click('Restart to update',signal,true);await this.wait(1000,signal);
       if(this.store.hasReadingTime||this.store.hasFocus||this.findButton('Focus')||document.querySelector('.demo-reading-time'))throw Error('The original app was not restored.');
@@ -177,7 +185,7 @@ export class Tour{
       await this.step('Restored','Your writing stays with you.',signal);await this.click('Writing',signal,true);await this.click('Open overflow',signal);
       const notes=document.querySelector<HTMLElement>('.overflow-editor');if(!notes)throw Error('The saved notes are unavailable.');await this.pointAt(notes,signal);await this.wait(1800,signal);
       if(JSON.stringify(this.store.library)!==writing)throw Error('An app update changed the writing.');
-      this.mark();this.pointer('hide');await this.step('Home','Your writing. Your app.',signal);await this.wait(5000,signal);
+      this.mark();this.pointer('hide');await this.step('Home','Your writing, your app',signal);await this.wait(5000,signal);
     }
   }
 }

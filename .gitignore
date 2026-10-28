@@ -10,3 +10,5 @@ src-tauri/target/
 *-private-key.pem
 src-tauri/gen/
 .draft-upstream/
+playwright-report/
+test-results/

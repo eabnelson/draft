@@ -40,6 +40,21 @@ test('sign-in retries the queued feature, passes real builds and installs withou
  }finally{await f.close();}
 });
 
+test('sign-in waits for the failed preparation to finish saving before retrying',async()=>{
+ const f=await officialFixture({agent:async()=>{throw new AgentSignInError('claude');},login:async()=>[connected]});
+ const saving=deferred<void>(),entered=deferred<void>();let signIns=0;
+ try{
+  const save=(f.host as any).save.bind(f.host);
+  (f.host as any).save=async()=>{if(f.host.state.updates.at(-1)?.state==='failed'){entered.resolve();await saving.promise;}await save();};
+  f.host.agents.login=async()=>{signIns++;return [connected];};
+  await f.host.queue({action:'add',request:'Find words with Command-F'});
+  const failed=await f.host.request('batch','');await entered.promise;
+  const recovery=f.host.reconnect(failed.id);let rejected=false;void recovery.catch(()=>{rejected=true;});
+  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(rejected,false,'A visible sign-in failure must wait for its save instead of rejecting recovery.');assert.equal(signIns,0);
+  saving.resolve();const result=await recovery;assert.ok(result.update);await settled(f.host,result.update.id);assert.equal(signIns,1);
+ }finally{saving.resolve();await f.close();}
+});
+
 test('duplicate sign-in clicks share one login and start at most one retry',async()=>{
  const login=deferred<Provider[]>(),f=await fixture(()=>login.promise);try{
   const first=f.host.reconnect(f.failed.id),second=f.host.reconnect(f.failed.id);login.resolve([connected]);

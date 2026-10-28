@@ -108,6 +108,9 @@ export class Updates {
   reconnect(id:string):Promise<ReconnectResult>{
     if(this.reconnecting)return this.reconnecting.id===id?this.reconnecting.promise:Promise.reject(Error('Finish the current sign-in before starting another.'));
     const attempt=async():Promise<ReconnectResult>=>{
+      // A failure is visible while its final atomic save is still in flight.
+      // Let that preparation release its controller before starting recovery.
+      if(this.runningId===id&&this.state.updates.find(update=>update.id===id)?.state==='failed')await this.preparation;
       const failed=this.state.updates.find(update=>update.id===id),selection=this.state.selection?{...this.state.selection}:undefined;
       if(!failed||failed.state!=='failed'||!failed.reconnectProvider||failed.reconnectedAt||!['add','remove','batch'].includes(failed.kind)||failed.baseVersion!==this.active.id||this.state.updates.at(-1)?.id!==id)throw Error('Your app or update has changed. Choose Download update to continue with your current list.');
       if(this.controller||this.state.updates.some(update=>['ready','applying','needs-attention'].includes(update.state)))throw Error('Finish the current update before signing in again.');

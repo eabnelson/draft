@@ -30,6 +30,8 @@ If Claude needs you to sign in again, the update card explains what happened and
 
 Removing a feature and returning to official Draft use the same prepare → update flow. Draft checks for official updates on opening, periodically while running, and when you return to the app. An update appears in the header and Preferences. **Draft → Check for Updates…** is always available, including with an older personal interface.
 
+Every successful change on `main` prepares a versioned Mac release automatically. Signing, Apple notarization, the website walkthrough, and a fresh-Mac installation must pass before users can download it. Users choose when to install. The [website demo](docs/demo-maintenance.md) shares the app's interface and must be reviewed whenever app features change.
+
 **Download update** brings in the matching signed app and source. Independent changes combine automatically. If changes overlap, choose **Keep mine**, **Use Draft’s**, or **Combine both** for each high-level feature. Draft uses your connected model when integration needs work, then checks the result before offering **Restart to update**. Personal features and features you turned off remain recorded; only changes you explicitly replace are dropped. Missing model access, interrupted downloads, or unresolved checks keep the current app running.
 
 The native app and personal source update together after saving. A failed startup restores the previous app. **Undo last update** in Preferences returns to the previous working app while keeping your current documents and queued ideas. These controls are owned by the desktop host so personal interface changes cannot hide the recovery route. Versions before 0.2.0-alpha.18 need a one-time desktop download to gain this updater.

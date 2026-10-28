@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sourceHash": "1d657a7d8786863c5c2f29b78da2e5e5e721ab6156f901f7434c4816f053cbd3",
+  "features": {
+    "writing": {
+      "scenes": [
+        "Write"
+      ],
+      "review": "The production Markdown editor types and saves writing; formatting and spelling stay available without extending the short tour."
+    },
+    "alternatives": {
+      "scenes": [
+        "Refine"
+      ],
+      "review": "The real alternatives sidebar, squiggle, option dots and keyboard switching are exercised."
+    },
+    "ghosts": {
+      "scenes": [
+        "Write"
+      ],
+      "review": "Set aside and revive remain in the production editing tools; omitted from the short tour to keep customization the focus."
+    },
+    "overflow": {
+      "scenes": [
+        "Write",
+        "Restored"
+      ],
+      "review": "The real overflow editor keeps spare writing through personal, official and reset updates."
+    },
+    "documents": {
+      "scenes": [
+        "Write",
+        "Restored"
+      ],
+      "review": "The demo saves through the production editor using isolated memory; personal Mac files and native export are outside the browser tour."
+    },
+    "assistance": {
+      "scenes": [
+        "Refine"
+      ],
+      "review": "The production alternatives UI is shared; live model generation and sign-in are not run on the public website."
+    },
+    "personal-updates": {
+      "scenes": [
+        "Customize",
+        "Build",
+        "Update",
+        "Official",
+        "Reset"
+      ],
+      "review": "The real Preferences, queued features and official-update card show building personal features, retaining them through an official update, and returning to official Draft without changing writing. External agent execution, packaging and restarts are simulated."
+    }
+  }
+}

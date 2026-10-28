@@ -1,5 +1,9 @@
 name: Release Mac app
 on:
+  workflow_run:
+    workflows: [Check]
+    branches: [main]
+    types: [completed]
   push:
     tags: ['v*']
   workflow_dispatch:
@@ -17,21 +21,57 @@ permissions:
 concurrency:
   group: draft-mac-release
   cancel-in-progress: false
-env:
-  DRAFT_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 jobs:
+  prepare:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+      skipped: ${{ steps.version.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - name: Prepare an immutable version from checked main
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRAFT_MAIN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_EVENT: ${{ github.event_name }}
+          REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if [ "$RELEASE_EVENT" = workflow_run ]; then
+            bun scripts/main-release.ts
+          else
+            printf 'skipped=false\ntag=%s\nsha=%s\n' "$REQUESTED_TAG" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
   release:
-    if: ${{ !inputs.verify_existing }}
+    needs: prepare
+    if: ${{ needs.prepare.outputs.skipped == 'false' && !inputs.verify_existing }}
     runs-on: macos-15
     timeout-minutes: 90
     permissions:
       contents: write
     env:
+      DRAFT_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -40,11 +80,11 @@ jobs:
       - name: Verify release version and signing configuration
         run: |
           test "$(uname -m)" = arm64
-          test "$GITHUB_REF_NAME" = "v$(bun -p 'require("./package.json").version')"
-          test "$DRAFT_RELEASE_TAG" = "$GITHUB_REF_NAME"
+          test "$DRAFT_RELEASE_TAG" = "v$(bun -p 'require("./package.json").version')"
           test -n "$APPLE_TEAM_ID"
           test -n "$APPLE_SIGNING_IDENTITY"
       - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run demo:check
       - run: shasum -a 256 -c SHA256SUMS
       - name: Import distribution certificate into a temporary keychain
         env:
@@ -94,11 +134,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bun -e 'for (const note of await Bun.file("release-notes.json").json()) console.log("- " + note)' > "$RUNNER_TEMP/draft-release-notes.md"
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
-            gh release upload "$GITHUB_REF_NAME" release/Draft-* release/draft-update.json release/SHA256SUMS release/distribution-report.json --clobber
+          if gh release view "$DRAFT_RELEASE_TAG" > /dev/null 2>&1; then
+            test "$(gh release view "$DRAFT_RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+            gh release upload "$DRAFT_RELEASE_TAG" release/Draft-* release/draft-update.json release/SHA256SUMS release/distribution-report.json --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release/Draft-* release/draft-update.json release/SHA256SUMS release/distribution-report.json --title "Draft $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/draft-release-notes.md" --draft --prerelease
+            gh release create "$DRAFT_RELEASE_TAG" release/Draft-* release/draft-update.json release/SHA256SUMS release/distribution-report.json --target "${{ needs.prepare.outputs.sha }}" --title "Draft $DRAFT_RELEASE_TAG" --notes-file "$RUNNER_TEMP/draft-release-notes.md" --draft --prerelease
           fi
       - name: Remove signing material
         if: always()
@@ -107,7 +147,7 @@ jobs:
           rm -f "$RUNNER_TEMP/draft-signing.p12" "$RUNNER_TEMP/draft-notary.p8" "$RUNNER_TEMP/draft-update-key.pem"
 
   clean-mac:
-    needs: release
+    needs: [prepare, release]
     if: ${{ always() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.verify_existing)) }}
     runs-on: macos-15
     timeout-minutes: 15
@@ -116,14 +156,19 @@ jobs:
       # The token is supplied solely to the download step, never the app or its tests.
       contents: write
     env:
+      DRAFT_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.3
+      - name: Use the candidate version when retrying only its verification
+        if: ${{ inputs.verify_existing }}
+        run: bun scripts/release-version.ts "$DRAFT_RELEASE_TAG"
       - run: bun install --frozen-lockfile --ignore-scripts
       - name: Verify candidate matches this source version
         run: test "$DRAFT_RELEASE_TAG" = "v$(bun -p 'require("./package.json").version')"
@@ -139,7 +184,7 @@ jobs:
         run: bun scripts/verify-download.ts "$RUNNER_TEMP/draft-downloads"
 
   publish:
-    needs: clean-mac
+    needs: [prepare, clean-mac]
     if: ${{ always() && needs.clean-mac.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
@@ -148,8 +193,9 @@ jobs:
     steps:
       - name: Publish the tested release and refresh the website download
         env:
+          DRAFT_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release edit "$DRAFT_RELEASE_TAG" --draft=false
-          gh workflow run pages.yml --ref main
+          gh workflow run pages.yml --ref main -f source_ref="$DRAFT_RELEASE_TAG"

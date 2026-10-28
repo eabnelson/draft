@@ -1,6 +1,18 @@
 # Releasing Draft
 
-The macOS application and editable application source ship together. Version values in package.json, features.json, Cargo.toml, tauri.conf.json, and the host version constant must agree.
+The macOS application and editable application source ship together. Version values in package.json, features.json, Cargo.toml, Cargo.lock, tauri.conf.json, and the host version constant must agree.
+
+## Automatic releases from main
+
+Every push to `main` runs **Check**, including the full homepage walkthrough on desktop, mobile and compact landscape. A successful push starts **Release Mac app** for that exact checked commit. Failed checks, pull requests, forks, and superseded main heads cannot start a release. Rapid pushes can be combined into the newest checked main head; all included changes ship together.
+
+The preparation script reserves the next `alpha.N` version above every existing version tag, including unpublished candidates. It creates a release commit with the checked main commit as its only parent and stamps all six version locations together. Only the release tag points to that commit: main is never rewritten or given a recursive bot version commit. Retrying preparation reuses the same release commit; an already public release is skipped. The current run builds the generated tag directly, because tags created with `GITHUB_TOKEN` do not trigger another workflow.
+
+The signing, notarization, authenticated manifest, and separate clean-Mac installation gates below remain mandatory. A failed candidate stays private. Only after all gates pass is the update published and the website rebuilt from that release tag. Installed alpha users discover it on launch, when returning to the app, or during the six-hour background check. Updates remain optional; personal changes use the existing merge and conflict choices, and writing stays outside app versions.
+
+`main` currently follows the alpha channel. Stable releases remain explicit version tags. Before beginning a new release series after a stable version, advance main's package baseline to that series with `bun scripts/release-version.ts 0.3.0-alpha.1` (substitute the intended version). Automatic preparation refuses to issue a version below a later stable tag.
+
+Keep `release-notes.json` consumer-friendly and current. Run `bun run demo:check` before pushing; see [demo maintenance](demo-maintenance.md). Main's package version is a baseline, while each generated release tag contains the exact shipped version.
 
 ## Build and verify
 
@@ -27,7 +39,7 @@ Required repository variables: `APPLE_TEAM_ID`, `APPLE_SIGNING_IDENTITY` (the ce
 
 A tagged release is first uploaded as a private draft. A separate fresh macOS runner, without the distribution keychain or Apple credentials, downloads the exact assets, verifies their Ed25519 signature and hashes, checks the stapled Apple tickets and Gatekeeper approval, copies the app from the disk image into Applications, adds browser-style quarantine metadata, and launches it with a new local profile. It also runs the document and official-update integration checks with the app’s bundled Bun and build tools, including real personal builds and conflict choices with system Node unavailable on PATH. It verifies the first document library and expected app version, then closes only its own test process. Only a successful check publishes the release and dispatches the website rebuild.
 
-If only the verification harness needs repair after a candidate has already been signed and notarized, keep the candidate private and retry with `gh workflow run release.yml --ref main -f verify_existing=true -f tag=v0.2.0-alpha.20` (replace the tag with the current package version). This downloads the existing artifacts onto a new Mac without importing signing credentials. All verification gates still run before publication. Changes to shipped application code require a new version and a full release build. The temporary installation path is canonicalized because Tauri intentionally refuses to launch a Mac executable through symlinked parents.
+If only the verification harness needs repair after a candidate has already been signed and notarized, keep the candidate private and retry with `gh workflow run release.yml --ref main -f verify_existing=true -f tag=v0.2.0-alpha.21` (substitute the existing candidate tag). The current verification harness is locally stamped with that candidate's version; no new package is built. This downloads the existing artifacts onto a new Mac without importing signing credentials. All verification gates still run before publication. Changes to shipped application code require a new version and a full release build. The temporary installation path is canonicalized because Tauri intentionally refuses to launch a Mac executable through symlinked parents.
 
 The website resolves the newest published Apple Silicon installer when it builds, ignoring private drafts and unexpected download addresses. If the release API is unavailable, it keeps a known download rather than constructing a link for a version that may not exist. The known fallback is the verified alpha.20 installer. Advance it after publishing later verified releases.
 
@@ -41,7 +53,7 @@ After `bun run release:notarize` succeeds, `bun run release:prepare` packages th
 
 The manifest is a JSON envelope with `payload` (the exact serialized version-2 manifest) and its base64 Ed25519 `signature`. The signed payload binds the version, native-host version, bundle identity, architecture, release notes, source, desktop and installer URLs, sizes, and SHA-256 digests. Both downloads are verified before use. The separate native installer verifies the envelope and desktop archive again immediately before swapping apps. This update authentication is independent of Apple distribution signing.
 
-Configure the repository secret `DRAFT_UPDATE_SIGNING_KEY` with that PEM key. Push a matching version tag (`v…`) after the main checks and the isolated installed-app test pass. The release workflow builds on Apple Silicon, notarizes, signs the manifest, and verifies a private draft on another Mac runner before publishing the prerelease. It reads the key only in the final signing step and deletes its temporary file. Never use an older manifest or source archive with a newer desktop build. For a stable release, remove the workflow’s prerelease flag after meeting the distribution requirements above.
+Configure the repository secret `DRAFT_UPDATE_SIGNING_KEY` with that PEM key. Main releases reserve their matching version tag automatically after checks pass; a matching explicit `v…` tag is also supported. The release workflow builds on Apple Silicon, notarizes, signs the manifest, and verifies a private draft on another Mac runner before publishing the prerelease. It reads the key only in the final signing step and deletes its temporary file. Never use an older manifest or source archive with a newer desktop build. For a stable release, remove the workflow’s prerelease flag after meeting the distribution requirements above.
 
 The updater merges original official source, current personal source, and incoming official source. It preserves independent edits, prompts for overlapping features and dependency changes, and validates retained feature identities, enabled/removed states, personal checks, controller integrity, tests, and builds. Personal native/controller edits require a separately built package and cannot be silently replaced through the ordinary feature flow.
 

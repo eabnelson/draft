@@ -5,6 +5,31 @@ on:
 permissions:
   contents: read
 jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run demo:check
+      - run: bun run website:build
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: bun run node_modules/@playwright/test/cli.js install --with-deps chromium
+      - run: bun run test:demo
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: demo-check-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
   check:
     runs-on: macos-15
     steps:
