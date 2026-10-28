@@ -185,7 +185,7 @@ export class Tour{
       await this.step('Restored','Your writing stays with you.',signal);await this.click('Writing',signal,true);await this.click('Open overflow',signal);
       const notes=document.querySelector<HTMLElement>('.overflow-editor');if(!notes)throw Error('The saved notes are unavailable.');await this.pointAt(notes,signal);await this.wait(1800,signal);
       if(JSON.stringify(this.store.library)!==writing)throw Error('An app update changed the writing.');
-      this.mark();this.pointer('hide');await this.step('Home','Your writing, your app',signal);await this.wait(5000,signal);
+      this.mark();this.pointer('hide');await this.step('Home','Your writing. Your app.',signal);await this.wait(5000,signal);
     }
   }
 }
