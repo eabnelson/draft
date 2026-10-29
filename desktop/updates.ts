@@ -12,7 +12,7 @@ import {prepareOfficialMerge,verifyPreservedFeatures,sourceFiles,type ConflictCh
 import {NativeUpdates,rememberPreviousApp} from './native-update';
 import type {HostState,Version,Update,UpdateKind,FeaturesState,AgentSelection,Provider,Catalog,Handoff,HandoffPrompt,QueuedFeature} from './types';
 
-const nativeHostVersion='0.2.0-alpha.20';
+const nativeHostVersion='0.2.0-alpha.23';
 const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['implemented','already_exists','failed']},title:{type:'string',maxLength:80},summary:{type:'string',maxLength:360},featureId:{type:'string'}},required:['outcome','title','summary','featureId'],additionalProperties:false};
 export type AgentConnection=Pick<Agents,'discover'|'login'|'select'|'run'>;
 export type ReconnectResult={update?:Update;message:string};
