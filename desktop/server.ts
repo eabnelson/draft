@@ -3,6 +3,7 @@ import {homedir} from 'node:os';
 import {readFile,mkdir} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {DocumentStore} from './documents';
+import {ImageStore,MAX_IMAGE_BYTES} from './images';
 import {Updates} from './updates';
 import {writingSchema} from './writing';
 import {NativeSpelling,spellingExecutable} from './spelling';
@@ -20,6 +21,7 @@ const dependencies=join(runtime,'node_modules');
 const session=process.env.DRAFT_SESSION_TOKEN;
 if(!dev&&!session)throw Error('Start Draft through the desktop app.');
 const documents=new DocumentStore(join(root,'Documents'));
+const images=new ImageStore(join(root,'Documents','images'));
 const spelling=new NativeSpelling(spellingExecutable(runtime));
 const testHost=process.env.DRAFT_BUNDLE_ID?.endsWith('.update-check')===true;
 const updates=new Updates(root,template,dependencies,process.execPath,{appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID,hostVersion:process.env.DRAFT_HOST_VERSION,...(testHost?{feed:process.env.DRAFT_UPDATE_FEED,allowLocal:true}:{} )});
@@ -38,6 +40,14 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
     if(!authorized(request))return new Response('Open Draft through its desktop app.',{status:401});
     const requestOrigin=request.headers.get('origin');
     if(requestOrigin&&requestOrigin!==origin)return new Response('Forbidden',{status:403});
+    if(url.pathname.startsWith('/api/images/')&&request.method==='GET')return images.response(url.pathname);
+    // Image types are not CORS-safelisted, so cross-site pages cannot send this without a preflight.
+    if(url.pathname==='/api/images'&&request.method==='POST'){
+      if(!/^image\/(png|jpeg|webp|gif)$/.test(request.headers.get('content-type')??''))return json({error:'Paste a PNG, JPEG, WebP or GIF image.'},415);
+      if(Number(request.headers.get('content-length')??0)>MAX_IMAGE_BYTES)return json({error:'Images must be smaller than 25 MB.'},413);
+      try{return json(await images.save(new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')!));}
+      catch(error){return json({error:error instanceof Error?error.message:'This image could not be added.'},400);}
+    }
     if(url.pathname.startsWith('/api/')){
       if(request.method==='POST'&&request.headers.get('content-type')!=='application/json')return json({error:'Expected a JSON request.'},415);
       try{
@@ -52,6 +62,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         }
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
         if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
+        if(url.pathname==='/api/images/copy'&&request.method==='POST'){await images.copy(String(input.src??''));return json({copied:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
         if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested,...(restartRequested?{nativeInstallPlan:updates.state.nativeInstallPlan}:{})});
         if(url.pathname==='/api/links/open'&&request.method==='POST'){await openExternalLink(input.url);return json({opened:true});}

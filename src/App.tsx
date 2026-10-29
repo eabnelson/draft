@@ -9,8 +9,10 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Features } from './Features';
 import { ModelSettings } from './ModelSettings';
-import { api } from './client';
-import { type Draft, type Span, type Cut, fresh, changed, words, cleanText, applyChanges, addVariant, addCandidate, choose, ghost, stash, replace, parseDraft, overlaps, validateQuotes, variantContext, variantScope, makeCuts, applyReviewFix } from './model';
+import { api, uploadImage, copyImage } from './client';
+import { ImagePanel } from './ImageEditor';
+import { imageMarkdown, imageInsertion, imageAt, findImage, type ImageCrop } from './images';
+import { type Draft, type Span, type Cut, fresh, changed, words, cleanText, applyChanges, addVariant, addCandidate, choose, ghost, stash, replace, parseDraft, overlaps, validateQuotes, variantContext, variantScope, makeCuts, applyReviewFix, boundaryError } from './model';
 
 const NO_CUTS:Cut[]=[];
 type Library={active:string;drafts:Draft[];archived?:Draft[]};
@@ -40,6 +42,7 @@ export default function App(){
   const [aiBusy,setAiBusy]=useState(''),[aiError,setAiError]=useState('');
   const [review,setReview]=useState<Review|null>(null);
   const [strength,setStrength]=useState('');
+  const [imageFocus,setImageFocus]=useState<string|null>(null);
   const controller=useRef<AbortController|null>(null);
   const editor=useRef<EditorHandle>(null),file=useRef<HTMLInputElement>(null),candidateInput=useRef<HTMLTextAreaElement>(null);
   const undo=useRef<Draft[]>([]),redo=useRef<Draft[]>([]),lastEdit=useRef({group:'',time:0});
@@ -48,6 +51,7 @@ export default function App(){
   const sidebarOpen=panel&&draft.revisionMode;
   const selectedText=draft.text.slice(selection.from,selection.to);
   const visibleText=cleanText(draft), wordCount=words(plainText(visibleText));
+  const focusedImage=imageFocus?findImage(draft.text,imageFocus):undefined;
   const liveReview=review?.revision===draft.revision?review:null;
   const preview=liveReview?.cuts??NO_CUTS;
   const notice=(m:string)=>setMessage(m);
@@ -185,6 +189,28 @@ export default function App(){
     }catch(e){if(!abort.signal.aborted)setAiError(e instanceof Error?e.message:'The request failed. Your draft is untouched.');}
     finally{if(controller.current===abort){setAiBusy('');controller.current=null;}}
   }
+  // Pasted images go in exactly as copied; clicking one opens the crop panel.
+  async function pasteImage(image:File,at:Span){
+    try{
+      const d=draftRef.current;if(boundaryError(d,at))throw Error('Move the cursor outside the marked passage to add an image here.');
+      const {src}=await uploadImage(image),latest=draftRef.current,place={from:Math.min(at.from,latest.text.length),to:Math.min(at.to,latest.text.length)};
+      const edit=imageInsertion(latest.text,place,imageMarkdown(src));
+      commit(replace(latest,edit.from,edit.to,edit.insert));
+      requestAnimationFrame(()=>editor.current?.select({from:edit.cursor,to:edit.cursor}));notice('Image added. Click it to crop.');
+    }catch(e){notice(e instanceof Error?e.message:'This image could not be added.');}
+  }
+  function selectImage(pos:number){const image=imageAt(draftRef.current.text,pos);if(image)setImageFocus(image.markdown);}
+  function rewriteImage(markdown:string){
+    const d=draftRef.current,image=imageFocus?findImage(d.text,imageFocus):undefined;
+    if(!image)throw Error('This image changed. Click it again to crop.');
+    commit(replace(d,image.from,image.to,markdown));setImageFocus(markdown);
+  }
+  async function cropImage(image:Blob,crop:ImageCrop){
+    const current=imageFocus?findImage(draftRef.current.text,imageFocus):undefined;if(!current)throw Error('This image changed. Click it again to crop.');
+    const {src}=await uploadImage(image);rewriteImage(imageMarkdown(src,current.alt,crop));notice('Crop applied. Undo restores the previous image.');
+  }
+  function resetImage(){safely(()=>{const current=imageFocus?findImage(draftRef.current.text,imageFocus):undefined;if(!current?.crop)return;rewriteImage(imageMarkdown(current.crop.original,current.alt));notice('Back to the original image.');});}
+  function copyImageToClipboard(source:string|Promise<Blob>){void copyImage(source).then(()=>notice('Image copied.')).catch(e=>notice(e instanceof Error?e.message:'This image could not be copied.'));}
   function applyCuts(){
     if(!liveReview||liveReview.kind!=='trim')return;
     safely(()=>{commit(makeCuts(draft,liveReview.cuts));setReview(null);notice('Cuts made. Undo brings them back.');});
@@ -214,7 +240,7 @@ export default function App(){
     safely(()=>{const next=applyReviewFix(draftRef.current,liveReview.cuts,cut.id);commit(next.draft);setReview({...liveReview,revision:next.draft.revision,cuts:next.cuts});});
   }
 
-  return <><div className={`app ${panel&&draft.revisionMode?'with-panel':'without-panel'} ${overflowOpen&&draft.revisionMode?'with-overflow':''}`} inert={updating}>
+  return <><div className={`app ${panel&&draft.revisionMode?'with-panel':'without-panel'} ${focusedImage?'with-image':overflowOpen&&draft.revisionMode?'with-overflow':''}`} inert={updating}>
     <header className="topbar">
       <div className="sidebar-header">{sidebarOpen&&<a className="brand" href="#" onClick={e=>{e.preventDefault();setDocsOpen(!docsOpen);}} aria-label="Draft documents"><span className="brand-wordmark">Draft</span></a>}<Button variant="ghost" size="icon-sm" className="icon-button panel-toggle" aria-label={sidebarOpen?'Close side panel':'Open side panel'} aria-expanded={sidebarOpen} onClick={()=>{setFeaturesOpen(false);if(!sidebarOpen&&!draft.revisionMode)commit(changed(draft,{revisionMode:true}));setPanel(!sidebarOpen);}}><svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="3.5"/>{sidebarOpen?<path d="M9 3.5v17"/>:<path d="M6.5 7v10" strokeWidth="2.5"/>}</svg></Button></div>
       <div className="document-name"><Input className="draft-title" aria-label="Draft name" value={draft.title} placeholder="Untitled draft" onChange={e=>commit(changed(draft,{title:e.target.value}),'title')}/><Button variant="ghost" size="icon-sm" className="icon-button" onClick={()=>setDocsOpen(!docsOpen)} aria-label="Open drafts" aria-expanded={docsOpen}><ChevronDown size={14}/></Button><span className={`save-state ${saveError?'error':''}`}><span className="status-dot"/>{saveError?'Unsaved':saveState}</span></div>
@@ -229,13 +255,14 @@ export default function App(){
       <section className="writing-area">
         <div className="draft-toolbar"><div className="undo-tools"><Button variant="ghost" size="icon-sm" className="icon-button" title="Undo · ⌘Z" aria-label="Undo" disabled={!undo.current.length} onClick={()=>history('undo')}><Undo2 size={16}/></Button><Button variant="ghost" size="icon-sm" className="icon-button" title="Redo · ⌘⇧Z" aria-label="Redo" disabled={!redo.current.length} onClick={()=>history('redo')}><Redo2 size={16}/></Button></div>{draft.revisionMode&&<div className="selection-tools"><Button variant="ghost" onClick={()=>action('alternative')} title="Add alternative · ⌘⇧A"><ArrowLeftRight size={14}/>Alternative</Button><Button variant="ghost" onClick={()=>action('ghost')} title="Ghost / revive · ⌘⇧G"><GhostIcon size={14}/>Set aside</Button><Button variant="ghost" onClick={()=>action('overflow')} title="Move to overflow · ⌘⇧O"><ArrowDownToLine size={14}/>Overflow</Button></div>}<Button variant="ghost" className={`word-count ${draft.revisionMode?'enabled':''}`} onClick={()=>commit(changed(draft,{revisionMode:!draft.revisionMode}))} aria-pressed={draft.revisionMode} aria-label="Toggle editing tools" title="Toggle revision mode"><span>{wordCount} words</span><span className="word-count-mode">Revise</span><span className="toggle-track"><span/></span></Button></div>
         <div className={`paper ${draft.revisionMode?'revision-mode':'plain-mode'}`}>
-          <Editor ref={editor} draft={draft} active={panel?active:null} focusPassage={panel&&draft.revisionMode} panelsOpen={draft.revisionMode&&(panel||overflowOpen)} cuts={preview} reviewing={liveReview?.kind==='review'} source={source} onCut={toggleCut} onError={notice} onAction={action} onVariant={id=>{setActive(id);const v=draft.variants.find(v=>v.id===id);if(v)setScope(variantScope(v));setPanel(true);}} onCycle={(id,direction)=>cycle(direction,id)} onChange={(changes,formatting)=>safely(()=>commit(applyChanges(draftRef.current,changes),formatting?'action':'typing'))} onSelection={(r,user)=>{selectionRef.current=r;setSelection(r);const v=draftRef.current.variants.find(v=>r.from>=v.from&&r.to<=v.to);if(user&&!v)setActive(null);}}/>
+          <Editor ref={editor} draft={draft} active={panel?active:null} focusPassage={panel&&draft.revisionMode} panelsOpen={draft.revisionMode&&(panel||overflowOpen)} cuts={preview} reviewing={liveReview?.kind==='review'} source={source} onCut={toggleCut} onError={notice} onAction={action} onImagePaste={(image,at)=>void pasteImage(image,at)} onImageCopy={copyImageToClipboard} onImageSelect={selectImage} selectedImage={focusedImage} onVariant={id=>{setActive(id);const v=draft.variants.find(v=>v.id===id);if(v)setScope(variantScope(v));setPanel(true);}} onCycle={(id,direction)=>cycle(direction,id)} onChange={(changes,formatting)=>safely(()=>commit(applyChanges(draftRef.current,changes),formatting?'action':'typing'))} onSelection={(r,user)=>{selectionRef.current=r;setSelection(r);const v=draftRef.current.variants.find(v=>r.from>=v.from&&r.to<=v.to);if(user&&!v)setActive(null);}}/>
         </div>
       </section>
       {panel&&draft.revisionMode&&<AlternativesPanel draft={draft} variant={variant} source={source} scope={scope} onScope={changeScope} commit={commit} onChoose={id=>variant&&selectWording(variant.id,id)} onCycle={cycle} onClose={()=>setPanel(false)} onSettings={()=>setSettings(true)} candidate={candidate} onCandidate={value=>{if(value.trim()==='??'&&!aiBusy){setCandidate('');void askAI('alternatives');}else setCandidate(value);}} onAdd={addWording} onSuggest={()=>void askAI('alternatives')} busy={!!aiBusy} inputRef={candidateInput}/>}
-      {overflowOpen&&draft.revisionMode&&<OverflowPanel draft={draft} source={source} commit={commit} onClose={()=>setOverflowOpen(false)} onStash={()=>action('overflow')} onCopy={copyOverflow} onInsert={insertOverflow}/>}
+      {focusedImage&&<ImagePanel image={focusedImage} onApply={cropImage} onReset={resetImage} onCopy={copyImageToClipboard} onClose={()=>{setImageFocus(null);editor.current?.focus();}}/>}
+      {!focusedImage&&overflowOpen&&draft.revisionMode&&<OverflowPanel draft={draft} source={source} commit={commit} onClose={()=>setOverflowOpen(false)} onStash={()=>action('overflow')} onCopy={copyOverflow} onInsert={insertOverflow}/>}
     </main>
-    {!featuresOpen&&draft.revisionMode&&<footer className="writing-controls"><Button variant="ghost" aria-label={panel?'Hide alternatives':'Open alternatives'} onClick={()=>setPanel(!panel)} aria-pressed={panel}><ArrowLeftRight size={15}/><span>Alternatives</span></Button><Button variant="ghost" className="lab-toggle" aria-expanded={labOpen} onClick={()=>setLabOpen(!labOpen)}>Lab</Button><div><Button variant="ghost" aria-label="Show Markdown source" aria-pressed={source} onClick={()=>setSource(!source)}><span className="markdown-toggle">M↓</span></Button><Button variant="ghost" aria-label={overflowOpen?'Hide overflow':'Open overflow'} aria-pressed={overflowOpen} onClick={()=>setOverflowOpen(!overflowOpen)}><ArrowDownToLine size={15}/><span>Overflow</span></Button></div></footer>}
+    {!featuresOpen&&draft.revisionMode&&<footer className="writing-controls"><Button variant="ghost" aria-label={panel?'Hide alternatives':'Open alternatives'} onClick={()=>setPanel(!panel)} aria-pressed={panel}><ArrowLeftRight size={15}/><span>Alternatives</span></Button><Button variant="ghost" className="lab-toggle" aria-expanded={labOpen} onClick={()=>setLabOpen(!labOpen)}>Lab</Button><div><Button variant="ghost" aria-label="Show Markdown source" aria-pressed={source} onClick={()=>setSource(!source)}><span className="markdown-toggle">M↓</span></Button><Button variant="ghost" aria-label={overflowOpen&&!focusedImage?'Hide overflow':'Open overflow'} aria-pressed={overflowOpen&&!focusedImage} onClick={()=>{if(focusedImage){setImageFocus(null);setOverflowOpen(true);}else setOverflowOpen(!overflowOpen);}}><ArrowDownToLine size={15}/><span>Overflow</span></Button></div></footer>}
     {!featuresOpen&&labOpen&&draft.revisionMode&&<Lab busy={!!aiBusy||!wordCount} onReview={tool=>{setLabOpen(false);void askAI('review',undefined,strength,tool);}} onTrim={value=>{setStrength(value);setLabOpen(false);void askAI('trim',undefined,value);}} onOriginal={()=>{setReview(null);setStrength('');setLabOpen(false);}} strength={strength} onClose={()=>setLabOpen(false)} onSettings={()=>setSettings(true)}/>}
     {!featuresOpen&&liveReview&&<ReviewBar draft={draft} review={liveReview} onCuts={applyCuts} onDismiss={()=>setReview(null)} onToggle={toggleCut} onWalk={walkCuts} onSelect={cut=>editor.current?.select(cut)} onFix={fix}/>}
     {!featuresOpen&&aiBusy&&<div className="writing-progress" role="status"><LoaderCircle className="spin" size={14}/><span>Thinking…</span><Button variant="ghost" onClick={()=>{controller.current?.abort();controller.current=null;setAiBusy('');}}>Cancel</Button></div>}

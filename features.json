@@ -83,6 +83,29 @@
       ]
     },
     {
+      "id": "images",
+      "title": "Images for social",
+      "description": "Paste images into your writing as they are, then click one to crop it for Instagram, TikTok, or YouTube and copy it back.",
+      "updatedAt": "2026-10-29T17:30:00Z",
+      "origin": "official",
+      "state": "active",
+      "dependsOn": [
+        "writing"
+      ],
+      "code": [
+        "src/images.ts",
+        "src/ImageEditor.tsx",
+        "src/Editor.tsx",
+        "src/editor-markdown.ts",
+        "src/App.tsx",
+        "src/client.ts",
+        "src/markdown.ts",
+        "src/writing.css",
+        "desktop/images.ts",
+        "desktop/server.ts"
+      ]
+    },
+    {
       "id": "documents",
       "title": "Local documents",
       "description": "Save, reopen, and export writing as files on your Mac.",

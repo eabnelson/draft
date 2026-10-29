@@ -7,6 +7,8 @@ import {formatMarkdown,type TextFormat,type WordingScope} from './markdown';
 import {markdownEditing,showMarkdown} from './editor-markdown';
 import {TextMenu} from './TextMenu';
 import {nativeSpelling,spellingAt,correctSpelling,type SpellingWord} from './editor-spelling';
+import {pastedImage} from './images';
+import {ImageMenu} from './ImageEditor';
 
 type Annotations={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;focusPassage?:boolean};
 const annotate=StateEffect.define<Annotations>();
@@ -83,7 +85,7 @@ const writingScrollRoom=ViewPlugin.define(view=>{
   const observer=new ResizeObserver(measure);observer.observe(area);measure();
   return {destroy(){observer.disconnect();area.style.removeProperty('--writing-room');}};
 });
-type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;panelsOpen?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void};
+type Props={draft:Draft;active:string|null;cuts:Cut[];reviewing?:boolean;source?:boolean;focusPassage?:boolean;panelsOpen?:boolean;onChange:(changes:ChangeSet,formatting:boolean)=>void;onSelection:(range:Span,user?:boolean)=>void;onVariant:(id:string)=>void;onCycle:(id:string,direction:number)=>void;onCut?:(id:string)=>void;onError:(message:string)=>void;onAction:(action:string)=>void;selectedImage?:Span|null;onImagePaste?:(image:File,at:Span)=>void;onImageCopy?:(src:string)=>void;onImageSelect?:(pos:number)=>void};
 
 function replacement(before:string,after:string){let from=0,oldTo=before.length,newTo=after.length;while(from<oldTo&&from<newTo&&before[from]===after[from])from++;while(oldTo>from&&newTo>from&&before[oldTo-1]===after[newTo-1]){oldTo--;newTo--;}return {from,to:oldTo,insert:after.slice(from,newTo)};}
 function selectContext(view:EditorView,event:MouseEvent):Span {
@@ -96,7 +98,7 @@ function applyFormat(view:EditorView,format:TextFormat,href?:string){const edit=
 
 export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
   const host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null),current=useRef(props),syncing=useRef(false),hovered=useRef<string|null>(null);
-  const [menu,setMenu]=useState<{x:number;y:number;range:Span;spelling?:SpellingWord}|null>(null);current.current=props;
+  const [menu,setMenu]=useState<{x:number;y:number;range:Span;spelling?:SpellingWord}|null>(null),[imageMenu,setImageMenu]=useState<{x:number;y:number;src:string}|null>(null);current.current=props;
   useImperativeHandle(ref,()=>({focus:()=>view.current?.focus(),select:r=>{view.current?.dispatch({selection:{anchor:r.from,head:r.to},scrollIntoView:true});view.current?.focus();}}));
   useEffect(()=>{
     const v=new EditorView({parent:host.current!,state:EditorState.create({doc:current.current.draft.text,extensions:[
@@ -115,12 +117,13 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
       }),
       EditorView.updateListener.of(update=>{if(syncing.current)return;if(update.docChanged)current.current.onChange(update.changes,update.transactions.some(tr=>tr.isUserEvent('input.format')||tr.isUserEvent('input.spelling')));if(update.selectionSet||update.docChanged){const {from,to}=update.state.selection.main;current.current.onSelection({from,to},true);}}),
       EditorView.domEventHandlers({
-        mousedown:event=>{const cut=(event.target as HTMLElement).closest<HTMLElement>('[data-cut]');if(event.button===0&&cut&&current.current.onCut&&!current.current.reviewing){event.preventDefault();current.current.onCut(cut.dataset.cut!);return true;}return false;},
+        mousedown:(event,editor)=>{const image=(event.target as HTMLElement).closest<HTMLElement>('[data-image-src]');if(event.button===0&&image&&current.current.onImageSelect){current.current.onImageSelect(editor.posAtDOM(image));return false;}const cut=(event.target as HTMLElement).closest<HTMLElement>('[data-cut]');if(event.button===0&&cut&&current.current.onCut&&!current.current.reviewing){event.preventDefault();current.current.onCut(cut.dataset.cut!);return true;}return false;},
         mousemove:event=>{hovered.current=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]')?.dataset.variant??null;return false;},
         mouseleave:()=>{hovered.current=null;return false;},
         keydown:event=>{if(!event.key.startsWith('Arrow'))hovered.current=null;return false;},
         click:event=>{const el=(event.target as HTMLElement).closest<HTMLElement>('[data-variant]');if(el)current.current.onVariant(el.dataset.variant!);return false;},
-        contextmenu:(event,editor)=>{event.preventDefault();const spelling=spellingAt(editor,event),range=selectContext(editor,event);current.current.onSelection(range);setMenu({x:event.clientX,y:event.clientY,range,spelling});return true;},
+        paste:(event,editor)=>{const image=pastedImage(event.clipboardData);if(!image||!current.current.onImagePaste)return false;event.preventDefault();const {from,to}=editor.state.selection.main;current.current.onImagePaste(image,{from,to});return true;},
+        contextmenu:(event,editor)=>{event.preventDefault();const image=(event.target as HTMLElement).closest<HTMLElement>('[data-image-src]');if(image&&current.current.onImageCopy){setMenu(null);setImageMenu({x:event.clientX,y:event.clientY,src:image.dataset.imageSrc!});return true;}const spelling=spellingAt(editor,event),range=selectContext(editor,event);current.current.onSelection(range);setMenu({x:event.clientX,y:event.clientY,range,spelling});return true;},
       }),
     ]})});view.current=v;
     const arrows=(event:KeyboardEvent)=>{
@@ -142,7 +145,12 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
     const center=()=>{if(!area.clientHeight)return;const selected=current.current.draft.variants.find(variant=>variant.id===current.current.active)??v.state.selection.main;v.dispatch({effects:EditorView.scrollIntoView(EditorSelection.range(selected.from,selected.to),{y:'center',x:'nearest'})});};
     const observer=new ResizeObserver(center);observer.observe(area);center();return()=>observer.disconnect();
   },[props.active,props.panelsOpen,props.draft.variants.find(variant=>variant.id===props.active)?.active]);
-  return <><div className="editor-host" ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} spelling={menu.spelling} onSpellingFix={text=>menu.spelling&&correctSpelling(view.current!,menu.spelling,text)} writingActions revive={props.draft.ghosts.some(g=>overlaps(g,menu.range))} onAction={props.onAction} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}</>;
+  useEffect(()=>{
+    const v=view.current;if(!v)return;
+    const mark=()=>{for(const frame of v.contentDOM.querySelectorAll<HTMLElement>('[data-image-src]')){const pos=v.posAtDOM(frame),selected=props.selectedImage;frame.classList.toggle('is-selected',!!selected&&pos>=selected.from&&pos<=selected.to);}};
+    mark();const frame=requestAnimationFrame(mark);return()=>cancelAnimationFrame(frame);
+  },[props.selectedImage?.from,props.selectedImage?.to,props.draft]);
+  return <><div className="editor-host" ref={host}/>{menu&&<TextMenu x={menu.x} y={menu.y} spelling={menu.spelling} onSpellingFix={text=>menu.spelling&&correctSpelling(view.current!,menu.spelling,text)} writingActions revive={props.draft.ghosts.some(g=>overlaps(g,menu.range))} onAction={props.onAction} onFormat={(format,href)=>applyFormat(view.current!,format,href)} onClose={restore=>{setMenu(null);if(restore)view.current?.focus();}}/>}{imageMenu&&<ImageMenu x={imageMenu.x} y={imageMenu.y} onCopy={()=>props.onImageCopy?.(imageMenu.src)} onClose={restore=>{setImageMenu(null);if(restore)view.current?.focus();}}/>}</>;
 });
 
 type FieldProps={label:string;value:string;onChange:(value:string)=>void;placeholder?:string;className?:string;source?:boolean};

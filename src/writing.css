@@ -90,3 +90,24 @@
 .spelling-suggestions { display:flex; flex-direction:column; border-bottom:1px solid var(--border); padding:2px 0 6px; margin-bottom:6px }
 .spelling-suggestions [data-slot=button] { justify-content:flex-start; padding:6px 10px; height:auto }
 .spelling-suggestions > span { padding:6px 10px; color:var(--muted-foreground); font-size:12px }
+.md-image{display:block;margin:12px 0;line-height:0;cursor:default}.md-image img{display:block;max-width:100%;max-height:min(72vh,760px);border-radius:10px;box-shadow:0 1px 2px #0000000f,0 8px 28px #00000012}
+.md-image.is-missing{line-height:1.5;min-height:56px;border:1px dashed #d4d4d4;border-radius:10px;display:flex;align-items:center;justify-content:center}.md-image.is-missing img{display:none}.md-image.is-missing::after{content:attr(data-missing);font-size:12px;color:var(--muted-foreground)}
+.image-menu{width:180px}.image-menu [data-slot=button]{width:100%;justify-content:flex-start;gap:8px;height:32px}
+.md-image img{cursor:pointer;transition:box-shadow .15s}.md-image:hover img{box-shadow:0 0 0 2px #1c1c1c33,0 8px 28px #00000012}.md-image.is-selected img{box-shadow:0 0 0 2px #1c1c1c,0 8px 28px #0000001a}
+.with-image .workspace{grid-template-columns:0 minmax(0,1fr) 320px}.with-panel.with-image .workspace{grid-template-columns:260px minmax(0,1fr) 320px}
+.image-panel{grid-area:overflow;border-left:1px solid var(--border)}.image-panel .panel-header{justify-content:space-between}.image-panel .panel-header>span{font-weight:500}
+.image-panel-scroll{display:flex;flex-direction:column;gap:12px;padding:6px 14px 18px}
+.image-stage{position:relative;flex:none;height:min(360px,46dvh);display:flex;align-items:center;justify-content:center;background:#f2f2f1;border-radius:12px;overflow:hidden;cursor:grab;touch-action:none;user-select:none;outline:none}.image-stage:active{cursor:grabbing}.image-stage:focus-visible{box-shadow:0 0 0 2px #1c1c1c}
+.image-frame-area{position:relative;flex:none}.image-context,.image-frame img{position:absolute;max-width:none;pointer-events:none}.image-context{opacity:.18}
+.image-frame{position:absolute;inset:0;overflow:hidden;border-radius:2px;box-shadow:0 0 0 1px #00000024,0 8px 26px #00000024}
+.image-hint{margin:-4px 0 0;text-align:center;font-size:10px;color:var(--muted-foreground)}
+.image-loading{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted-foreground)}
+.image-shapes{display:flex;flex-direction:column;gap:2px}
+.image-shape{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:6px 8px;border-radius:10px;border:1px solid transparent;background:transparent;color:inherit;font:inherit;cursor:pointer}.image-shape:hover{background:#f6f6f6}.image-shape[aria-checked=true]{background:#f2f2f2;border-color:#e2e2e2}.image-shape:focus-visible{outline:2px solid #1c1c1c;outline-offset:1px}
+.image-shape-icon{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center}.image-shape-icon i{display:block;border:1.5px solid currentColor;border-radius:3px;opacity:.4}.image-shape[aria-checked=true] .image-shape-icon i{opacity:1;background:#1c1c1c12}
+.image-shape-text{display:flex;flex-direction:column;min-width:0;flex:1}.image-shape-text strong{font-size:12.5px;font-weight:500;line-height:1.35}.image-shape-text small{font-size:10.5px;line-height:1.4;color:var(--muted-foreground)}.image-shape-check{flex:none}
+.image-zoom{display:flex;flex-direction:column;gap:5px;padding:0 4px;font-size:11px;color:var(--muted-foreground)}.image-zoom-row{display:flex;align-items:center;gap:8px}.image-zoom input{flex:1;accent-color:#1c1c1c}
+.image-output,.image-error{margin:0;padding:0 4px;font-size:11px;color:var(--muted-foreground)}.image-error{color:#982323}
+.image-actions{display:flex;flex-direction:column;gap:6px}.image-actions .primary-button{width:100%}.image-secondary{display:flex;justify-content:center;gap:2px}.image-secondary [data-slot=button]{font-size:12px;gap:6px}
+@media(max-width:1100px){.with-image .workspace{grid-template-columns:0 minmax(0,1fr) 280px}.with-panel.with-image .workspace{grid-template-columns:235px minmax(0,1fr) 280px}}
+@media(max-width:760px){.with-image .workspace,.with-panel.with-image .workspace{display:flex;flex-direction:column;min-height:0}.image-panel{order:2;flex:0 0 min(520px,60dvh);height:min(520px,60dvh)}.image-stage{height:200px}}

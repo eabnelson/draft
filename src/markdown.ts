@@ -72,6 +72,8 @@ export function formatMarkdown(text:string,range:Span,format:TextFormat,href='')
 export function plainText(markdown:string):string {
   const remove:Span[]=[];
   markdownParser.parse(markdown).iterate({enter(node){
+    // Images are not prose: they add no words and no stray paths to clean text.
+    if(node.name==='Image'){remove.push({from:node.from,to:node.to});return false;}
     if(['EmphasisMark','StrikethroughMark','HeaderMark','CodeMark','QuoteMark','LinkMark','ListMark','HTMLTag'].includes(node.name)){let to=node.to;if(['HeaderMark','QuoteMark','ListMark'].includes(node.name))while(/[ \t]/.test(markdown[to]??'')&&to<markdown.length)to++;remove.push({from:node.from,to});}
     if(node.name==='Link'){
       const labelEnd=node.node.getChildren('LinkMark').find(n=>markdown.slice(n.from,n.to)===']');
