@@ -92,6 +92,8 @@ export class Updates {
     const promise=attempt().finally(()=>{this.logins.delete(provider);});this.logins.set(provider,promise);return promise;
   }
   async request(kind:UpdateKind,request:string,featureId?:string){
+    // A failed or cancelled preparation reports its state before it finishes saving.
+    if(this.controller&&['failed','cancelled'].includes(this.state.updates.find(u=>u.id===this.runningId)?.state??''))await this.preparation;
     if(this.controller||this.state.updates.some(u=>['ready','applying','needs-attention'].includes(u.state)))throw Error('Apply or discard the prepared update before starting another one.');
     if(!['add','remove','official','reset','rollback','batch'].includes(kind))throw Error('Unknown update request.');
     const requests=kind==='batch'?(this.state.featureQueue??[]).filter(q=>q.selected).map(q=>({...q})):undefined;
