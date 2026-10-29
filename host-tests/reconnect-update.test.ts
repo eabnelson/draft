@@ -140,3 +140,13 @@ test('reopening Draft keeps Sign-in needed until the connection has been restore
   await reopened.login('claude');assert.equal((await reopened.providers(true))[0].ready,true);
  }finally{await f.close();}
 });
+
+test('starting another update right after a failure waits for the failed preparation to finish saving',{timeout:30000},async()=>{
+ const f=await officialFixture({agent:async()=>{throw new AgentSignInError('claude');}});try{
+  await f.host.queue({action:'add',request:'Find words with Command-F'});
+  // A slow disk widens the gap between reporting the failure and releasing the preparation.
+  const host=f.host as unknown as {save:()=>Promise<void>},save=host.save.bind(host);host.save=async()=>{await new Promise(resolve=>setTimeout(resolve,300));return save();};
+  const requested=await f.host.request('batch',''),failed=await settled(f.host,requested.id);assert.equal(failed.state,'failed');
+  const reset=await f.host.request('reset','');host.save=save;assert.notEqual(reset.id,requested.id);await settled(f.host,reset.id);
+ }finally{await f.close();}
+});
