@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceHash": "4dd64b4653d4ed0a12978139b8c9b9beea3f446b6807f988bf8fe823a5ba4a74",
+  "sourceHash": "94d7b68196583a09017d342198023a2a1a12fc94ddf105f3f8c8561d00086ff1",
   "features": {
     "writing": {
       "scenes": [
@@ -49,6 +49,12 @@
         "Reset"
       ],
       "review": "The real Preferences, queued features and official-update card show building personal features, retaining them through an official update, and returning to official Draft without changing writing. External agent execution, packaging and restarts are simulated."
+    },
+    "images": {
+      "scenes": [
+        "Write"
+      ],
+      "review": "Pasting images and cropping them from the image panel use the production editor; omitted from the short tour to keep customization the focus. The demo keeps pasted images in memory instead of the Mac document folder."
     }
   }
 }
