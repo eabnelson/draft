@@ -8,6 +8,18 @@ export async function macCommand(args:string[]){
  if(await child.exited)throw Error(stderr.trim()||stdout.trim()||'The Mac distribution check failed.');
  return {stdout,stderr};
 }
+// Checking a stapled ticket asks Apple's servers, which sometimes drop the connection from CI
+// runners. Only those network failures are retried; a missing or invalid ticket fails at once.
+const APPLE_UNREACHABLE=/network connection was lost|NSURLErrorDomain|request timed out|could not connect/i;
+export async function validateStaple(path:string,{attempts=6,delay=15000,run=macCommand}:{attempts?:number;delay?:number;run?:typeof macCommand}={}){
+ for(let attempt=1;;attempt++){
+  try{return await run(['xcrun','stapler','validate',path]);}
+  catch(error){
+   if(attempt>=attempts||!(error instanceof Error&&APPLE_UNREACHABLE.test(error.message)))throw error;
+   console.log(`Apple could not be reached to check ${path}; trying again (${attempt} of ${attempts-1}).`);await Bun.sleep(delay);
+  }
+ }
+}
 async function machFiles(root:string):Promise<string[]>{
  const paths:string[]=[],base=await realpath(root);
  async function visit(folder:string){for(const entry of await readdir(folder,{withFileTypes:true})){
@@ -45,7 +57,7 @@ export async function verifyMacApp(app:string,team:string,notarized=true){
  await requireDeveloperIdCode(app,team);
  for(const path of await machFiles(join(app,'Contents/Resources/runtime')))await requireDeveloperIdCode(path,team);
  if(notarized){
-  await macCommand(['xcrun','stapler','validate',app]);
+  await validateStaple(app);
   const assessment=await macCommand(['/usr/sbin/spctl','--assess','--type','execute','--verbose=2',app]);
   if(!/source=Notarized Developer ID/.test(assessment.stdout+assessment.stderr))throw Error('Gatekeeper did not confirm a notarized Developer ID application.');
   await macCommand(['/usr/bin/syspolicy_check','distribution',app]);

@@ -26,7 +26,7 @@ Public releases require a Developer ID Application certificate and Apple notariz
 
 The release workflow imports an encrypted PKCS#12 identity into an ephemeral keychain. It signs every embedded Mach-O tool and library before signing the app. Only Bun receives the JIT entitlement needed for JavaScript; no library-validation or debugging exceptions are added. The runtime, helper tools, and app must use the same release team, hardened runtime, and secure timestamps.
 
-Notarization submits a ZIP containing the signed app, waits for Apple's acceptance, and staples the ticket to the app. It then creates and signs a disk image containing that stapled app and an Applications shortcut, notarizes the disk image, and staples its ticket. Re-running `bun run release:notarize` resumes a matching recorded submission; a changed signed app produces a new submission. Both distribution formats are checked before the authenticated update manifest is produced. The manifest also binds the disk image's checksum and size.
+Notarization submits a ZIP containing the signed app, waits for Apple's acceptance, and staples the ticket to the app. It then creates and signs a disk image containing that stapled app and an Applications shortcut, notarizes the disk image, and staples its ticket. Re-running `bun run release:notarize` resumes a matching recorded submission; a changed signed app produces a new submission. Both distribution formats are checked before the authenticated update manifest is produced. Checking a stapled ticket asks Apple's servers; when that connection drops, the check is retried a few times before failing, while a missing or invalid ticket still fails at once. The manifest also binds the disk image's checksum and size.
 
 Required GitHub secrets:
 

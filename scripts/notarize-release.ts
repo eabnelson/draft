@@ -2,7 +2,7 @@ import {mkdir,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {fileDigest} from '../desktop/native-update';
 import {atomicWrite,exists} from '../desktop/files';
-import {macCommand,verifyMacApp,createMacInstaller} from './mac-distribution';
+import {macCommand,verifyMacApp,createMacInstaller,validateStaple} from './mac-distribution';
 const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'package.json')).json()).version;
 const team=process.env.APPLE_TEAM_ID,identity=process.env.APPLE_SIGNING_IDENTITY;
 if(!team||!identity||identity==='-')throw Error('A public release requires the Apple distribution signing identity and team.');
@@ -32,7 +32,7 @@ async function notarize(path:string,label:string){
 }
 async function staple(path:string){for(let attempt=0;attempt<6;attempt++){try{await macCommand(['xcrun','stapler','staple',path]);return;}catch(error){if(attempt===5)throw error;await new Promise(resolve=>setTimeout(resolve,10000));}}}
 await verifyMacApp(app,team,false);
-try{await macCommand(['xcrun','stapler','validate',app]);console.log('The app already has its Apple approval ticket.');}
+try{await validateStaple(app);console.log('The app already has its Apple approval ticket.');}
 catch{
  const zip=join(folder,'app.zip');
  if(!await exists(zip))await macCommand(['/usr/bin/ditto','-c','-k','--keepParent',app,zip]);
@@ -45,7 +45,7 @@ catch{
 await verifyMacApp(app,team);
 const dmg=join(root,`src-tauri/target/release/bundle/dmg/Draft_${version}_${process.arch==='arm64'?'aarch64':'x64'}.dmg`);
 await createMacInstaller(app,dmg,identity);await notarize(dmg,'installer');await staple(dmg);
-await macCommand(['xcrun','stapler','validate',dmg]);
+await validateStaple(dmg);
 await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature','--verbose=2',dmg]);
 await atomicWrite(join(root,'release/distribution-report.json'),JSON.stringify({schemaVersion:1,version,team,developerId:true,notarized:true,appVerified:true,installerVerified:true},null,2)+'\n');
 console.log('Signed, notarized app and installer passed Mac distribution checks.');

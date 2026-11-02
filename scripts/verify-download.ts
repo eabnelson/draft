@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir,mkdtemp,rm,symlink,realpath} from 'node:fs/prom
 import {join,resolve,dirname} from 'node:path';
 import {tmpdir,homedir} from 'node:os';
 import {verify} from 'node:crypto';
-import {macCommand,verifyMacApp} from './mac-distribution';
+import {macCommand,verifyMacApp,validateStaple} from './mac-distribution';
 import {fileDigest} from '../desktop/native-update';
 const repo=resolve(import.meta.dir,'..'),assets=resolve(process.argv[2]??join(repo,'release'));
 const envelope=await Bun.file(join(assets,'draft-update.json')).json();
@@ -17,7 +17,7 @@ for(const artifact of [release.installer,release.desktop]){
 // launched through it; use the canonical installation path, as /Applications does.
 const stage=await realpath(await mkdtemp(join(tmpdir(),'draft-download-check-'))),mount=join(stage,'volume');await mkdir(mount);
 const installer=join(assets,new URL(release.installer.url).pathname.split('/').at(-1)!);
-await macCommand(['xcrun','stapler','validate',installer]);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
+await validateStaple(installer);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
 let mounted=false,child:ReturnType<typeof Bun.spawn>|undefined,output='';const data=join(stage,'profile');
 const capture=async(stream:ReadableStream<Uint8Array>)=>{
  const reader=stream.getReader(),decoder=new TextDecoder();
