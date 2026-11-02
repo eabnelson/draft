@@ -1,0 +1,23 @@
+/* The walkthrough window: the real app on a soft desktop, so its glass has something to show. */
+html,body,#root{height:100%;margin:0;overflow:hidden}
+#root{transition:none}
+.demo-wallpaper{position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:radial-gradient(60% 70% at 12% 18%,#f9c9a6 0%,transparent 70%),radial-gradient(55% 60% at 88% 12%,#b9c8ff 0%,transparent 70%),radial-gradient(70% 70% at 70% 95%,#bfe8d6 0%,transparent 70%),linear-gradient(135deg,#f4e7f1,#e6ecfb)}
+/* The Mac window buttons, which the app leaves room for at the top of the sidebar. */
+.demo-window-buttons{position:fixed;left:20px;top:13px;z-index:50;display:flex;gap:8px;pointer-events:none}
+.demo-window-buttons span{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px #0000001f}
+.demo-window-buttons span:nth-child(1){background:#ff5f57}.demo-window-buttons span:nth-child(2){background:#febc2e}.demo-window-buttons span:nth-child(3){background:#28c840}
+.app{height:100%}
+
+/* A blinking caret while the tour types (the page cannot focus the editor). */
+.tour-caret{position:fixed;left:0;top:0;width:1.5px;min-height:14px;background:#303030;pointer-events:none;z-index:40;animation:tour-caret 1s step-end infinite;will-change:transform}
+.tour-is-typing .cm-cursorLayer{visibility:hidden!important}
+@keyframes tour-caret{0%,55%{opacity:1}56%,100%{opacity:0}}
+/* The shortcut being pressed, as a glass chip at the bottom of the window. */
+.tour-keys{position:fixed;left:50%;bottom:28px;z-index:60;display:flex;align-items:center;gap:6px;padding:8px 14px 8px 9px;border-radius:12px;font-size:13px;color:#303030;
+  background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);box-shadow:0 8px 30px #0000001a,inset 0 0 0 1px #ffffffb3;
+  opacity:0;transform:translate(-50%,8px);transition:opacity .25s,transform .25s;pointer-events:none}
+.tour-keys.is-shown{opacity:1;transform:translate(-50%,0)}
+.tour-keys kbd{min-width:24px;height:24px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;background:#fff;box-shadow:0 1px 0 #0000001f,inset 0 0 0 1px #0000000f;font:500 12px ui-sans-serif,system-ui,sans-serif}
+.tour-keys span{margin-left:4px;color:#555}
+@media(prefers-reduced-motion:reduce){.tour-caret{animation:none}.tour-keys{transition:none}}
