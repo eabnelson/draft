@@ -50,8 +50,9 @@ export async function officialFixture(options:{conflict?:boolean;agent?:AgentCon
 }
 
 // Waits for the host to finish any preparation and state save still in flight, so removing the
-// fixture folder cannot fail a write that belongs to a test that has already finished.
-async function idle(host:Updates){
+// fixture folder cannot fail a write that belongs to a test that has already finished, and a
+// test that reopens Draft from disk sees what the host last reported.
+export async function idle(host:Updates){
  const pending=()=>[(host as any).preparation,(host as any).saving] as unknown[];
  for(let i=0;i<200;i++){
   const before=pending();await Promise.allSettled(before);await new Promise(resolve=>setTimeout(resolve,10));

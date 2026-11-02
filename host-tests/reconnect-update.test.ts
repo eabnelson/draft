@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {AgentSignInError} from '../desktop/agents';
 import {Updates} from '../desktop/updates';
 import type {Provider} from '../desktop/types';
-import {officialFixture,settled} from './helpers/official-update';
+import {officialFixture,settled,idle} from './helpers/official-update';
 
 const connected:Provider={id:'claude',name:'Claude Code',installed:true,ready:true,models:[{id:'fixture',name:'Claude',provider:'claude'}]};
 function deferred<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(done=>{resolve=done;});return {promise,resolve};}
@@ -24,6 +24,8 @@ async function fixture(login?:()=>Promise<Provider[]>){
  await f.host.queue({action:'add',request:'Find words with Command-F'});requestId=f.host.state.featureQueue![0].id;
  const requested=await f.host.request('batch',''),failed=await settled(f.host,requested.id);
  assert.equal(failed.state,'failed');assert.equal(failed.reconnectProvider,'claude');
+ // A failed preparation reports its state before it finishes saving; a test that reopens Draft reads the saved one.
+ await idle(f.host);
  return {...f,failed,loginCalls:()=>loginCalls};
 }
 
