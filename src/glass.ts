@@ -26,9 +26,28 @@ function maskFor(width:number,height:number):string{
     `<rect width="${width}" height="${height}" fill="#000" mask="url(#m)"/></svg>`;
 }
 
+// Each tab is drawn as one shape: its bubbles and the necks joining them, unioned into a single
+// mask for the tab's glass. Painted separately, every piece blurred and antialiased its own edges,
+// which showed as faint lines where they met.
+const NECK='M-1 6 L1 6 A3 3 0 0 0 7 6 L9 6 L9 22 L7 22 A3 3 0 0 0 1 22 L-1 22 Z';
+function pillShape(pill:Element):string|null{
+  const box=pill.getBoundingClientRect();if(!box.width||!box.height)return null;
+  const parts:string[]=[];
+  for(const piece of pill.querySelectorAll(':scope > .version-tab-bubble, :scope > .version-tab-neck')){
+    const r=piece.getBoundingClientRect(),x=n(r.left-box.left),y=n(r.top-box.top);if(!r.width)continue;
+    parts.push(piece.classList.contains('version-tab-neck')?`<path transform="translate(${x} ${y})" d="${NECK}"/>`:`<rect x="${x}" y="${y}" width="${n(r.width)}" height="${n(r.height)}" rx="8"/>`);
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${n(box.width)}" height="${n(box.height)}" viewBox="0 0 ${n(box.width)} ${n(box.height)}"><g fill="#000">${parts.join('')}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
 export function startGlass(fill:HTMLElement):()=>void{
   let frame=0,last='';
   const draw=()=>{frame=0;
+    for(const pill of document.querySelectorAll<HTMLElement>('.version-tab-pill')){
+      resize.observe(pill);const shape=pillShape(pill);
+      if(shape&&pill.style.getPropertyValue('--pill-shape')!==shape)pill.style.setProperty('--pill-shape',shape);
+    }
     const svg=maskFor(innerWidth,innerHeight);if(svg===last)return;last=svg;
     const url=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
     fill.style.setProperty('-webkit-mask-image',url);fill.style.setProperty('mask-image',url);

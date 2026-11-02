@@ -271,8 +271,10 @@ html,body{height:100%;overflow:clip;overscroll-behavior:none}
 .shortcut-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 28px}
 .shortcut-list .help-item{margin:10px 0}
 /* Naming a version right in its tab */
-.version-tab-title.is-renaming{padding:0 6px 0 13px;box-shadow:0 0 0 2px var(--ring)!important}
-.version-rename{width:200px;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:12.5px;font-weight:550;color:var(--foreground)}
+/* Renaming is just editing the text in place: no ring or box, and the field is as wide as the name. */
+.version-tab-title.is-renaming{padding:0 13px;box-shadow:none!important;outline:none!important}
+.version-rename{width:200px;min-width:0;max-width:260px;padding:0;margin:0;border:0;border-radius:0;outline:0!important;box-shadow:none!important;background:none;font:inherit;font-size:12.5px;font-weight:550;line-height:inherit;color:var(--foreground);-webkit-appearance:none;appearance:none}
+@supports (field-sizing:content){.version-rename{width:auto;min-width:1ch;field-sizing:content}}
 
 /* No scrollbars anywhere; everything still scrolls with the trackpad, wheel and keyboard. */
 *{scrollbar-width:none!important}
@@ -300,12 +302,19 @@ html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-c
 .dark .version-column{--tab-glass:rgba(255,255,255,.05)}
 .dark .version-column:not(.is-active):has(.version-tab-pill:hover){--tab-glass:rgba(255,255,255,.07)}
 .dark .version-column.is-active{--tab-glass:var(--selected-glass)}
-.version-tab-bubble,.version-tab-neck,.version-column.is-active .version-tab-bubble{background:var(--tab-glass)!important}
+/* A tab's glass is one piece behind its bubbles and necks, masked to their combined shape by
+   glass.ts, so there is no seam where a neck meets a bubble. Until the shape is measured the
+   tab shows no glass rather than a plain rectangle. */
+.version-tab-pill{position:relative;isolation:isolate;--pill-shape:linear-gradient(transparent,transparent)}
+.version-tab-pill::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:var(--tab-glass);transition:background-color .12s;
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  -webkit-mask-image:var(--pill-shape);mask-image:var(--pill-shape);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.version-tab-pill>.version-tab-bubble,.version-tab-pill>.version-tab-neck{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 .settings-bubble{background:rgba(0,0,0,.035)!important}
 .settings-bubble:hover,.settings-bubble.is-open{background:rgba(0,0,0,.07)!important}
 .dark .settings-bubble{background:rgba(255,255,255,.05)!important}
 .dark .settings-bubble:hover,.dark .settings-bubble.is-open{background:rgba(255,255,255,.1)!important}
-.version-tab-bubble,.version-tab-neck,.settings-bubble{-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}
+.settings-bubble{-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}
 /* The lines between columns (and between the sidebar and the first column) are thinner places in
    the glass too, drawn by glass.ts, running the full height of the window. */
 
