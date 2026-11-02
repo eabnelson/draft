@@ -53,7 +53,7 @@ The update builder edits candidate source rather than live files. Its process is
 
 ## Landing page
 
-[Visit the website](https://draft.studiofour.io/). It plays a walkthrough of the real app showing how Erik writes: a brain dump, then new versions side by side; the source is in [website/](website/). Run `bun run website:dev` to preview it locally.
+[Visit the website](https://draft.studiofour.io/). It plays a walkthrough of the real app and the workflow it is built for: a brain dump, then new versions side by side; the source is in [website/](website/). Run `bun run website:dev` to preview it locally.
 
 Pushes to `main` build and publish the landing page to GitHub Pages through the [website workflow](.github/workflows/pages.yml).
 

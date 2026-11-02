@@ -1,11 +1,11 @@
-// The landing page walkthrough: Erik showing how he writes, in the real app driven the way a
+// The landing page walkthrough: the writing workflow Draft is built for, in the real app driven the way a
 // person would, with a glass cursor drawn by the page around it. A brain dump, new versions
-// beside it, refining more than one, marking one ready, then asking Draft for a feature of his
-// own and restarting into it. It loops until the visitor pauses it.
+// beside it, refining more than one, marking one ready, then asking Draft for a feature and
+// restarting into it. It loops until the visitor pauses it.
 import {EditorView} from '@codemirror/view';
 import {TOUR} from './store';
 
-export const OPENING='Hi, I’m Erik. Here’s how I write.';
+export const OPENING='Write messy. Shape it later.';
 const ease=(t:number)=>t*t*(3-2*t);
 type Point={x:number;y:number};
 
@@ -152,7 +152,7 @@ export class Tour{
       await this.wait(1800,signal);
 
       // A brain dump in a new draft. Its first sentence names it until the AI suggests a title.
-      await this.step('Dump','I start with a brain dump.',signal);
+      await this.step('Dump','Start with a brain dump.',signal);
       await this.shortcut(['⌘','N'],'New draft',{key:'n',metaKey:true},signal);
       await this.until(()=>document.querySelector('.inbox-row.is-active .inbox-title')?.textContent==='Untitled draft',signal);
       await this.type(this.editor(0),TOUR.dump,signal);
@@ -160,26 +160,26 @@ export class Tour{
       await this.move(this.center(row.querySelector('.inbox-title')!),signal,900);await this.wait(1200,signal);
 
       // New versions beside it: a clean rewrite, then a short one made from that.
-      await this.step('Versions','Then I make new versions.',signal);
+      await this.step('Versions','Spin off new versions.',signal);
       await this.newVersion(1,TOUR.clean,signal);
       await this.rename(1,TOUR.cleanName,signal);
       await this.newVersion(2,TOUR.short,signal);
       await this.rename(2,TOUR.shortName,signal);
 
       // Going back and forth, refining more than one.
-      await this.step('Refine','And refine a few side by side.',signal);
+      await this.step('Refine','Refine a few side by side.',signal);
       await this.refine(1,TOUR.cleanMore,signal);
       await this.refine(2,TOUR.shortMore,signal);
 
       // When one feels right, it is marked ready in the sidebar.
-      await this.step('Ready','When one feels right, it’s ready.',signal);
+      await this.step('Ready','Mark the one that’s ready.',signal);
       const chip=await this.until(()=>document.querySelector('.inbox-row.is-active [data-stage-chip]'),signal);
       await this.click(chip,signal);
       await this.click(await this.until(()=>this.menuItem('Ready'),signal),signal);
       await this.wait(1400,signal);
 
       // Customizing: asking Draft for a feature in Settings, building it, and restarting into it.
-      await this.step('Customize','And I make Draft my own.',signal);
+      await this.step('Customize','Add whatever you need.',signal);
       await this.click(await this.until(()=>document.querySelector('.settings-bubble'),signal),signal);
       const field=await this.until(()=>document.querySelector<HTMLTextAreaElement>('.feature-request textarea'),signal);
       await this.press(field,signal,()=>{});
@@ -196,7 +196,7 @@ export class Tour{
       const goal=await this.until(()=>first.querySelector('.demo-goal'),signal),at=this.center(goal);
       await this.move({x:at.x,y:at.y+30},signal,700);await this.wait(2400,signal);
 
-      this.scene='Try';this.headline='Want to write like this? Try Draft.';this.announce();this.pointer('hide');
+      this.scene='Try';this.headline='Try it on your Mac.';this.announce();this.pointer('hide');
       await this.wait(4500,signal);
       await this.fade(0,signal);
     }

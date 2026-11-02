@@ -15,20 +15,20 @@ function draft(text:string,minutes:number,shape:(d:Draft)=>Draft=d=>d):Draft{
   const d=fresh();return dated(shape(editVersion(d,d.versions[0].id,text)),minutes);
 }
 
-// What the tour types, and what the stand-in AI answers once there is enough of it. The
-// walkthrough is Erik showing how he writes: a brain dump, then new versions, refining a few.
+// What the tour types, and what the stand-in AI answers once there is enough of it: the workflow
+// Draft is built for, a rough brain dump first, then versions shaped side by side.
 export const TOUR={
-  dump:"hi, I'm Erik\n\nthis is how I like to write. I start with a brain dump: every thought, out of order, no fixing typos or worrying if it's any good. half sentences are fine, it just needs to get out of my head. once it's down I make new versions and shape them side by side until one feels right.",
-  clean:"Hi, I'm Erik. I start every post with a brain dump, then shape it into new versions side by side.",
+  dump:"rough idea first\n\nget it all down before it disappears. out of order, typos, half sentences, whatever. don't fix anything yet. the point is to empty your head while the idea is still warm. once it's down you can make new versions and shape them side by side until one feels right.",
+  clean:'Get the idea down before it disappears, then shape it into versions side by side.',
   cleanName:'Clean',
-  short:'Brain dump first. Versions second.',
+  short:'Dump it first. Shape it after.',
   shortName:'Short',
-  cleanMore:' Then I post the one that feels right.',
+  cleanMore:' Keep the one that feels right.',
   shortMore:' Post the best one.',
   request:'Show a daily word goal in my tabs',
   goal:300,
-  title:'How I write',
-  summary:"Erik's process: dump every thought first, then shape new versions side by side until one is ready to post.",
+  title:'Dump first, shape later',
+  summary:'Getting a rough idea down fast, then shaping it into versions side by side until one is ready to post.',
 };
 
 export function seedLibrary():Library{
