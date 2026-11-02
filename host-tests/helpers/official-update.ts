@@ -46,7 +46,17 @@ export async function officialFixture(options:{conflict?:boolean;agent?:AgentCon
  for(const [name,text] of [['appearance','import {appearance} from "../src/appearance";test("personal dark appearance remains",()=>expect(appearance).toBe("dark"));'],['reading','import {minutes} from "../src/reading";test("personal reading time remains",()=>expect(minutes).toBe(3));']])await atomicWrite(join(customSource,`tests/${name}.test.ts`),'import {test,expect} from "bun:test";'+text);
  const version:Version={...host.active,id:'personal-start',source:customSource,dist:customDist,catalog:personal,sourceHash:await sourceHash(customSource),artifactHash:await sourceHash(customDist),parentId:host.active.id,hostVersion:'1.1.0'};host.state.versions.push(version);host.state.activeVersion=version.id;
  const docs=new DraftStore(join(data,'Drafts'));const draft=fresh();await docs.save(editVersion(draft,draft.versions[0].id,'My writing stays on this Mac.'));
- return {root,host,docs,template,incoming,data,server,async close(){host.stopAutomaticChecks();server.stop(true);await rm(root,{recursive:true,force:true});}};
+ return {root,host,docs,template,incoming,data,server,async close(){host.stopAutomaticChecks();server.stop(true);await idle(host);await rm(root,{recursive:true,force:true});}};
+}
+
+// Waits for the host to finish any preparation and state save still in flight, so removing the
+// fixture folder cannot fail a write that belongs to a test that has already finished.
+async function idle(host:Updates){
+ const pending=()=>[(host as any).preparation,(host as any).saving] as unknown[];
+ for(let i=0;i<200;i++){
+  const before=pending();await Promise.allSettled(before);await new Promise(resolve=>setTimeout(resolve,10));
+  if(pending().every((value,index)=>value===before[index]))return;
+ }
 }
 
 export async function settled(host:Updates,id:string){
