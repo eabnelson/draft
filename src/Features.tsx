@@ -125,7 +125,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
     changes:{title:'Your changes',detail:changes.length?'What your Draft does differently from official Draft.':'You’re using official Draft.',meta:`${changes.length}`},
     official:{title:'Official features',detail:'Everything Draft does out of the box.',meta:`${data?.official.features.length??0}`},
     updates:{title:'Updates',detail:systemUpdate||data?.latestOfficial?'A new version of Draft is available.':'New versions of Draft and your update history.',meta:data?`Draft ${data.appVersion}`:undefined},
-    appearance:{title:'Appearance',detail:'Light, dark, or match your Mac.',meta:{light:'Light',dark:'Dark',system:'Mac'}[savedAppearance()]},
+    appearance:{title:'Appearance',detail:'Light, dark, or system.',meta:{light:'Light',dark:'Dark',system:'System'}[savedAppearance()]},
     mac:{title:'Mac',detail:'Open at login and the menu bar icon.'},
     shortcuts:{title:'Shortcuts',detail:'Every keyboard shortcut in Draft.'},
     ai:{title:'AI',detail:'The model that writes titles, summaries and your features.'},
@@ -136,7 +136,6 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
   const messages=<>{(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}</>;
   function body(id:SectionId){switch(id){
     case 'customize':return <>
-      <div className="settings-intro"><h1>Make Draft yours.</h1><p>Keep a list of what you want. Update when you’re ready.</p></div>
       <form className="feature-request" onSubmit={event=>{event.preventDefault();void queue({action:'add',request},true);}}>
         <textarea aria-label="Feature request" placeholder="What would you like Draft to do?" value={request} onChange={event=>setRequest(event.target.value)} disabled={submitting||applying} rows={2}/>
         <div><span>{data?.demo?null:data?.selection?.model==='claude-opus-5-5'?'Claude Opus 5.5':'Uses your connected AI'}</span><Button type="submit" disabled={submitting||applying||!request.trim()}><Plus size={14}/>Add feature</Button></div>

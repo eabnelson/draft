@@ -58,7 +58,7 @@
 .dark .feature-wishlist input,.dark .mac-preferences input{accent-color:#ccc}
 .dark .restart-overlay{background:rgba(20,20,20,.96);color:#aaa}
 
-/* Settings → Appearance: light, dark or match your Mac */
+/* Settings → Appearance: light, dark or system */
 .appearance-choices{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:var(--secondary)}
 .appearance-choices button{display:flex;align-items:center;gap:7px;height:30px;padding:0 13px;border:0;border-radius:8px;background:none;color:var(--muted-foreground);font:inherit;font-size:12.5px;cursor:pointer}
 .appearance-choices button:hover{color:var(--foreground)}

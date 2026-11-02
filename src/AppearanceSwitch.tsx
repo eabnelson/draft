@@ -2,9 +2,9 @@ import {useState} from 'react';
 import {Keyboard,Monitor,Moon,Sun} from 'lucide-react';
 import {savedAppearance,setAppearance,type AppearanceChoice} from './theme';
 
-const CHOICES:[AppearanceChoice,string,typeof Sun][]=[['light','Light',Sun],['dark','Dark',Moon],['system','Match your Mac',Monitor]];
+const CHOICES:[AppearanceChoice,string,typeof Sun][]=[['light','Light',Sun],['dark','Dark',Moon],['system','System',Monitor]];
 
-// In Settings: light, dark, or whatever your Mac is set to (the default).
+// In Settings: light, dark, or system (whatever your Mac is set to, the default).
 export function AppearanceSetting(){
   const [choice,setChoice]=useState<AppearanceChoice>(savedAppearance);
   return <section className="settings-section" aria-labelledby="appearance-heading">
