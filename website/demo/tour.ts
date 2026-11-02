@@ -1,6 +1,7 @@
 // The landing page walkthrough: Erik showing how he writes, in the real app driven the way a
 // person would, with a glass cursor drawn by the page around it. A brain dump, new versions
-// beside it, refining more than one, then marking one ready. It loops until the visitor pauses it.
+// beside it, refining more than one, marking one ready, then asking Draft for a feature of his
+// own and restarting into it. It loops until the visitor pauses it.
 import {EditorView} from '@codemirror/view';
 import {TOUR} from './store';
 
@@ -16,7 +17,7 @@ export class Tour{
   private position:Point={x:640,y:420};
   private caret?:HTMLElement;
   private reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  constructor(private reset:()=>void){}
+  constructor(private reset:()=>void,private finishUpdate:()=>void){}
 
   private announce(){window.dispatchEvent(new CustomEvent('draft-demo-scene',{detail:{scene:this.scene,headline:this.headline,state:this.paused?'paused':'playing'}}));}
   private pointer(kind:string,point?:Point){window.dispatchEvent(new CustomEvent('draft-demo-pointer',{detail:{kind,...point}}));}
@@ -65,6 +66,12 @@ export class Tour{
     this.pointer('press');await this.wait(140,signal);act();this.pointer('release');await this.wait(450,signal);
   }
   private click(element:Element,signal:AbortSignal){return this.press(element,signal,()=>(element as HTMLElement).click());}
+  private button(label:string){return [...document.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].find(b=>b.textContent?.trim()===label&&b.getClientRects().length);}
+  // Types into a text field the app controls, one character at a time.
+  private async fill(field:HTMLTextAreaElement|HTMLInputElement,text:string,signal:AbortSignal){
+    const set=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field),'value')!.set!;
+    for(let i=1;i<=text.length;i++){set.call(field,text.slice(0,i));field.dispatchEvent(new Event('input',{bubbles:true}));await this.wait(this.reduced?0:24+Math.random()*24,signal);}
+  }
   private menuItem(label:string){return [...document.querySelectorAll<HTMLButtonElement>('.context-menu button:not(:disabled)')].find(b=>b.textContent?.trim()===label);}
 
   // A keyboard shortcut, shown as a glass chip at the bottom of the window while it runs.
@@ -170,6 +177,24 @@ export class Tour{
       await this.click(chip,signal);
       await this.click(await this.until(()=>this.menuItem('Ready'),signal),signal);
       await this.wait(1400,signal);
+
+      // Customizing: asking Draft for a feature in Settings, building it, and restarting into it.
+      await this.step('Customize','And I make Draft my own.',signal);
+      await this.click(await this.until(()=>document.querySelector('.settings-bubble'),signal),signal);
+      const field=await this.until(()=>document.querySelector<HTMLTextAreaElement>('.feature-request textarea'),signal);
+      await this.press(field,signal,()=>{});
+      await this.fill(field,TOUR.request,signal);await this.wait(300,signal);
+      await this.click(await this.until(()=>this.button('Add feature'),signal),signal);
+      await this.click(await this.until(()=>this.button('Download update'),signal),signal);
+      await this.wait(2600,signal);this.finishUpdate();
+      await this.click(await this.until(()=>this.button('Restart to update'),signal),signal);
+      await this.until(()=>document.querySelector('.demo-goal'),signal);
+      await this.step('Customized','Ask for anything. Draft builds it.',signal);
+      // Back on the brain dump, the new bubble counts its words toward the goal.
+      const first=document.querySelectorAll('.version-tab-pill')[0];
+      await this.press(first,signal,()=>first.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0})));
+      const goal=await this.until(()=>first.querySelector('.demo-goal'),signal),at=this.center(goal);
+      await this.move({x:at.x,y:at.y+30},signal,700);await this.wait(2400,signal);
 
       this.scene='Try';this.headline='Want to write like this? Try Draft.';this.announce();this.pointer('hide');
       await this.wait(4500,signal);

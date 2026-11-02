@@ -3,7 +3,8 @@ import {safeLinkURL} from './markdown';
 import {copyImageToClipboard,mediaURL} from './images';
 export type Library={active:string;drafts:Draft[];archived:number};
 declare global {interface Window {draftBoot:{library:Library;version:string;error?:string};}}
-export function restartApp(){window.location.reload();}
+// The website walkthrough cancels this event to stand in for a restart without reloading the page.
+export function restartApp(){if(window.dispatchEvent(new Event('draft:restart',{cancelable:true})))window.location.reload();}
 export async function openLink(value:string){const url=safeLinkURL(value);if(!url)throw Error('Use a web address or mailto: link.');await api('/api/links/open',{url});}
 // Image bytes are stored in the draft's media folder; the draft keeps a relative Markdown reference.
 export async function uploadImage(draftId:string,image:Blob):Promise<{src:string}>{

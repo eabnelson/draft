@@ -29,7 +29,7 @@ function VersionTab({version,selection,renaming,onRename}:{version:Version;selec
 
 export default function App(){
   const boot=window.draftBoot;
-  const [featuresOpen,setFeaturesOpen]=useState(false),[updateLabel,setUpdateLabel]=useState('Preferences');
+  const [featuresOpen,setFeaturesOpen]=useState(false),[updateLabel,setUpdateLabel]=useState('Preferences'),featuresOpenRef=useRef(featuresOpen);featuresOpenRef.current=featuresOpen;
   const [updating,setUpdating]=useState(false);
   const [drafts,setDrafts]=useState<Draft[]>(boot.library.drafts),draftsRef=useRef(drafts);draftsRef.current=drafts;
   const [activeId,setActiveId]=useState(boot.library.active),[archived,setArchived]=useState(boot.library.archived);
@@ -226,16 +226,17 @@ export default function App(){
       // The View menu zooms with ⌘−, ⌘0 and ⌘+. ⌘= (plus without Shift) reaches the page first, so it is passed to the app.
       if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key==='='||e.key==='+')){e.preventDefault();void fetch('draft-native://localhost/zoom/in').catch(()=>{});}
       // ⌃Tab and ⌃⇧Tab move between the open version columns.
+      if(e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key==='Tab'&&featuresOpenRef.current){e.preventDefault();window.dispatchEvent(new CustomEvent('draft:settings-cycle',{detail:e.shiftKey?-1:1}));return;}
       if(e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key==='Tab'){const d=draftRef.current,open=openVersions(d);if(open.length>1){e.preventDefault();const at=open.findIndex(v=>v.id===viewed(d).id);showVersion(open[(at+(e.shiftKey?-1:1)+open.length)%open.length].id);}}
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key===','){e.preventDefault();openSettings();}
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='w'){e.preventDefault();closeTab();}
-      if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='b'){e.preventDefault();setFeaturesOpen(false);setInboxOpen(open=>!open);}
-      if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();newVersion();}
+      if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='b'){e.preventDefault();setInboxOpen(open=>!open);}
+      if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();if(!featuresOpenRef.current)newVersion();}
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&/^[1-9]$/.test(e.key)){e.preventDefault();const d=byShortcut(listedRef.current,Number(e.key));if(d)void open(d);}
       if(e.key==='Escape'){setMessage('');setContextMenu(null);setConfirm(null);}
     };
     const fromShortcut=()=>newDraft();
-    const closeTab=()=>{const d=draftRef.current;closeVersion(viewed(d).id);};
+    const closeTab=()=>{if(featuresOpenRef.current){window.dispatchEvent(new Event('draft:settings-close-tab'));return;}const d=draftRef.current;closeVersion(viewed(d).id);};
     const openSettings=()=>setFeaturesOpen(true);
     // Draft has no visible title bar: dragging the empty top row moves the window and double-clicking zooms it.
     const region=(e:MouseEvent)=>{const target=e.target as HTMLElement;return e.button===0&&!!target.closest('[data-drag-region]')&&!target.closest('button,input,a,[role=button],[role=radio]');};
@@ -298,15 +299,17 @@ export default function App(){
   function resetImage(){try{const current=imageFocus?findImage(viewed(draftRef.current).text,imageFocus):undefined;if(!current?.crop)return;rewriteImage(imageMarkdown(current.crop.original,current.alt));notice('Back to the original image.');}catch(e){notice(e instanceof Error?e.message:'That action could not be completed.');}}
   function copyImageToClipboard(source:string|Promise<Blob>){void copyImage(draftRef.current.id,source).then(()=>notice('Image copied.')).catch(e=>notice(e instanceof Error?e.message:'This image could not be copied.'));}
 
+  // Settings: a glass button in the sidebar's lower left corner, in writing and in Settings.
+  const settingsButton=<button type="button" className={`settings-bubble ${featuresOpen?'is-open':''}`} aria-pressed={featuresOpen} aria-label={updateLabel==='Preferences'?'Settings':updateLabel} title={updateLabel==='Preferences'?'Settings · ⌘,':updateLabel} onClick={()=>setFeaturesOpen(open=>!open)}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>;
   return <><div className="glass-fill" ref={glassRef} aria-hidden="true"/><div className={`app ${inboxOpen?'with-panel':'without-panel'} ${focusedImage?'with-image':''}`} inert={updating}>
     <input ref={file} type="file" accept=".txt,.md,.markdown" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value='';}}/>
     {saveError&&<div className="save-error" role="alert">{saveError}<Button variant="ghost" onClick={()=>void exportDraft()}>Export a safe copy <ArrowUpRight size={14}/></Button></div>}
-    {featuresOpen&&<main className="features-scroll" aria-label="Preferences" tabIndex={0}><Features onBack={()=>setFeaturesOpen(false)} onUpdating={setUpdating} onBeforeApply={persistAll}/></main>}
+    {featuresOpen&&<Features sidebar={inboxOpen} footer={settingsButton} onUpdating={setUpdating} onBeforeApply={persistAll}/>}
     <main className="workspace" style={featuresOpen?{display:'none'}:undefined}>
       {inboxOpen&&<Inbox drafts={listed} activeId={draft.id} activeVersionId={version.id} renamingId={renamingId} onOpen={d=>{
         // Clicking another draft opens it with its versions showing; clicking the open draft shows or hides them.
         if(d.id!==draftRef.current.id){void open(d);expand(d.id,true);}else expand(d.id,!expanded.has(d.id));
-      }} onVersion={(d,versionId)=>{void open(d);showVersion(versionId);}} expanded={expanded} onRename={renameDraft} onMenu={openMenu} onStage={(d,at)=>setStageMenu({x:at.left,y:at.bottom+4,draftId:d.id})} footer={/* Settings: a glass button in the sidebar's lower left corner */<button type="button" className={`settings-bubble ${featuresOpen?'is-open':''}`} aria-pressed={featuresOpen} aria-label={updateLabel==='Preferences'?'Settings':updateLabel} title={updateLabel==='Preferences'?'Settings · ⌘,':updateLabel} onClick={()=>setFeaturesOpen(open=>!open)}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>} onBackgroundMenu={e=>{e.preventDefault();setBackgroundMenu({x:e.clientX,y:e.clientY});}}/>}
+      }} onVersion={(d,versionId)=>{void open(d);showVersion(versionId);}} expanded={expanded} onRename={renameDraft} onMenu={openMenu} onStage={(d,at)=>setStageMenu({x:at.left,y:at.bottom+4,draftId:d.id})} footer={settingsButton} onBackgroundMenu={e=>{e.preventDefault();setBackgroundMenu({x:e.clientX,y:e.clientY});}}/>}
       <section className="writing-area">
         <div className={`version-columns ${columns.length>1?'is-split':''}`} ref={columnsRef}>{columns.map((v,i)=>{
           const active=v.id===version.id;

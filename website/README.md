@@ -9,4 +9,4 @@ bun run website:dev
 
 Open http://127.0.0.1:4320/. `bun run website:build` produces the static site in `website/dist/` and points the download button at the latest published Mac release.
 
-The page plays a walkthrough of the real app: `website/demo/` mounts `src/App.tsx` in a frame and answers its requests from an in-memory store (`demo/store.ts`), and `demo/tour.ts` drives it through how Erik writes: a brain dump, new versions beside it, refining a few, then marking one ready. `player.ts` runs the headline, glass cursor, Pause and Replay on the page around the frame.
+The page plays a walkthrough of the real app: `website/demo/` mounts `src/App.tsx` in a frame and answers its requests from an in-memory store (`demo/store.ts`), and `demo/tour.ts` drives it through how Erik writes: a brain dump, new versions beside it, refining a few, marking one ready, then asking Draft for a feature of his own and restarting into it. `player.ts` runs the headline, glass cursor, Pause and Replay on the page around the frame.

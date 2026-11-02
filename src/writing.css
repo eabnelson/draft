@@ -308,3 +308,19 @@ html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-c
 .version-tab-bubble,.version-tab-neck,.settings-bubble{-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}
 /* The lines between columns (and between the sidebar and the first column) are thinner places in
    the glass too, drawn by glass.ts, running the full height of the window. */
+
+/* Settings is laid out like writing: sections in the sidebar, each open one a column with a tab. */
+.settings-workspace .inbox-row{cursor:default}
+.settings-workspace .inbox-time{font-variant-numeric:tabular-nums}
+.settings-paper{max-width:640px;margin:0 auto;padding:50px 28px 80px}
+.settings-intro{margin-bottom:22px}
+.settings-intro h1{font-size:24px;font-weight:500;letter-spacing:-.6px;margin:0 0 6px}
+.settings-intro p,.settings-detail{font-size:13px;line-height:1.6;color:var(--muted-foreground);margin:0}
+.settings-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.settings-column .settings-section:first-child,.settings-column .mac-preferences:first-child{margin-top:0;padding-top:0;border-top:0}
+.settings-column .feature-wishlist{margin:0 0 24px}
+.settings-column .feature-column{border-radius:12px}
+.settings-column .update-history{margin-top:24px}
+.settings-column .update-history h2{font-size:13px;font-weight:600;margin:0 0 8px}
+.settings-column .appearance-choices{flex-wrap:wrap}
+.settings-column .appearance-choices button{white-space:nowrap}

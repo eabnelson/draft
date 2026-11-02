@@ -1,5 +1,6 @@
 import {expect,test} from 'bun:test';
-import {DemoStore,TOUR} from '../website/demo/store';
+import {DemoStore,TOUR,GOAL_FEATURE} from '../website/demo/store';
+import type {FeaturesState} from '../desktop/types';
 import {walkthroughLayout,fitWalkthrough} from '../website/layout';
 import {inboxOrder,openVersions,proseWords,IDEA_WORDS,SUMMARY_WORDS,needsSummary,stage} from '../src/model';
 import type {Library} from '../src/client';
@@ -38,4 +39,23 @@ test('the walkthrough window keeps the desktop size and scales to fit',()=>{
   const layout=walkthroughLayout(390,844,true);
   expect(layout).toEqual({id:'desktop',width:1152,height:720});
   expect(fitWalkthrough(576,720,layout)).toEqual({scale:.5,width:576,height:360});
+});
+
+test('the walkthrough asks for a feature, builds it, and restarts into it',async()=>{
+  const store=new DemoStore();store.reset();
+  let state=await store.api('/api/features/queue',{action:'add',request:TOUR.request}) as FeaturesState;
+  expect(state.featureQueue?.map(q=>q.request)).toEqual([TOUR.request]);
+  const update=await store.api('/api/updates/request',{kind:'batch'}) as {id:string;state:string};
+  expect(update.state).toBe('building');
+  await expect(store.api('/api/updates/apply',{id:update.id})).rejects.toThrow('not ready');
+  // The tour decides when the build is done, so pausing it pauses the build.
+  store.finishUpdate();
+  const applied=await store.api('/api/updates/apply',{id:update.id}) as {version:string;restart:boolean};
+  expect(applied.restart).toBe(false);expect(store.hasGoal).toBe(true);
+  await store.api('/api/updates/confirm',{version:applied.version});
+  state=store.features();
+  expect(state.featureQueue).toHaveLength(0);expect(state.updates[0].state).toBe('applied');
+  expect(state.current.features.find(f=>f.id===GOAL_FEATURE)?.origin).toBe('personal');
+  expect((await store.api('/api/health') as {version:string}).version).toBe(applied.version);
+  store.reset();expect(store.hasGoal).toBe(false);
 });

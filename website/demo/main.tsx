@@ -1,7 +1,8 @@
-import React from 'react';
+import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {flushSync} from 'react-dom';
-import {DemoStore} from './store';
+import {createPortal,flushSync} from 'react-dom';
+import {DemoStore,TOUR} from './store';
+import {proseWords} from '../../src/model';
 import {Tour} from './tour';
 import '../../src/studio-theme.css';
 import '../../src/style.css';
@@ -25,7 +26,7 @@ const demoFetch=async(resource:RequestInfo|URL,init?:RequestInit):Promise<Respon
 };
 window.fetch=demoFetch as typeof fetch;
 // The walkthrough is always the light window it shows on the page, whatever the visitor's Mac uses.
-document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light';
+document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light';localStorage.setItem('draft:appearance','light');
 
 // A desktop behind the window and the Mac's window buttons, which are not part of the web app.
 const wallpaper=document.createElement('div');wallpaper.className='demo-wallpaper';
@@ -34,18 +35,38 @@ document.body.prepend(wallpaper);document.body.append(buttons);
 
 const {default:App}=await import('../../src/App');
 const root=createRoot(document.getElementById('root')!);let key=0;
-// Each run starts from the same drafts with nothing remembered from the last one.
-function render(){
+
+// The feature the walkthrough builds: the tab you are in shows your words toward a goal, as one
+// more glass bubble on the end of the tab.
+function WordGoal(){
+  const [target,setTarget]=useState<{pill:Element;words:number}|null>(null);
+  useEffect(()=>{
+    const timer=setInterval(()=>{
+      const column=document.querySelector('.version-column.is-active:not(.settings-column)'),pill=column?.querySelector('.version-tab-pill');
+      setTarget(pill?{pill,words:proseWords(column!.querySelector('.cm-content')?.textContent??'')}:null);
+    },250);
+    return()=>clearInterval(timer);
+  },[]);
+  return target&&createPortal(<><span className="version-tab-neck" aria-hidden="true"/><span className="version-tab-bubble version-tab-meta demo-goal">{target.words} / {TOUR.goal} words</span></>,target.pill);
+}
+
+// A fresh run starts from the same drafts with nothing remembered from the last one; a restart
+// after an update keeps everything and only remounts the app, as Draft would.
+function render(fresh=true){
   // Unmount the last run first: its pending effects would otherwise save its own sidebar state over this reset.
   flushSync(()=>root.render(null));
-  for(const name of ['draft:viewing','draft:expanded','draft:columns','draft:inbox'])localStorage.removeItem(name);
-  localStorage.setItem('draft:expanded',JSON.stringify([store.library.active]));
-  window.draftBoot={library:structuredClone(store.library),version:'demo'};
-  root.render(<React.Fragment key={++key}><App/></React.Fragment>);
+  if(fresh){
+    for(const name of ['draft:viewing','draft:expanded','draft:columns','draft:inbox','draft:settings'])localStorage.removeItem(name);
+    localStorage.setItem('draft:expanded',JSON.stringify([store.library.active]));
+  }
+  window.draftBoot={library:structuredClone(store.library),version:store.version};
+  root.render(<React.Fragment key={++key}><App/>{store.hasGoal&&<WordGoal/>}</React.Fragment>);
 }
 render();
+// Applying an update restarts Draft; here the app remounts with the new feature instead.
+window.addEventListener('draft:restart',event=>{event.preventDefault();setTimeout(()=>render(false),1200);});
 
-const tour=new Tour(()=>{store.reset();render();});
+const tour=new Tour(()=>{store.reset();render();},()=>store.finishUpdate());
 const send=(value:object)=>window.parent.postMessage({channel:'draft-demo',...value},location.origin);
 window.addEventListener('message',event=>{
   if(event.origin!==location.origin||event.source!==window.parent||event.data?.channel!=='draft-demo')return;

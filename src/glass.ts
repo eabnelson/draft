@@ -14,11 +14,13 @@ function maskFor(width:number,height:number):string{
   // The dividers run the full height of the window at each column's left edge (none before the
   // first column while the sidebar is closed).
   const withSidebar=!!document.querySelector('.with-panel');
-  document.querySelectorAll('.version-column').forEach((column,i)=>{
+  // Only the columns on screen: the writing columns are hidden while Settings is open.
+  const columns=[...document.querySelectorAll('.version-column')].map(column=>column.getBoundingClientRect()).filter(r=>r.width>0);
+  columns.forEach((r,i)=>{
     if(i===0&&!withSidebar)return;
-    const r=column.getBoundingClientRect();
     shapes.push(`<rect x="${n(r.left)}" y="0" width="${DIVIDER_WIDTH}" height="${height}" fill="${grey(DIVIDER)}"/>`);
   });
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`+
     `<defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#fff"/>${shapes.join('')}</mask></defs>`+
     `<rect width="${width}" height="${height}" fill="#000" mask="url(#m)"/></svg>`;

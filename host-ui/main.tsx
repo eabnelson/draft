@@ -9,6 +9,6 @@ import '../src/writing.css';
 function UpdateWindow(){
  const [updating,setUpdating]=useState(false);
  useEffect(()=>{const close=()=>void api('/api/close/ready',{});const failed=()=>setUpdating(false);window.addEventListener('draft:save-and-close',close);window.addEventListener('draft:update-failed',failed);return()=>{window.removeEventListener('draft:save-and-close',close);window.removeEventListener('draft:update-failed',failed);};},[]);
- return <div className="app"><main className="features-scroll"><Features onBack={()=>location.assign('/')} onBeforeApply={async()=>true} onUpdating={setUpdating}/></main>{updating&&<div className="restart-overlay" role="status">Restarting Draft…</div>}</div>;
+ return <><div className="glass-fill" aria-hidden="true"/><div className="app with-panel"><Features onBeforeApply={async()=>true} onUpdating={setUpdating}/>{updating&&<div className="restart-overlay" role="status">Restarting Draft…</div>}</div></>;
 }
 createRoot(document.getElementById('root')!).render(<UpdateWindow/>);
