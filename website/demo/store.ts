@@ -18,7 +18,7 @@ function draft(text:string,minutes:number,shape:(d:Draft)=>Draft=d=>d):Draft{
 // What the tour types, and what the stand-in AI answers once there is enough of it. The
 // walkthrough is Erik showing how he writes: a brain dump, then new versions, refining a few.
 export const TOUR={
-  dump:"hi, I'm Erik. this is how I like to write. I start with a brain dump: every thought, out of order, no fixing typos or worrying if it's any good. half sentences are fine, it just needs to get out of my head. once it's down I make new versions and shape them side by side until one feels right.",
+  dump:"hi, I'm Erik\n\nthis is how I like to write. I start with a brain dump: every thought, out of order, no fixing typos or worrying if it's any good. half sentences are fine, it just needs to get out of my head. once it's down I make new versions and shape them side by side until one feels right.",
   clean:"Hi, I'm Erik. I start every post with a brain dump, then shape it into new versions side by side.",
   cleanName:'Clean',
   short:'Brain dump first. Versions second.',
@@ -27,22 +27,22 @@ export const TOUR={
   shortMore:' Post the best one.',
   request:'Show a daily word goal in my tabs',
   goal:300,
-  title:'How I write: brain dump, then versions',
+  title:'How I write',
   summary:"Erik's process: dump every thought first, then shape new versions side by side until one is ready to post.",
 };
 
 export function seedLibrary():Library{
   const tiny=draft('Tiny software is having a moment. The apps I open every day do one thing, and they do it well.\n\nBig platforms try to be everything. Small apps get to be good.',95,d=>{
     const second=addVersion(d,d.versions[0].id);
-    const named=renameVersion(editVersion(second.draft,second.version.id,'Small apps get to be good. Big platforms have to be everything.'),second.version.id,'Punchier');
-    return setSummary({...named,title:'The case for tiny software',titleSource:'ai'},'Why single-purpose apps feel better to use than all-in-one platforms.',40);
+    const named=renameVersion(renameVersion(editVersion(second.draft,second.version.id,'Small apps get to be good. Big platforms have to be everything.'),second.version.id,'Punchier'),d.versions[0].id,'First');
+    return setSummary({...named,title:'Tiny software',titleSource:'ai'},'Why single-purpose apps feel better to use than all-in-one platforms.',40);
   });
   const shipping=draft('I shipped 50 updates in 50 days. Here is what actually mattered.\n\nNobody noticed the polish. Everybody noticed when something was fast.',60*26,d=>({
-    ...setSummary({...d,title:'50 updates in 50 days',titleSource:'ai'},'Lessons from shipping daily: speed gets noticed, polish mostly does not.',30),
+    ...setSummary({...d,title:'Shipping daily',titleSource:'ai'},'Lessons from shipping daily: speed gets noticed, polish mostly does not.',30),
     publications:[{id:crypto.randomUUID(),platform:'x',url:'https://x.com/',versionId:d.versions[0].id,publishedAt:ago(60*25),text:latest(d).text}],
   }));
-  const publicNotes=draft('Writing in public is mostly about showing up. The first hundred posts are practice.',60*52,d=>chooseStage({...d,title:'Notes on writing in public',titleSource:'manual'},'ready'));
-  const pages=draft('Morning pages, but for product ideas.',60*80);
+  const publicNotes=draft('Writing in public is mostly about showing up. The first hundred posts are practice.',60*52,d=>chooseStage({...d,title:'Writing in public',titleSource:'manual'},'ready'));
+  const pages=draft('Morning pages, but for product ideas.',60*80,d=>({...d,title:'Morning pages',titleSource:'manual'}));
   const drafts=[tiny,shipping,publicNotes,pages];
   return {active:tiny.id,drafts,archived:0};
 }
