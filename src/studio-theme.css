@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
-/* Opt in to dark styling via a .dark ancestor rather than the OS preference.
-   Studio Four ships only a light theme, so following prefers-color-scheme fired
-   shadcn's dark: utilities with no dark theme behind them. */
+/* Dark styling applies under a .dark ancestor. Draft sets it on <html> from the
+   light, dark or system choice at the bottom of the sidebar. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
@@ -42,6 +41,20 @@
   --input-emphasis: color-mix(in oklch, var(--input), var(--foreground) 5%);
   --ring: oklch(0.708 0 0);
   --radius: 0.5rem;
+}
+.dark {
+  --background: oklch(0.185 0 0);
+  --foreground: oklch(0.93 0 0);
+  --primary: oklch(0.9 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.26 0 0);
+  --secondary-foreground: oklch(0.93 0 0);
+  --muted: oklch(0.26 0 0);
+  --muted-foreground: oklch(0.68 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
 }
 
 @layer base {

@@ -1,0 +1,68 @@
+/* Dark appearance. The theme variables switch in studio-theme.css; these cover the
+   surfaces that use fixed light colors. */
+:root.dark{--canvas:#161616;--surface:#1c1c1c;--raised:#262626;--text:#ececec;--line:#303030}
+.dark ::selection{background:#3d3d3d}
+
+/* Writing */
+.dark .editor-host .cm-editor{color:#d8d8d8}
+.dark .editor-host .cm-selectionBackground{background:#3d3d3d!important}
+.dark .editor-host .cm-placeholder{color:#666}
+.dark .md-code,.dark .md-code-block{background:#272727}
+.dark .md-quote{color:#8e8e8e}
+.dark .md-image.is-missing{border-color:#3a3a3a}
+.dark .spelling-word{text-decoration-color:#e06666}
+.dark .version-columns,.dark .version-scroll,.dark .inbox-list,.dark .features-scroll,.dark .panel-scroll{scrollbar-color:#3a3a3a transparent}
+
+/* Version tabs: the one you are in is the brightest */
+.dark .version-column{--glass:rgba(29,29,29,.94)}
+.dark .version-column:not(.is-active):has(.version-tab-pill:hover){--glass:rgba(33,33,33,.95)}
+.dark .version-column.is-active{--glass:rgba(38,38,38,.96)}
+.dark .settings-bubble{background:rgba(38,38,38,.94)}
+.dark .settings-bubble:hover,.dark .settings-bubble.is-open{background:rgba(48,48,48,.92)}
+
+/* Sidebar */
+.dark .inbox-rename{border-color:#444}
+.dark .inbox-live{color:#7cc597}
+.dark .stage-chip.stage-idea,.dark .stage-pill.stage-idea{background:#2a2a2a;color:#a8a8a8}
+.dark .stage-chip.stage-drafting,.dark .stage-pill.stage-drafting{background:#1e2a3d;color:#9dbbea}
+.dark .stage-chip.stage-ready,.dark .stage-pill.stage-ready{background:#3a2d16;color:#e8c27a}
+.dark .stage-chip.stage-live,.dark .stage-pill.stage-live{background:#1b3324;color:#8fd3a8}
+.dark .stage-menu button:hover .stage-pill,.dark .stage-menu button:focus-visible .stage-pill,.dark .inbox-row [data-stage-chip]:hover{box-shadow:0 0 0 2px #ffffff1f}
+.dark .update-badge{background:#ff7a45}
+
+/* Menus, popovers and dialogs */
+.dark .context-menu,.dark .text-menu{background:color-mix(in srgb,#1f1f1f 96%,transparent);border-color:#363636;color:#e0e0e0;box-shadow:0 8px 30px #0008}
+.dark .context-menu button:hover:not(:disabled),.dark .context-menu button:focus-visible{background:#2c2c2c}
+.dark .context-menu.stage-menu button:hover:not(:disabled),.dark .context-menu.stage-menu button:focus-visible{background:none}
+.dark .context-menu button.is-danger{color:#f08a80}
+.dark .format-row [data-slot=button]{color:#cfcfcf}
+.dark .block-formats{border-top-color:#2e2e2e}
+.dark .link-entry input{border-color:#3a3a3a;background:#181818}
+.dark .cm-tooltip:has(.link-tooltip){border-color:#363636;box-shadow:0 6px 24px #0006}
+.dark .link-tooltip button{color:#aaa}
+.dark .toast{box-shadow:0 8px 28px #00000066}
+.dark .modal{box-shadow:0 20px 80px #00000080}
+.dark .modal-backdrop{background:#000a}
+
+/* Images */
+.dark .image-stage{background:#202020}
+.dark .md-image:hover img{box-shadow:0 0 0 2px #ffffff33,0 8px 28px #0006}
+
+/* Messages */
+.dark .save-error,.dark .inline-error{background:#2a1717;border-color:#4a2626;color:#f0a5a5}
+.dark .text-menu p,.dark .image-error{color:#f0a5a5}
+
+/* Preferences */
+.dark .update-card{background:#1f1f1f;border-color:#3a3a3a}
+.dark .feature-wishlist li{border-bottom-color:#2a2a2a}
+.dark .feature-wishlist input,.dark .mac-preferences input{accent-color:#ccc}
+.dark .restart-overlay{background:rgba(20,20,20,.96);color:#aaa}
+
+/* Settings → Appearance: light, dark or match your Mac */
+.appearance-choices{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:var(--secondary)}
+.appearance-choices button{display:flex;align-items:center;gap:7px;height:30px;padding:0 13px;border:0;border-radius:8px;background:none;color:var(--muted-foreground);font:inherit;font-size:12.5px;cursor:pointer}
+.appearance-choices button:hover{color:var(--foreground)}
+.appearance-choices button[aria-checked=true]{background:var(--background);color:var(--foreground);box-shadow:0 1px 2px #0000001f}
+.dark .appearance-choices button[aria-checked=true]{background:#3a3a3a;box-shadow:none}
+.appearance-choices button:focus-visible{outline:2px solid var(--ring);outline-offset:1px}
+.dark .toast{background:#262626;color:#e6e6e6;border-color:#363636}

@@ -1,15 +1,13 @@
 import {join,resolve,extname} from 'node:path';
 import {homedir} from 'node:os';
-import {readFile,mkdir} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
-import {DocumentStore} from './documents';
-import {ImageStore,MAX_IMAGE_BYTES} from './images';
+import {DraftStore,MAX_MEDIA_BYTES} from './documents';
+import {copyImageFile} from './images';
 import {Updates} from './updates';
 import {writingSchema} from './writing';
 import {NativeSpelling,spellingExecutable} from './spelling';
 import {openExternalLink} from './links';
-import {within,exists,atomicWrite} from './files';
-import {cleanText,parseDraft} from '../src/model';
+import {within,exists,readJSON,atomicWrite} from './files';
 import {plainText} from '../src/markdown';
 import type {AgentSelection,UpdateKind} from './types';
 
@@ -20,13 +18,18 @@ const template=resolve(process.env.DRAFT_TEMPLATE_ROOT??(dev?runtime:join(runtim
 const dependencies=join(runtime,'node_modules');
 const session=process.env.DRAFT_SESSION_TOKEN;
 if(!dev&&!session)throw Error('Start Draft through the desktop app.');
-const documents=new DocumentStore(join(root,'Documents'));
-const images=new ImageStore(join(root,'Documents','images'));
+// Draft 1 documents in Documents/ migrate once and stay there as the recovery copy.
+const documents=new DraftStore(join(root,'Drafts'),join(root,'Documents'));
 const spelling=new NativeSpelling(spellingExecutable(runtime));
 const testHost=process.env.DRAFT_BUNDLE_ID?.endsWith('.update-check')===true;
 const updates=new Updates(root,template,dependencies,process.execPath,{appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID,hostVersion:process.env.DRAFT_HOST_VERSION,...(testHost?{feed:process.env.DRAFT_UPDATE_FEED,allowLocal:true}:{} )});
 await updates.initialize();
 if(!dev)updates.startAutomaticChecks();
+// Mac preferences the native shell reads from /api/health.
+type Preferences={menuBarIcon:boolean;openAtLogin:boolean};
+const preferencesPath=join(root,'preferences.json');
+let preferences:Preferences={menuBarIcon:true,openAtLogin:true};
+try{preferences={...preferences,...await readJSON<Partial<Preferences>>(preferencesPath)};}catch{}
 let recoveryCounter=0,closeReady=false,restartRequested=false;let activeRuntime:{id:string;handler:((request:Request)=>Promise<Response|null>)|null}|undefined;
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 function authorized(request:Request){if(dev)return true;const cookie=request.headers.get('cookie')??'';return cookie.split(';').some(s=>s.trim()===`draft_session=${session}`)||request.headers.get('authorization')===`Bearer ${session}`;}
@@ -40,12 +43,13 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
     if(!authorized(request))return new Response('Open Draft through its desktop app.',{status:401});
     const requestOrigin=request.headers.get('origin');
     if(requestOrigin&&requestOrigin!==origin)return new Response('Forbidden',{status:403});
-    if(url.pathname.startsWith('/api/images/')&&request.method==='GET')return images.response(url.pathname);
+    const media=/^\/api\/drafts\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,150})\/media(?:\/([^/]+))?$/.exec(url.pathname);
+    if(media?.[2]&&request.method==='GET')return documents.mediaResponse(media[1],media[2]);
     // Image types are not CORS-safelisted, so cross-site pages cannot send this without a preflight.
-    if(url.pathname==='/api/images'&&request.method==='POST'){
+    if(media&&!media[2]&&request.method==='POST'){
       if(!/^image\/(png|jpeg|webp|gif)$/.test(request.headers.get('content-type')??''))return json({error:'Paste a PNG, JPEG, WebP or GIF image.'},415);
-      if(Number(request.headers.get('content-length')??0)>MAX_IMAGE_BYTES)return json({error:'Images must be smaller than 25 MB.'},413);
-      try{return json(await images.save(new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')!));}
+      if(Number(request.headers.get('content-length')??0)>MAX_MEDIA_BYTES)return json({error:'Images must be smaller than 25 MB.'},413);
+      try{return json(await documents.saveMedia(media[1],new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')!));}
       catch(error){return json({error:error instanceof Error?error.message:'This image could not be added.'},400);}
     }
     if(url.pathname.startsWith('/api/')){
@@ -61,10 +65,21 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
           return json(await spelling.request({word:input.word}));
         }
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
-        if(url.pathname==='/api/library'&&request.method==='POST'){await documents.save(input);return json({saved:true});}
-        if(url.pathname==='/api/images/copy'&&request.method==='POST'){await images.copy(String(input.src??''));return json({copied:true});}
+        if(url.pathname==='/api/drafts/save'&&request.method==='POST'){await documents.save(input.draft);return json({saved:true});}
+        if(url.pathname==='/api/drafts/active'&&request.method==='POST'){await documents.setActive(String(input.id??''));return json({saved:true});}
+        if(url.pathname==='/api/drafts/archive'&&request.method==='POST'){await documents.archive(String(input.id??''));return json({archived:true});}
+        if(url.pathname==='/api/drafts/delete'&&request.method==='POST'){await documents.delete(String(input.id??''));return json({deleted:true});}
+        if(url.pathname==='/api/drafts/restore'&&request.method==='POST')return json({draft:await documents.restoreLast()});
+        if(url.pathname==='/api/drafts/history/load'&&request.method==='POST')return json({history:await documents.history(String(input.id??''),String(input.versionId??''))});
+        if(url.pathname==='/api/drafts/history'&&request.method==='POST'){await documents.saveHistory(String(input.id??''),String(input.versionId??''),input.history);return json({saved:true});}
+        if(url.pathname==='/api/images/copy'&&request.method==='POST'){await copyImageFile(documents.mediaPath(String(input.id??''),String(input.src??'').replace(/^media\//,'')));return json({copied:true});}
         if(url.pathname==='/api/features'&&request.method==='GET')return json(updates.view());
-        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested,...(restartRequested?{nativeInstallPlan:updates.state.nativeInstallPlan}:{})});
+        if(url.pathname==='/api/preferences'&&request.method==='GET')return json(preferences);
+        if(url.pathname==='/api/preferences'&&request.method==='POST'){
+          for(const key of ['menuBarIcon','openAtLogin'] as const)if(typeof input[key]==='boolean')preferences[key]=input[key];
+          await atomicWrite(preferencesPath,JSON.stringify(preferences,null,2)+'\n');return json(preferences);
+        }
+        if(url.pathname==='/api/health')return json({version:updates.active.id,recoveryCounter,closeReady,restartRequested,preferences,...(restartRequested?{nativeInstallPlan:updates.state.nativeInstallPlan}:{})});
         if(url.pathname==='/api/links/open'&&request.method==='POST'){await openExternalLink(input.url);return json({opened:true});}
         if(url.pathname==='/api/close/ready'&&request.method==='POST'){closeReady=true;return json({ready:true});}
         if(url.pathname==='/api/close/reset'&&request.method==='POST'){closeReady=false;return json({ready:false});}
@@ -92,15 +107,11 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
           if(!path)throw Error('Unknown folder.');spawn('/usr/bin/open',[path],{stdio:'ignore'}).unref();return json({opened:true});
         }
         if(url.pathname==='/api/external'&&request.method==='POST'){
-          const addresses={claude:'https://claude.com/product/claude-code',codex:'https://developers.openai.com/codex/cli',source:'https://github.com/eabnelson/draft',video:'https://x.com/jasonfried/status/2105403067793584590'};
+          const addresses={claude:'https://claude.com/product/claude-code',codex:'https://developers.openai.com/codex/cli',source:'https://github.com/eabnelson/draft'};
           const address=addresses[input.kind as keyof typeof addresses];if(!address)throw Error('Unknown link.');spawn('/usr/bin/open',[address],{stdio:'ignore'}).unref();return json({opened:true});
         }
         if(url.pathname==='/api/export'&&request.method==='POST'){
-          const draft=parseDraft(JSON.stringify(input.draft)),kind=input.kind;
-          if(!['native','txt','md'].includes(kind))throw Error('Unknown export format.');
-          const folder=join(root,'Exports');await mkdir(folder,{recursive:true});const stem=draft.title.replace(/[^a-z0-9-_ ]/gi,'').replace(/\s+/g,'-').toLowerCase()||'untitled';
-          const path=join(folder,`${stem}-${Date.now()}.${kind==='native'?'draft.json':kind}`);
-          await atomicWrite(path,kind==='native'?JSON.stringify(draft,null,2):kind==='txt'?plainText(cleanText(draft)):cleanText(draft));spawn('/usr/bin/open',['-R',path],{stdio:'ignore'}).unref();return json({path});
+          const path=await documents.export(String(input.id??''),join(root,'Exports'),plainText);spawn('/usr/bin/open',['-R',path],{stdio:'ignore'}).unref();return json({path});
         }
         if(url.pathname.startsWith('/api/custom/')){
           if(activeRuntime?.id!==updates.active.id){const path=join(updates.active.dist,'runtime.js');activeRuntime={id:updates.active.id,handler:await exists(path)?(await import(path+`?version=${updates.active.id}`)).handleRequest:null};}
@@ -117,7 +128,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
     if(!await exists(path))return new Response('Not found',{status:404});
     if(decoded==='/')closeReady=false;
     const html=extname(path)==='.html';
-    return new Response(html?(await Bun.file(path).text()).replace('</head>','<script src="/host-updates.js" defer></script></head>'):Bun.file(path),{headers:{...(html?{'Content-Type':'text/html; charset=utf-8'}:{}),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}});
+    return new Response(html?(await Bun.file(path).text()).replace('</head>','<script src="/host-updates.js" defer></script></head>'):Bun.file(path),{headers:{...(html?{'Content-Type':'text/html; charset=utf-8'}:{}),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' draft-native:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}});
   }
 });
 setInterval(()=>{void updates.recoverIfNeeded().then(recovered=>{if(recovered)recoveryCounter++;});},2000).unref();

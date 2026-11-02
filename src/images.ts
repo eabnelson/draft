@@ -46,8 +46,10 @@ export function outputSize(crop:Size,shape:ImageShape|undefined,limit=4096):Size
   return {width:Math.max(1,Math.round(crop.width*scale)),height:Math.max(1,Math.round(crop.height*scale))};
 }
 
-export const IMAGE_SOURCE=/^\/api\/images\/[a-f0-9]{32}\.(?:png|jpg|webp|gif)$/;
-export const safeImageSource=(src:string)=>IMAGE_SOURCE.test(src)||/^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(src);
+// Images live in the draft's own media folder and are referenced relative to the draft.
+export const IMAGE_SOURCE=/^media\/[a-f0-9]{32}\.(?:png|jpg|webp|gif)$/;
+export const safeImageSource=(src:string)=>IMAGE_SOURCE.test(src);
+export const mediaURL=(draftId:string,src:string)=>`/api/drafts/${encodeURIComponent(draftId)}/${src}`;
 // A cropped image remembers its untouched original in the Markdown title, so it can be re-cropped.
 export type ImageCrop={original:string;shape:string;framing:Framing};
 export type DraftImage={from:number;to:number;markdown:string;alt:string;src:string;crop?:ImageCrop};
@@ -75,7 +77,7 @@ export function parseImages(text:string):DraftImage[] {
 export const imageAt=(text:string,pos:number)=>parseImages(text).find(image=>image.from<=pos&&pos<=image.to);
 // The panel follows its image by content, which survives typing elsewhere in the draft.
 export const findImage=(text:string,markdown:string)=>parseImages(text).find(image=>image.markdown===markdown);
-// Images sit on their own paragraph so they never split a word or a marked passage.
+// Images sit on their own paragraph so they never split a word.
 export function imageInsertion(text:string,at:Span,markdown:string):Span&{insert:string;cursor:number} {
   const before=text.slice(0,at.from),after=text.slice(at.to);
   const lead=!before?'':before.endsWith('\n\n')?'':before.endsWith('\n')?'\n':'\n\n';

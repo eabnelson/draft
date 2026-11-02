@@ -1,7 +1,7 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Copy,X,LoaderCircle,Minus,Plus,Undo2,Check} from 'lucide-react';
 import {Button} from './components/ui/button';
-import {IMAGE_SHAPES,ORIGINAL_SHAPE,MAX_ZOOM,shapeById,cropFor,centered,clampFraming,panFraming,outputSize,renderCrop,type Framing,type Size,type DraftImage,type ImageCrop} from './images';
+import {IMAGE_SHAPES,ORIGINAL_SHAPE,MAX_ZOOM,shapeById,cropFor,centered,clampFraming,panFraming,outputSize,renderCrop,type Framing,type Size,type DraftImage,type ImageCrop,mediaURL} from './images';
 
 type MenuProps={x:number;y:number;onCopy:()=>void;onClose:(restoreFocus?:boolean)=>void};
 export function ImageMenu({x,y,onCopy,onClose}:MenuProps){
@@ -18,9 +18,9 @@ export function ImageMenu({x,y,onCopy,onClose}:MenuProps){
   </div>;
 }
 
-type Props={image:DraftImage;onApply:(image:Blob,crop:ImageCrop)=>Promise<void>;onReset:()=>void;onCopy:(image:string|Promise<Blob>)=>void;onClose:()=>void};
-export function ImagePanel({image,onApply,onReset,onCopy,onClose}:Props){
-  const original=image.crop?.original??image.src;
+type Props={draftId:string;image:DraftImage;onApply:(image:Blob,crop:ImageCrop)=>Promise<void>;onReset:()=>void;onCopy:(image:string|Promise<Blob>)=>void;onClose:()=>void};
+export function ImagePanel({draftId,image,onApply,onReset,onCopy,onClose}:Props){
+  const source=image.crop?.original??image.src,original=mediaURL(draftId,source);
   const [picture,setPicture]=useState<{element:HTMLImageElement;size:Size}|null>(null);
   const [shapeId,setShapeId]=useState(image.crop?.shape??ORIGINAL_SHAPE),[framing,setFraming]=useState<Framing|null>(image.crop?.framing??null);
   const [stage,setStage]=useState<Size>({width:0,height:0}),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -55,13 +55,13 @@ export function ImagePanel({image,onApply,onReset,onCopy,onClose}:Props){
   function nudge(dx:number,dy:number){if(size&&framing&&frame.width)setFraming(panFraming(size,aspect,framing,dx,dy,frame.width));}
   function result():Promise<Blob>{
     if(!picture||!crop)return Promise.reject(Error('The image is still loading.'));
-    return renderCrop(picture.element,crop,outputSize(crop,shape),/^data:image\/jpeg|\.jpg$/.test(original)?'image/jpeg':'image/png');
+    return renderCrop(picture.element,crop,outputSize(crop,shape),/\.jpg$/.test(source)?'image/jpeg':'image/png');
   }
   async function apply(){
     if(busy||!crop||!framing||unchanged)return;
     if(uncropped){onReset();return;}
     setBusy(true);setError('');
-    try{await onApply(await result(),{original,shape:shapeId,framing});}
+    try{await onApply(await result(),{original:source,shape:shapeId,framing});}
     catch(e){setError(e instanceof Error?e.message:'This crop could not be applied.');setBusy(false);}
   }
   const shapes=[{id:ORIGINAL_SHAPE,label:'Original',detail:size?`${size.width} × ${size.height}`:'As pasted',aspect:size?size.width/size.height:1},...IMAGE_SHAPES.map(s=>({id:s.id,label:s.label,detail:`${s.ratio} · ${s.width} × ${s.height}`,aspect:s.width/s.height}))];

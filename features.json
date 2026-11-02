@@ -1,20 +1,17 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.2.0-alpha.20",
+  "appVersion": "0.3.0-alpha.50",
   "name": "Draft",
   "features": [
     {
       "id": "writing",
       "title": "Writing & revision",
-      "description": "Write in Markdown, format text, and check spelling as you type.",
-      "updatedAt": "2026-10-27T14:08:11.251870+00:00",
+      "description": "Write in Markdown, format text, check spelling, and undo or redo each version separately, even after restarting.",
+      "updatedAt": "2026-10-31T22:30:00Z",
       "origin": "official",
       "state": "active",
       "code": [
         "src/Editor.tsx",
-        "src/model.ts",
-        "src/App.tsx",
-        "src/WritingPanels.tsx",
         "src/markdown.ts",
         "src/editor-markdown.ts",
         "src/TextMenu.tsx",
@@ -29,64 +26,44 @@
       ]
     },
     {
-      "id": "alternatives",
-      "title": "Alternate wording",
-      "description": "Compare wordings in place, with a sound when you return to the original.",
-      "updatedAt": "2026-10-27T14:08:11.252036+00:00",
+      "id": "documents",
+      "title": "Drafts",
+      "description": "Every draft is its own file on your Mac with all its versions and media. Titles come from the first sentence, or your AI once there is enough text. Export any draft as a folder.",
+      "updatedAt": "2026-10-31T22:30:00Z",
       "origin": "official",
       "state": "active",
       "code": [
         "src/model.ts",
+        "desktop/documents.ts",
+        "desktop/server.ts",
         "src/App.tsx",
-        "src/WritingPanels.tsx",
-        "src/Editor.tsx",
-        "src/comparison-sound.ts",
-        "src/writing.css",
-        "src/markdown.ts",
-        "src/ProviderMark.tsx",
-        "src/assets/claude.svg",
-        "src/assets/chatgpt.svg"
+        "src/writing-assistance.ts",
+        "desktop/writing.ts"
       ]
     },
     {
-      "id": "ghosts",
-      "title": "Set aside & revive",
-      "description": "Fade uncertain passages and revive them in place.",
-      "updatedAt": "2026-10-26T17:04:28Z",
+      "id": "inbox",
+      "title": "Inbox & progress",
+      "description": "See every draft with when you last edited it, how many versions it has, and whether it is an idea, drafting, ready, or live. Press ⌘N for a new draft.",
+      "updatedAt": "2026-10-31T22:30:00Z",
+      "createdAt": "2026-10-31T22:30:00Z",
       "origin": "official",
       "state": "active",
+      "dependsOn": [
+        "documents"
+      ],
       "code": [
-        "src/model.ts",
-        "src/App.tsx"
-      ]
-    },
-    {
-      "id": "overflow",
-      "title": "Overflow",
-      "description": "Keep Markdown notes and spare writing beside your draft.",
-      "updatedAt": "2026-10-27T14:08:11.252039+00:00",
-      "origin": "official",
-      "state": "active",
-      "code": [
-        "src/model.ts",
+        "src/Inbox.tsx",
         "src/App.tsx",
-        "src/WritingPanels.tsx",
-        "src/markdown.ts",
-        "src/Editor.tsx",
-        "src/editor-markdown.ts",
-        "src/TextMenu.tsx",
-        "src/links.ts",
-        "src/editor-links.ts",
-        "src/writing.css",
-        "desktop/links.ts",
-        "src/client.ts"
+        "src/model.ts",
+        "src/writing.css"
       ]
     },
     {
       "id": "images",
       "title": "Images for social",
-      "description": "Paste images into your writing as they are, then click one to crop it for Instagram, TikTok, or YouTube and copy it back.",
-      "updatedAt": "2026-10-29T17:30:00Z",
+      "description": "Paste images into a draft as they are, then click one to crop it for Instagram, TikTok, or YouTube and copy it back. Images are stored inside the draft.",
+      "updatedAt": "2026-10-31T22:30:00Z",
       "origin": "official",
       "state": "active",
       "dependsOn": [
@@ -99,40 +76,10 @@
         "src/editor-markdown.ts",
         "src/App.tsx",
         "src/client.ts",
-        "src/markdown.ts",
         "src/writing.css",
         "desktop/images.ts",
-        "desktop/server.ts"
-      ]
-    },
-    {
-      "id": "documents",
-      "title": "Local documents",
-      "description": "Save, reopen, and export writing as files on your Mac.",
-      "updatedAt": "2026-10-26T17:04:28Z",
-      "origin": "official",
-      "state": "active",
-      "code": [
         "desktop/documents.ts",
-        "src/App.tsx"
-      ]
-    },
-    {
-      "id": "assistance",
-      "title": "Writing assistance",
-      "description": "Ask for ideas with ??, preview cuts, and review writing with your connected agent.",
-      "updatedAt": "2026-10-27T14:08:11.252040+00:00",
-      "origin": "official",
-      "state": "active",
-      "code": [
-        "desktop/agents.ts",
-        "src/App.tsx",
-        "src/WritingPanels.tsx",
-        "src/model.ts",
-        "src/writing.css",
-        "src/ProviderMark.tsx",
-        "src/assets/claude.svg",
-        "src/assets/chatgpt.svg"
+        "desktop/server.ts"
       ]
     },
     {

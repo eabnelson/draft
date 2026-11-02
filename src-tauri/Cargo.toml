@@ -1,6 +1,6 @@
 [package]
 name = "draft-desktop"
-version = "0.2.0-alpha.20"
+version = "0.3.0-alpha.50"
 description = "A local writing app you can make your own"
 authors = ["Erik Nelson"]
 license = "MIT"
@@ -10,8 +10,10 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.12", features = [] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 libc = "0.2"

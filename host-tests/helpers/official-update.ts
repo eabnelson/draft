@@ -5,8 +5,8 @@ import {generateKeyPairSync,sign,createHash} from 'node:crypto';
 import {Updates,type AgentConnection} from '../../desktop/updates';
 import {atomicWrite,sourceHash,copySource} from '../../desktop/files';
 import {sourceFiles} from '../../desktop/official-merge';
-import {DocumentStore} from '../../desktop/documents';
-import {fresh} from '../../src/model';
+import {DraftStore} from '../../desktop/documents';
+import {fresh,editVersion} from '../../src/model';
 import type {Catalog,Version} from '../../desktop/types';
 
 export async function officialFixture(options:{conflict?:boolean;agent?:AgentConnection['run'];login?:AgentConnection['login'];noModel?:boolean}={}){
@@ -45,7 +45,7 @@ export async function officialFixture(options:{conflict?:boolean;agent?:AgentCon
  await atomicWrite(join(customSource,'src/main.ts'),'import {writing} from "./writing";\ndocument.querySelector("#app")!.textContent=writing;\nimport {appearance} from "./appearance";document.body.dataset.appearance=appearance;\n');
  for(const [name,text] of [['appearance','import {appearance} from "../src/appearance";test("personal dark appearance remains",()=>expect(appearance).toBe("dark"));'],['reading','import {minutes} from "../src/reading";test("personal reading time remains",()=>expect(minutes).toBe(3));']])await atomicWrite(join(customSource,`tests/${name}.test.ts`),'import {test,expect} from "bun:test";'+text);
  const version:Version={...host.active,id:'personal-start',source:customSource,dist:customDist,catalog:personal,sourceHash:await sourceHash(customSource),artifactHash:await sourceHash(customDist),parentId:host.active.id,hostVersion:'1.1.0'};host.state.versions.push(version);host.state.activeVersion=version.id;
- const docs=new DocumentStore(join(data,'Documents'));const draft={...fresh(),text:'My writing stays on this Mac.'};await docs.save({active:draft.id,drafts:[draft]});
+ const docs=new DraftStore(join(data,'Drafts'));const draft=fresh();await docs.save(editVersion(draft,draft.versions[0].id,'My writing stays on this Mac.'));
  return {root,host,docs,template,incoming,data,server,async close(){host.stopAutomaticChecks();server.stop(true);await rm(root,{recursive:true,force:true});}};
 }
 

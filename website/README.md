@@ -1,35 +1,12 @@
 # Draft website
 
-The landing page and looping app walkthrough live here in the Draft repository.
-
-The public site is https://draft.studiofour.io/. GitHub Pages serves the build from `main`; the repository's Pages settings hold the custom domain. Cloudflare routes only the `draft` subdomain with a DNS-only CNAME to `eabnelson.github.io`.
+The landing page for https://draft.studiofour.io/. GitHub Pages serves the build from `main`; the repository's Pages settings hold the custom domain. Cloudflare routes only the `draft` subdomain with a DNS-only CNAME to `eabnelson.github.io`.
 
 ```sh
 bun install --frozen-lockfile
 bun run website:dev
 ```
 
-Open http://127.0.0.1:4320/. `bun run website:build` produces the static site in `website/dist/`, ready for any static host. No hosting account or service is required.
+Open http://127.0.0.1:4320/. `bun run website:build` produces the static site in `website/dist/` and points the download button at the latest published Mac release.
 
-The iframe runs the real Draft editor and Features components with an in-memory transport. Writing, alternatives, set aside, overflow, the feature list, export, reading time, and focus mode work in the browser. AI generation and the wait for an update are simulated and sped up. Only the two demonstrated custom features can be activated in this demo; the Mac app uses the person's real agent to build arbitrary requests. No visitor account is detected and no personal writing is stored or transmitted.
-
-The tour is watch-only, with Play/Pause and Replay controls. Reduced-motion preferences start it paused. Demo-only labels and instructions are omitted from the page and app preview. After each complete run, the tour returns to “Your writing. Your app.” with the writing and notes intact for five seconds before starting a fresh loop. Replay also starts fresh. Third-party license notices are included in the built output.
-
-The brief writing introduction shows Markdown, comparing “paperclip” with “eraser” using the arrow keys, and keeping spare writing in overflow. The rest of the story centers on making the app your own: type two feature requests in Preferences, stack them in a list, download one update, restart, and use the new reading-time and focus features. It then shows the custom features beside official Draft, returns to official Draft through another prepared update and restart, and shows that the writing and overflow notes stayed intact. Both updates use the shared app controls. The tour also verifies that the complete document library survives both updates.
-
-One centered dot per wording and the current selection remain visible. The circular glass cursor stays beside the wording, and the sidebar uses the app’s plain icons. Preferences shares the Mac app’s full-width scrolling layout and latest components, including the corrected text carets.
-
-The walkthrough scales its entire app canvas uniformly into the available width and height. Wide windows use a 1152 × 720 desktop layout. Narrow windows and smaller touch browsers use a 430 × 780 portrait layout, or an 800 × 480 compact landscape layout. Writing tools become a bottom panel and personal features appear above official features in the compact layouts. Resizing within a layout preserves playback; crossing layouts restarts the walkthrough while keeping Play/Pause state. The page, heading, controls, and source links fit within the viewport; content scrolls gently inside the app where needed. A circular glass cursor moves between targets and pulses on clicks, with a step-specific heading and time to read each result. Input fields have no focus or attention rings in the walkthrough. The draft and request fields share the same typing style and blinking caret, with a faster opening draft; the glass pointer steps aside while text is entered. Pause freezes the cursor, tour timing, and simulated download; Replay starts a fresh loop. Reduced-motion playback skips cursor travel and fades.
-
-
-## Link previews
-
-The page advertises a centered 1200 × 630 Draft poster and a silent six-second H.264 video cycling through “Draft”, “your writing”, and “your app”. All descriptions use “your writing your app”. Open Graph video metadata and an X player card point to the video and responsive `share/` player, with the still poster as the image preview. The receiving service controls whether it shows or plays video; publishing metadata does not verify a card inside X.
-
-The rendered assets are checked in, so normal website builds need no media tools. To regenerate them, install Pillow and FFmpeg, then run `python3 website/render-social.py`. The default uses the installed Helvetica Neue Medium face on macOS; use `--font` and `--font-index` for another installed font. Font files are not redistributed.
-
-## Check live resizing
-
-With the local website server running, open http://127.0.0.1:4320/__checks__/resize.html. It loads the actual website wide, narrows the same page without refreshing, and reports PASS only when the app and its frame remain inside the viewport. Add `?full=1` to exercise width-only and height-only changes, mobile layouts, and returning to desktop. This browser regression catches the intrinsic minimum-width constraint that a fresh load at a narrow size can hide. The check is served locally from `tests/fixtures/` and is excluded from the built static website.
-
-Open http://127.0.0.1:4320/__checks__/walkthrough.html to watch full desktop, mobile, and compact landscape loops together. It reports PASS after observing keyboard wording changes, centered option dots, both sidebar states, Preferences, two queued features, a ready update, the working custom features, and a second update that returns to official Draft. It checks that custom controls disappear, writing and notes remain, and the opening headline returns. It also checks that customization and rollback take up most of the playback. It observes the rendered app without shortening or skipping the tour. This check is local-only and excluded from the published site.
+During Draft 2.0 development the site is a plain download page. The interactive walkthrough will be redesigned after 2.0 ships.

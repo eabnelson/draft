@@ -1,40 +1,27 @@
 # Draft — product baseline
 
 Date: October 24, 2026
-Status: Accepted baseline v0.2; macOS first, MIT license, and update-based activation confirmed October 24, 2026.
+Status: Accepted baseline v0.2; macOS first, MIT license, and update-based activation confirmed October 24, 2026. The writing product, website walkthrough, and document format are superseded by the [Draft 2.0 spec](draft-2-spec-2026-10-31.md); the update sections still apply.
 Working product name: Draft.
 
 ## Purpose
 
-Draft is a fast local desktop writing app whose users own both their writing and their version of the app. The official app implements the writing experience in the initial product spec. A built-in Features page lets a person understand that experience, ask their existing coding agent to change it, and keep or remove those changes without managing a development environment themselves.
+Draft is a fast local desktop writing app whose users own both their writing and their version of the app. A built-in Features page lets a person understand that experience, ask their existing coding agent to change it, and keep or remove those changes without managing a development environment themselves.
 
-This is a new baseline derived from the owner's October 24 requirements. Preserve the [initial October 22 spec](initial-product-spec.md) unchanged as the record of the first Writing Room build. The current web versions are implementation references; web hosting, Zo sign-in, and cloud document storage are not requirements for this desktop baseline.
+This baseline records the owner's October 24 requirements. Web hosting, Zo sign-in, and cloud document storage are not requirements for this desktop baseline.
 
-## Source, inspiration, and distribution
+## Source and distribution
 
-- Maintain one canonical public source repository containing the application, desktop packaging, build/release instructions, automated checks, feature catalog, dated product specifications, and original reference material.
-- Credit [Jason Fried's original demonstration](https://x.com/jasonfried/status/2105403067793584590) as inspiration. Preserve the existing transcript and its extraction provenance.
-- Keep the original spec and later specifications as separately dated documents. A later baseline must not silently overwrite the original.
-- Use the MIT license for our application and authored documents. Keep the third-party transcript attribution separate; do not label the speaker's words as our authored work or automatically relicense them under the application's license.
+- Maintain one canonical public source repository containing the application, desktop packaging, build/release instructions, automated checks, feature catalog, and dated product specifications.
+- Keep specifications as separately dated documents.
+- Use the MIT license for the application and authored documents.
 - A normal download installs a desktop app. Opening, writing, and using already-configured AI must not require a terminal, GitHub account, manual dependency installation, or a developer build.
 - The download must provide the matching editable source and the runtime/build support needed for supported in-app customization. The user can reveal, export, back up, or edit that source outside Draft.
 - Define signing, notarization, release packaging, supported operating systems, and the recoverable customization build path before calling distribution ready. The current browser prototype is not that deliverable.
 
 ## Core writing product
 
-The editor remains the core product, with a quiet Studio Four-style interface. Writing and ordinary editing must not wait for an AI process, network request, feature builder, or update check.
-
-Implement the initial spec's capabilities:
-
-1. Writing and clean reading, with word count and revision mode.
-2. Alternate wording for words, sentences, and paragraphs, preserving the original and identifying human/AI origin.
-3. Reversible hiding and reviving of passages.
-4. Overflow for notes and spare writing.
-5. Local saving, recovery, undo/redo, and portable native/text/Markdown import and export.
-6. Optional AI alternatives, omission-only trim previews, and clarity/tone review.
-7. English article assistance where supported, with conservative handling of uncertain pronunciation.
-
-Use these as high-level catalog groups; individual acceptance criteria remain in the spec and tests. Agree measurable startup, typing, save, idle-memory, and customization-build budgets on representative hardware before claiming performance targets are met.
+Superseded by the [Draft 2.0 spec](draft-2-spec-2026-10-31.md). Writing and ordinary editing must not wait for an AI process, network request, feature builder, or update check.
 
 ## Existing Claude Code and Codex connections
 
@@ -142,12 +129,4 @@ The download button becomes an approximate time remaining, based on recent prepa
 
 Once every requested change passes independent checks, show **Restart to update**. Save writing, temporarily prevent further edits, and restart the native app into the prepared version. Remove only the included ideas after successful startup confirmation. If startup fails, restore the previous app and retain the list. Returning to official Draft and checking external-agent work use the same restart interaction.
 
-The repo includes a minimal landing page with the real editor and Features components running in an isolated browser demo. A looping tour demonstrates writing, alternatives, set aside, overflow, queued requests, a simulated download, and the resulting working demo features. Viewers watch the walkthrough, with pause/play and replay controls and support for reduced motion. Omit demo-only labels and instructions from the page and app preview. No local agent, account, personal document, or app API is accessed by the demo.
-
-### Walkthrough clarity — October 24, 2026
-
-Keep the complete landing page and app walkthrough within the viewer's screen height. Preserve one app canvas size throughout the loop and scale it uniformly to the available space. Use a smooth glass cursor with visible click feedback, deliberate pauses, and gentle internal scrolling. The page heading explains each step as it begins. Pause and resume retain the current position; replay resets the sequence. Keep the walkthrough free of demo-only labels.
-
-### Responsive walkthrough — October 26, 2026
-
-Fit the complete app frame within the available browser width and height, including smaller and shorter windows. Use a mobile portrait presentation on narrow screens and a compact landscape presentation for small, wide windows. Mobile writing tools appear in a bottom panel; personal features appear before official features in the stacked comparison. Keep the logical canvas stable within each presentation. Crossing between presentations restarts the walkthrough with the previous Play/Pause setting so cursor targets stay aligned.
+The website walkthrough described in the October 24–26 follow-ups is retired during Draft 2.0 development and will be redesigned after 2.0 ships.

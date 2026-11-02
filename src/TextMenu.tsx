@@ -5,8 +5,8 @@ import {Button} from './components/ui/button';
 import {api} from './client';
 import type {SpellingWord} from './editor-spelling';
 
-type Props={x:number;y:number;revive?:boolean;spelling?:SpellingWord;onSpellingFix?:(text:string)=>void;writingActions?:boolean;onFormat:(format:TextFormat,href?:string)=>void;onAction?:(action:string)=>void;onClose:(restoreFocus?:boolean)=>void};
-export function TextMenu({x,y,revive,spelling,onSpellingFix,writingActions,onFormat,onAction,onClose}:Props){
+type Props={x:number;y:number;spelling?:SpellingWord;onSpellingFix?:(text:string)=>void;onFormat:(format:TextFormat,href?:string)=>void;onClose:(restoreFocus?:boolean)=>void};
+export function TextMenu({x,y,spelling,onSpellingFix,onFormat,onClose}:Props){
   const ref=useRef<HTMLDivElement>(null),[blocks,setBlocks]=useState(false),[link,setLink]=useState(false),[url,setUrl]=useState(''),[error,setError]=useState('');
   const [suggestions,setSuggestions]=useState<string[]|null>(null);
   useEffect(()=>{if(!spelling)return;const controller=new AbortController();setSuggestions(null);void api('/api/spelling/suggestions',{word:spelling.word},controller.signal).then(result=>{if(!controller.signal.aborted)setSuggestions(result.suggestions);}).catch(()=>{if(!controller.signal.aborted)setSuggestions([]);});return()=>controller.abort();},[spelling?.word]);
@@ -31,7 +31,6 @@ export function TextMenu({x,y,revive,spelling,onSpellingFix,writingActions,onFor
     <div className="format-row">{([['bold',Bold],['italic',Italic],['underline',Underline],['strike',Strikethrough]] as const).map(([name,Icon])=><Button key={name} variant="ghost" size="icon-sm" role="menuitem" aria-label={name==='strike'?'Strikethrough':name[0].toUpperCase()+name.slice(1)} title={name} onClick={()=>format(name)}><Icon size={16}/></Button>)}<Button variant="ghost" size="icon-sm" role="menuitem" aria-label="Add link" onClick={()=>{setLink(!link);setBlocks(false);}}><Link size={16}/></Button><Button variant="ghost" role="menuitem" className="block-format-toggle" onClick={()=>{setBlocks(!blocks);setLink(false);}}>Text<ChevronDown size={13}/></Button></div>
     {blocks&&<div className="block-formats">{([['text','Text'],['h1','Heading 1'],['h2','Heading 2'],['h3','Heading 3'],['number','Numbered list'],['bullet','Bulleted list']] as const).map(([name,label])=><Button variant="ghost" role="menuitem" key={name} onClick={()=>format(name)}>{label}</Button>)}</div>}
     {link&&<form className="link-entry" onSubmit={e=>{e.preventDefault();format('link',url);}}><input autoFocus aria-label="Link address" placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)}/><Button type="submit" size="icon-sm" aria-label="Apply link"><Check size={15}/></Button></form>}
-    {writingActions&&<div className="writing-menu-actions">{[['alternative','Alternatives'],['ai-alternative','AI alternatives for selection'],['ghost',revive?'Revive':'Ghost it'],['overflow','Stash in overflow']].map(([name,label])=><Button variant="ghost" role="menuitem" key={name} onClick={()=>{onAction?.(name);onClose();}}>{label}</Button>)}</div>}
     {error&&<p role="alert">{error}</p>}
   </div>;
 }

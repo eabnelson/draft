@@ -1,95 +1,115 @@
 /* The writing canvas stays in the center; each notebook opens independently. */
 .app{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-.topbar,.save-error{flex-shrink:0}
+.save-error{flex-shrink:0}
 .features-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#ddd transparent}
-.sidebar-header{display:flex;align-items:center;gap:12px;min-width:180px;flex-shrink:0}
-.sidebar-header .panel-toggle{margin:0;background:transparent}.sidebar-header .brand{min-width:0}
 .workspace,.without-panel .workspace{flex:1;min-height:0;overflow:hidden;grid-template-columns:0 minmax(0,1fr) 0;grid-template-areas:"alternatives writing overflow"}
 .with-panel .workspace{grid-template-columns:260px minmax(0,1fr) 0}
-.with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 290px}
-.with-panel.with-overflow .workspace{grid-template-columns:260px minmax(0,1fr) 290px}
-.writing-area{grid-area:writing;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#ddd transparent}
-.draft-toolbar{height:49px;border-bottom:0;position:sticky;top:0;z-index:5;background:var(--background)}
-.selection-tools{opacity:.7}.selection-tools:hover{opacity:1}
+
+
+.writing-area{grid-area:writing;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+
 .paper{padding-top:50px;padding-bottom:100px;max-width:790px}
-.writing-area .paper{padding-bottom:var(--writing-room,75dvh)}
+.version-scroll .paper{padding-bottom:var(--writing-room,75dvh)}
+/* Versions sit side by side as columns; only the lines between them resize. */
+.version-columns{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:#ddd transparent}
+.version-column{flex:1 1 0;min-width:0;display:flex;flex-direction:column;min-height:0;container-type:inline-size}
+.version-columns.is-split .version-column{min-width:280px}
+.version-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#ddd transparent}
+.column-divider{flex:none;width:9px;margin:0 -4px;position:relative;z-index:2;cursor:col-resize;touch-action:none;outline:none}
+/* Columns have no divider line; the glass thins along their edges instead (see glass.ts). */
+.is-resizing-columns,.is-resizing-columns *{cursor:col-resize!important;user-select:none}
+@container (max-width:560px){.paper{padding:32px 24px 80px}}
+.context-menu{position:fixed;z-index:120;min-width:210px;max-width:320px;background:color-mix(in srgb,#fff 96%,transparent);backdrop-filter:blur(18px);border:1px solid #dedede;border-radius:10px;box-shadow:0 8px 30px #0002;padding:5px;font-size:13px;color:#303030}
+.context-menu button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;font:inherit;color:inherit;text-align:left;padding:6px 8px;border-radius:6px;cursor:default}
+.context-menu button:hover:not(:disabled),.context-menu button:focus-visible{background:#f1f1f1;outline:none}
+.context-menu button:disabled{opacity:.4}
+.context-menu button.is-danger{color:#b42318}
+.context-menu-icon{width:14px;flex:none;display:flex;color:var(--muted-foreground)}
+.context-menu button.is-danger .context-menu-icon{color:inherit}
+.context-menu-label{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.context-menu-muted{color:var(--muted-foreground);margin-left:4px}
+.context-menu-heading{font-size:11px;font-weight:550;color:var(--muted-foreground);padding:6px 8px 3px}
+.drafts-menu .is-danger{color:#b42318}
+.confirm-modal{width:400px}
+.confirm-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.inbox-row.is-renaming{cursor:default}
+.inbox-rename{font:inherit;font-size:13px;font-weight:550;width:100%;border:1px solid #cfcfcf;border-radius:6px;padding:3px 6px;outline:none;background:var(--background)}
+.inbox-version.is-closed .inbox-version-preview{opacity:.55}
 .side-panel{position:relative;top:auto;height:100%;min-height:0;min-width:0;border-left:0;border-right:0}
-.alternatives-panel{grid-area:alternatives;border-right:1px solid var(--border)}
-.overflow-panel{grid-area:overflow;border-left:1px solid var(--border)}
+
+
 .panel-header{padding:0 14px;gap:8px;height:49px;border-bottom:0;font-size:12px}
-.panel-header>span:first-child{font-weight:500}.overflow-word-count{margin-left:auto;color:var(--muted-foreground);font-size:10px}
+.panel-header>span:first-child{font-weight:500}
 .panel-scroll{padding:22px 18px;overflow-y:auto;min-height:0;scrollbar-width:thin}
-.wording-scopes{display:flex;flex:1;gap:0;min-width:0}
-.wording-scopes [data-slot=button]{padding:0 5px;font-size:11px;color:var(--muted-foreground);height:27px}
-.wording-scopes [aria-selected=true]{color:var(--foreground);background:var(--secondary)}
-.wording-row{position:relative;border-radius:7px;margin-bottom:8px;padding:8px 10px;border:1px solid transparent}
-.wording-row.chosen{background:#f7f7f7;border-color:#e8e8e8}
-.wording-row-top{display:flex;align-items:center;gap:1px;margin-bottom:4px;opacity:.5}
-.wording-row:hover .wording-row-top,.wording-row:focus-within .wording-row-top,.wording-row.chosen .wording-row-top{opacity:1}
-.wording-row-top>[data-slot=button]:first-child{height:22px;padding:0;font-size:10px;gap:6px;font-weight:400;color:#777}
-.wording-row-top>span{flex:1}.wording-row-top>[data-slot=button]:not(:first-child){width:22px;height:22px;color:#888}
-.wording-select[data-slot=button]{height:auto;width:100%;padding:0;gap:8px;white-space:normal;text-align:left;justify-content:flex-start;font-size:13px;line-height:1.65;font-weight:400}
-.wording-select>span:nth-child(2){flex:1}.original-label{font-size:10px;color:#999;margin-left:12px}
-.new-option{margin-top:20px;padding:10px;border-color:#e6e6e6}.new-option:focus-within{outline:none;box-shadow:none}
-.new-option textarea{font-size:12px;resize:vertical}.new-option textarea:focus-visible{outline:0}
-.alternatives-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
-.alternatives-footer [data-slot=button]{padding:0;font-size:11px;font-weight:400;color:#777}
-.cycle-control{gap:3px;font-size:10px;margin-top:15px;padding-top:10px}.cycle-control [data-slot=button]{font-size:14px}
-.wording-dots{display:inline;position:relative;font-size:0;line-height:0;margin:0;cursor:pointer;user-select:none}
-.wording-options{position:absolute;left:var(--wording-center,0px);top:10px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;white-space:nowrap}
-.wording-options i{flex:none;width:3px;height:3px;box-sizing:border-box;border:1px solid transparent;border-radius:50%;background:#bbb}
-.wording-options .is-selected{background:transparent;border-color:#777}.is-alternate .wording-options .is-selected{background:#555;border-color:#555}
-.wording-dots.is-sentence{display:inline;height:0;vertical-align:baseline}
-.is-sentence .wording-options{left:var(--wording-center,0px);top:4px;transform:translateX(-100%);gap:var(--wording-dot-gap,3px);background:var(--background)}
-.is-sentence .wording-options i{width:var(--wording-dot-size,3px);height:var(--wording-dot-size,3px);border-width:min(1px,calc(var(--wording-dot-size,3px)/3))}
-.variant-paragraph{text-decoration:none}.wording-dots.is-paragraph{color:#a3a3a3}.wording-dots.is-paragraph.is-alternate{color:#555}
-.wording-rail{position:absolute;left:calc(var(--wording-center,0px) - 3px);top:var(--wording-top,0px);overflow:hidden;fill:none;stroke:currentColor;stroke-width:1}
-.is-paragraph .wording-options{top:calc(var(--wording-top,0px) + var(--wording-height,0px)/2);transform:translate(-50%,-50%);flex-direction:column;padding:2px 1px;background:var(--background)}
-.variant-focused{background:#f4f4f4}.ghost-text,.cut-preview{color:#e8e8e8;background:transparent;text-decoration:none}
-.passage-muted{opacity:.35;transition:opacity .15s}
-.ghost-text:hover{color:#303030;background:transparent}.cut-preview{cursor:pointer}.cut-preview:hover{color:#888}
-.review-highlight{background:#eee;text-decoration:underline dotted #999;text-underline-offset:4px}
-.markdown-field .cm-editor{font:13px/1.75 ui-sans-serif,system-ui,sans-serif;outline:none;color:var(--foreground)}
-.markdown-field .cm-scroller{font:inherit;overflow:visible}.markdown-field .cm-content{padding:0;min-height:24px;white-space:pre-wrap}
-.markdown-field .cm-line{padding:0}.markdown-field .cm-focused{outline:none}.markdown-field .cm-cursor{border-left:1px solid currentColor}
-.markdown-field .cm-placeholder{color:#aaa}.markdown-field .cm-selectionBackground{background:#dedede!important}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 .md-bold{font-weight:650}.md-italic{font-style:italic}.md-strike{text-decoration:line-through}.md-underline{text-decoration:underline;text-underline-offset:3px}.md-link{text-decoration:underline;text-underline-offset:3px}
 .md-code,.md-code-block{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.9em;background:#f6f6f6;border-radius:3px}.md-quote{color:#888}
 .md-heading{font-weight:600;line-height:1.5!important}.md-h1{font-size:1.5em}.md-h2{font-size:1.3em}.md-h3{font-size:1.15em}
-.overflow-editor{border:0;border-radius:0;padding:0;min-height:200px;background:transparent}.overflow-editor .cm-content{min-height:200px}
-.overflow-actions,.overflow-return{gap:3px}.overflow-actions [data-slot=button],.overflow-return [data-slot=button]{padding:0;font-size:11px;justify-content:flex-start;color:#888;font-weight:400}
-.writing-controls{height:45px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-top:1px solid #f5f5f5;flex-shrink:0;position:relative;background:#fff}
-.writing-controls [data-slot=button]{font-size:11px;color:#888;gap:7px;height:28px;padding:0 8px;font-weight:400}.writing-controls [aria-pressed=true]{color:#303030}
-.writing-controls>div{display:flex;gap:6px}.writing-controls .lab-toggle{position:absolute;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:.5px;text-transform:uppercase;border:1px solid #e8e8e8;height:23px;border-radius:5px}
+
+
+
+
+
 .markdown-toggle{font:11px ui-monospace,monospace;font-weight:600;letter-spacing:-1px}
-.lab-popover,.review-bar{position:fixed;z-index:35;bottom:57px;left:50%;transform:translateX(-50%);width:460px;max-width:calc(100vw - 24px);background:#fff;border:1px solid #e5e5e5;box-shadow:0 12px 45px #00000012;border-radius:12px;padding:8px}
-.lab-popover>header,.review-bar>header{display:flex;align-items:center;gap:8px;font-size:11px;color:#888;padding:3px 6px 9px;border-bottom:1px solid #eee}.lab-popover>header>span,.review-bar>header>span{flex:1}
-.lab-tools{display:flex;flex-direction:column;padding:6px 0}.lab-tools [data-slot=button]{justify-content:flex-start;height:32px;font-size:12px;font-weight:400;padding:0 10px}
-.trim-strengths{display:flex;border-top:1px solid #eee;padding-top:8px;gap:3px}.trim-strengths [data-slot=button]{flex:1;display:flex;flex-direction:column;gap:1px;height:42px;font-size:10px;padding:4px;font-weight:400}.trim-strengths small{font-size:9px;color:#999}.trim-strengths [aria-pressed=true]{background:#f1f1f1}
-.review-bar{padding:8px 12px}.review-bar-actions{display:flex;align-items:center;gap:8px;padding-top:6px}.review-bar-actions [data-slot=button]{height:28px;padding:0 8px;font-size:11px;font-weight:400}
-.review-list{max-height:min(55dvh,460px);overflow-y:auto;padding:8px}.review-list>div{border-bottom:1px solid #eee;padding:8px 0}.review-list p{font-size:12px;color:#888;margin:5px 0}.review-list [data-slot=button]{font-size:11px;height:auto;padding:4px 8px;font-weight:400}.review-list .review-quote{font-size:13px;padding-left:0}
-.review-replacement{margin:9px 0;padding:8px 10px;border-radius:6px;background:var(--secondary,#f6f6f6)}.review-replacement>span{font-size:10px;color:#888}.review-replacement>p{margin:3px 0 0;font-size:13px;color:var(--foreground);white-space:pre-wrap;overflow-wrap:anywhere}
-.writing-progress,.writing-error{position:fixed;z-index:40;bottom:58px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:white;border:1px solid #e5e5e5;border-radius:10px;box-shadow:0 8px 30px #0000000c;padding:8px 12px;font-size:12px;max-width:calc(100vw - 24px)}
-.writing-progress [data-slot=button],.writing-error [data-slot=button]{font-size:11px;font-weight:400;height:25px;padding:0 5px}.writing-error{color:#982323}
+
+
+
+
+
+
+
+
+
 .text-menu{position:fixed;z-index:110;background:color-mix(in srgb,#fff 96%,transparent);backdrop-filter:blur(18px);border:1px solid #dedede;border-radius:12px;box-shadow:0 8px 35px #0002;padding:6px;width:278px;font-size:12px;color:#303030}
 .format-row{display:flex;align-items:center;gap:1px;padding:2px}.format-row [data-slot=button]{height:30px;min-width:30px;padding:0 7px;color:#444;border-radius:7px}.block-format-toggle{margin-left:auto;font-size:12px;gap:3px}
-.writing-menu-actions,.block-formats{display:flex;flex-direction:column;padding-top:5px;margin-top:5px;border-top:1px solid #eee}.writing-menu-actions [data-slot=button],.block-formats [data-slot=button]{justify-content:flex-start;height:32px;padding:0 9px;font-size:12px;font-weight:400}
+.block-formats{display:flex;flex-direction:column;padding-top:5px;margin-top:5px;border-top:1px solid #eee}.block-formats [data-slot=button]{justify-content:flex-start;height:32px;padding:0 9px;font-size:12px;font-weight:400}
 .text-menu p{font-size:11px;color:#982323;padding:0 8px}.link-entry{display:flex;gap:5px;padding:8px 2px 3px}.link-entry input{min-width:0;width:100%;border:1px solid #ddd;border-radius:7px;padding:5px 8px;font-size:12px;outline:none}
 .cm-tooltip:has(.link-tooltip){background:var(--background);color:var(--foreground);border:1px solid #dedede;border-radius:9px;box-shadow:0 6px 24px #0001;z-index:100}
 .link-tooltip{font:12px/1.5 ui-sans-serif,system-ui,sans-serif;padding:10px 12px;max-width:min(340px,80vw)}
 .link-tooltip>a{display:block;color:inherit;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 .link-tooltip-actions{display:flex;gap:14px;margin-top:8px}.link-tooltip button{font:inherit;color:#777;background:none;border:0;padding:2px 0;cursor:pointer}.link-tooltip button:hover{color:var(--foreground)}.link-error{display:block;color:#982323;margin-top:6px}
-@media(max-width:1100px){.sidebar-header{min-width:150px}}
-@media(max-width:760px){.sidebar-header{min-width:0;gap:8px}}
-@media(max-width:1100px){.with-panel .workspace{grid-template-columns:235px minmax(0,1fr) 0}.with-overflow .workspace{grid-template-columns:0 minmax(0,1fr) 250px}.with-panel.with-overflow .workspace{grid-template-columns:235px minmax(0,1fr) 250px}.paper{padding:40px 32px 80px}.panel-scroll{padding:18px 14px}}
-@media(max-width:760px){.workspace,.with-panel .workspace,.with-overflow .workspace,.with-panel.with-overflow .workspace{display:flex;flex-direction:column;min-height:0}.writing-area{flex:1;min-height:120px}.side-panel{flex:0 0 min(300px,38dvh);height:min(300px,38dvh);border:0;border-top:1px solid #e8e8e8}.panel-scroll{overflow-y:auto;padding:16px 22px}.alternatives-panel{order:1}.overflow-panel{order:2}.paper{padding:25px 24px 55px}.writing-controls{padding:0 12px}.draft-toolbar{min-height:44px;height:auto;padding:6px 12px}.selection-tools{order:initial;width:auto;gap:0}.selection-tools [data-slot=button]{font-size:10px;padding:0 5px}.word-count{font-size:10px}.word-count-mode,.toggle-track{display:none}.new-option{margin-top:12px}.top-actions{gap:3px}.top-actions>[aria-label="Keyboard shortcuts"]{display:none}.brand-wordmark{font-size:16px}}
-.provider-mark { width:14px; height:14px; object-fit:contain; flex-shrink:0 }
-.provider-codex { filter:invert(1) }
-.dark .provider-codex { filter:none }
-.spelling-word { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:#d34545; text-decoration-thickness:1px; text-underline-offset:3px }
-.spelling-suggestions { display:flex; flex-direction:column; border-bottom:1px solid var(--border); padding:2px 0 6px; margin-bottom:6px }
-.spelling-suggestions [data-slot=button] { justify-content:flex-start; padding:6px 10px; height:auto }
-.spelling-suggestions > span { padding:6px 10px; color:var(--muted-foreground); font-size:12px }
+@media(max-width:1100px){.with-panel .workspace{grid-template-columns:235px minmax(0,1fr) 0}.paper{padding:40px 32px 80px}.panel-scroll{padding:18px 14px}}
+@media(max-width:760px){.workspace,.with-panel .workspace{display:flex;flex-direction:column;min-height:0}.writing-area{flex:1;min-height:120px}.side-panel{flex:0 0 min(300px,38dvh);height:min(300px,38dvh);border:0;border-top:1px solid #e8e8e8}.panel-scroll{overflow-y:auto;padding:16px 22px}.paper{padding:25px 24px 55px}.draft-toolbar{min-height:44px;height:auto;padding:6px 12px}.word-count{font-size:10px}.top-actions{gap:3px}.top-actions>[aria-label="Keyboard shortcuts"]{display:none}.brand-wordmark{font-size:16px}}
+
+
+
+.spelling-word{ text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:#d34545; text-decoration-thickness:1px; text-underline-offset:3px }
+.spelling-suggestions{ display:flex; flex-direction:column; border-bottom:1px solid var(--border); padding:2px 0 6px; margin-bottom:6px }
+.spelling-suggestions [data-slot=button]{ justify-content:flex-start; padding:6px 10px; height:auto }
+.spelling-suggestions > span{ padding:6px 10px; color:var(--muted-foreground); font-size:12px }
 .md-image{display:block;margin:12px 0;line-height:0;cursor:default}.md-image img{display:block;max-width:100%;max-height:min(72vh,760px);border-radius:10px;box-shadow:0 1px 2px #0000000f,0 8px 28px #00000012}
 .md-image.is-missing{line-height:1.5;min-height:56px;border:1px dashed #d4d4d4;border-radius:10px;display:flex;align-items:center;justify-content:center}.md-image.is-missing img{display:none}.md-image.is-missing::after{content:attr(data-missing);font-size:12px;color:var(--muted-foreground)}
 .image-menu{width:180px}.image-menu [data-slot=button]{width:100%;justify-content:flex-start;gap:8px;height:32px}
@@ -111,3 +131,177 @@
 .image-actions{display:flex;flex-direction:column;gap:6px}.image-actions .primary-button{width:100%}.image-secondary{display:flex;justify-content:center;gap:2px}.image-secondary [data-slot=button]{font-size:12px;gap:6px}
 @media(max-width:1100px){.with-image .workspace{grid-template-columns:0 minmax(0,1fr) 280px}.with-panel.with-image .workspace{grid-template-columns:235px minmax(0,1fr) 280px}}
 @media(max-width:760px){.with-image .workspace,.with-panel.with-image .workspace{display:flex;flex-direction:column;min-height:0}.image-panel{order:2;flex:0 0 min(520px,60dvh);height:min(520px,60dvh)}.image-stage{height:200px}}
+
+/* Inbox: every draft with its stage, versions, and where it is live. */
+.inbox{grid-area:alternatives;min-height:0;display:flex;flex-direction:column;background:var(--background)}
+.inbox-list{list-style:none;margin:0;padding:2px 8px 16px;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:#ddd transparent}
+.inbox-row{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;font:inherit;border:0;background:none;border-radius:8px;padding:9px 10px;cursor:default;color:var(--foreground)}
+.inbox-row.is-active{background:var(--secondary)}
+/* The open draft's fill wraps its row and the versions under it. */
+.inbox-list>li.is-active{background:var(--secondary);border-radius:8px}
+.inbox-list>li.is-active .inbox-row,.inbox-list>li.is-active .inbox-row:hover{background:none}
+.inbox-title{font-size:13px;font-weight:550;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.inbox-preview{font-size:12px;line-height:1.4;color:var(--muted-foreground);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.inbox-versions{list-style:none;margin:-2px 0 0;padding:0 0 8px;display:flex;flex-direction:column;gap:1px}
+.inbox-version{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:12px;border:0;background:none;border-radius:6px;padding:2px 10px;cursor:default;color:var(--muted-foreground)}
+/* No line, background or hover fill: the version you are in just reads in the full text colour. */
+.inbox-version:hover{color:var(--foreground)}
+.inbox-version.is-active{color:var(--foreground);font-weight:550}
+.inbox-version-preview{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.inbox-version-time{flex:none;font-size:11px;font-weight:400;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.inbox-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:11px;color:var(--muted-foreground)}
+.inbox-live{color:#2f7d4f}
+.inbox-empty{font-size:12px;color:var(--muted-foreground);padding:14px 10px}
+.stage-chip{font-size:10.5px;padding:1px 7px;border-radius:999px;background:var(--secondary);color:#555}
+.stage-chip.stage-idea{background:#f3f3f3;color:#777}
+.stage-chip.stage-drafting{background:#eef3fb;color:#3b5f99}
+.stage-chip.stage-ready{background:#fdf3e2;color:#8a5a12}
+.stage-chip.stage-live{background:#e8f5ec;color:#2f7d4f}
+
+/* Draft status beside the word count. */
+.stage-pill.stage-idea{background:#f3f3f3;color:#666}
+.stage-pill.stage-drafting{background:#eef3fb;color:#3b5f99}
+.stage-pill.stage-ready{background:#fdf3e2;color:#8a5a12}
+.stage-pill.stage-live{background:#e8f5ec;color:#2f7d4f}
+.stage-pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 9px;border-radius:999px;font-size:12px;font-weight:550}
+.context-menu.stage-menu{min-width:0;padding:4px}
+.stage-menu button{padding:4px}
+.context-menu .stage-pill .stage-dot{margin:0}
+.stage-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#aaa;flex:none}
+.stage-dot.stage-idea{background:#a3a3a3}.stage-dot.stage-drafting{background:#4f7cc4}.stage-dot.stage-ready{background:#d29a2c}.stage-dot.stage-live{background:#3f9a63}
+.context-menu .stage-dot{margin:0 3px}
+.inbox-list li.is-last-pinned{border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:4px}
+/* A little air between drafts so one's hover or selected fill never touches the next. */
+.inbox-list>li+li{margin-top:4px}
+.version-label{font-size:11px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.drafts-menu kbd{margin-left:auto;font:11px ui-sans-serif,system-ui;color:var(--muted-foreground)}
+@media(max-width:760px){.inbox{order:1;max-height:40dvh;border-right:0;border-bottom:1px solid var(--border)}}
+.mac-preferences{display:flex;flex-wrap:wrap;gap:12px 28px;margin:22px 0 4px;padding-top:18px;border-top:1px solid var(--border)}
+.mac-preferences label{display:flex;align-items:flex-start;gap:9px;cursor:pointer;max-width:330px}
+.mac-preferences input{margin-top:3px;accent-color:#242424}
+.mac-preferences span{display:flex;flex-direction:column;gap:1px}
+.mac-preferences strong{font-size:13px;font-weight:550}
+.mac-preferences small{font-size:12px;color:var(--muted-foreground)}
+.context-menu.stage-menu button:hover:not(:disabled),.context-menu.stage-menu button:focus-visible{background:none}
+.stage-menu button:hover .stage-pill,.stage-menu button:focus-visible .stage-pill{box-shadow:0 0 0 2px #00000014}
+/* Title bar: just the draft's title, plus help and settings. */
+.settings-button{position:relative}
+.update-badge{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#d9480f;box-shadow:0 0 0 2px var(--background)}
+.word-count.is-selection{color:var(--foreground)}
+/* Sidebar rows: one-line title with the time on the right, then the summary. */
+.inbox-heading{display:flex;align-items:baseline;gap:8px;min-width:0}
+.inbox-heading .inbox-title{flex:1;min-width:0;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
+.inbox-heading .inbox-rename{flex:1;min-width:0}
+.inbox-time{flex:none;font-size:11px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.inbox-preview{-webkit-line-clamp:3}
+.marquee{display:inline-flex;gap:48px;animation:inbox-marquee linear infinite;will-change:transform}
+.marquee>span{flex:none}
+/* The part of a long title you can see; hovering scrolls the rest through it. */
+.marquee-clip{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+@keyframes inbox-marquee{from{transform:translateX(0)}to{transform:translateX(calc(-50% - 24px))}}
+@media(prefers-reduced-motion:reduce){.marquee{animation:none}}
+/* Each version opens as a fully rounded glass tab floating over the top of its column: the
+   text scrolls up behind it with nothing else in between. Its first sentence sits on the left,
+   then its number, reading time and characters on the far right. The tab you are in is the whitest. */
+.version-column{position:relative}
+/* The tab sits 8px in from the divider on each side, the same as the sidebar items sit in from
+   the sidebar's edges. */
+.version-tab{position:absolute;top:0;left:0;right:0;z-index:3;display:flex;align-items:center;height:40px;padding:0 8px;background:none}
+.version-scroll{padding-top:40px;scroll-padding-top:56px;-webkit-mask-image:linear-gradient(to bottom,transparent 4px,#000 22px);mask-image:linear-gradient(to bottom,transparent 4px,#000 22px)}
+/* Like the Studio Four sidebar: flat pills rounded 8px with no outline, joined by a neck. */
+.version-column{--glass:rgba(247,247,247,.94)}
+.version-column.is-active{--glass:rgba(240,240,240,.96)}
+.version-tab-pill{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;cursor:default;user-select:none;-webkit-user-select:none}
+.version-column:not(.is-active):has(.version-tab-pill:hover){--glass:rgba(243,243,243,.95)}
+.version-tab-bubble{flex:none;display:flex;align-items:center;height:28px;padding:0 10px;border-radius:8px;color:var(--muted-foreground);white-space:nowrap;
+  background:var(--glass);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);transition:background-color .12s}
+.version-column.is-active .version-tab-bubble{color:var(--foreground)}
+.version-tab-title{flex:0 1 auto;min-width:48px;max-width:260px;padding:0 13px;font-size:12.5px;font-weight:550;text-overflow:ellipsis}
+.version-column.is-active .version-tab-title.is-untitled,.version-tab-title.is-untitled{color:var(--muted-foreground);font-weight:450}
+.version-tab-neck{flex:none;width:8px;height:28px;margin:0 -1px;background:var(--glass);transition:background-color .12s;
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  /* A 6px bridge between the bubbles' straight sides, scooped from above and below to a 10px
+     neck, as in Studio Four's nav. It tucks 1px under each bubble so no hairline shows where
+     they meet; the glass is nearly opaque so that overlap cannot be seen either. */
+  clip-path:path('M0 6 L1 6 A3 3 0 0 0 7 6 L8 6 L8 22 L7 22 A3 3 0 0 0 1 22 L0 22 Z')}
+.version-tab-meta{font-size:11.5px;font-variant-numeric:tabular-nums}
+.version-column.is-active .version-tab-meta{color:var(--muted-foreground)}
+.version-column.is-active .version-tab-meta.is-selection{color:var(--foreground)}
+
+.inbox-row [data-stage-chip]{cursor:pointer}
+.inbox-row [data-stage-chip]:hover{filter:brightness(.95);box-shadow:0 0 0 1px #0000001a}
+
+/* Help and settings sit at the bottom of the sidebar. */
+.inbox{position:relative}
+.inbox-list{padding-bottom:60px}
+.inbox-footer{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:4px}
+/* The same glass as the version tabs; the draft list scrolls behind it. */
+.settings-bubble{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;color:var(--muted-foreground);cursor:pointer;
+  background:rgba(241,241,241,.94);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);transition:background-color .12s,color .12s}
+.settings-bubble:hover,.settings-bubble.is-open{background:rgba(232,232,232,.92);color:var(--foreground)}
+.settings-bubble:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.settings-bubble .update-badge{top:3px;right:3px}
+/* Where dragged text will land: a blinking cursor like the caret. */
+.editor-host .cm-dropCursor{border-left:2px solid var(--foreground)!important;margin-left:-1px;pointer-events:none;animation:drop-cursor-blink 1s steps(1) infinite}
+@keyframes drop-cursor-blink{50%{opacity:0}}
+/* The Mac's own highlight, which fills each line evenly; the editor only draws the caret. */
+.editor-host .cm-selectionLayer{display:none}
+.editor-host .cm-editor .cm-line::selection,.editor-host .cm-editor .cm-line ::selection{background-color:#dedede!important}
+.dark .editor-host .cm-editor .cm-line::selection,.dark .editor-host .cm-editor .cm-line ::selection{background-color:#3d3d3d!important}
+
+/* No title bar: the window buttons sit over the top of the sidebar, beside the version tabs. */
+.inbox-top{flex:none;height:40px}
+.inbox-version-count{margin-left:auto}
+.without-panel .version-column:first-child .version-tab{padding-left:84px}
+.save-error{padding-left:84px}
+.features-scroll{padding-top:48px}
+/* The window itself never scrolls or bounces: the sidebar, its top strip and the version
+   tabs stay put. Only the draft list, each version's text and Preferences scroll, and
+   they stop at their edges instead of rubber-banding. "clip" also stops code (such as
+   scrolling something into view) from shifting these containers. */
+html,body{height:100%;overflow:clip;overscroll-behavior:none}
+#root{height:100%;overflow:clip}
+.app,.workspace,.writing-area,.version-column,.inbox{overflow:clip}
+.version-columns{overflow-y:clip}
+.inbox-list,.version-scroll,.version-columns,.features-scroll,.image-panel{overscroll-behavior:none}
+
+/* Settings sections: appearance and keyboard shortcuts */
+.settings-section{margin:22px 0 4px;padding-top:18px;border-top:1px solid var(--border)}
+.settings-section h2{font-size:13px;font-weight:600;margin:0 0 12px}
+.shortcut-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 28px}
+.shortcut-list .help-item{margin:10px 0}
+/* Naming a version right in its tab */
+.version-tab-title.is-renaming{padding:0 6px 0 13px;box-shadow:0 0 0 2px var(--ring)!important}
+.version-rename{width:200px;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:12.5px;font-weight:550;color:var(--foreground)}
+
+/* No scrollbars anywhere; everything still scrolls with the trackpad, wheel and keyboard. */
+*{scrollbar-width:none!important}
+::-webkit-scrollbar{display:none;width:0;height:0}
+
+/* Glass: the window is frosted (the Mac blurs what is behind it) and .glass-fill tints it. Nothing
+   else paints a solid background; the selected draft and the dividers are thinner places in the
+   fill, drawn by glass.ts. */
+:root{--glass-fill:rgba(251,251,251,.8)}
+:root.dark{--glass-fill:rgba(26,26,26,.78)}
+html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-column,.features-scroll{background:transparent!important}
+.glass-fill{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--glass-fill);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.inbox-list>li.is-active,.inbox-row.is-active{background:transparent}
+/* The tabs and the Settings button are frosted panes laid on the glass: a light wash with their
+   own blur, so text scrolling under them is softened rather than showing straight through. The
+   tab you are in is the strongest wash, a hovered tab a little less, the others least. They are
+   not holes in the fill (unlike the selected draft), so the blur only ever sees the even tint and
+   the necks match the bubbles they join. */
+.version-column{--tab-glass:rgba(0,0,0,.035)}
+.version-column:not(.is-active):has(.version-tab-pill:hover){--tab-glass:rgba(0,0,0,.05)}
+.version-column.is-active{--tab-glass:rgba(0,0,0,.07)}
+.dark .version-column{--tab-glass:rgba(255,255,255,.05)}
+.dark .version-column:not(.is-active):has(.version-tab-pill:hover){--tab-glass:rgba(255,255,255,.07)}
+.dark .version-column.is-active{--tab-glass:rgba(255,255,255,.1)}
+.version-tab-bubble,.version-tab-neck,.version-column.is-active .version-tab-bubble{background:var(--tab-glass)!important}
+.settings-bubble{background:rgba(0,0,0,.035)!important}
+.settings-bubble:hover,.settings-bubble.is-open{background:rgba(0,0,0,.07)!important}
+.dark .settings-bubble{background:rgba(255,255,255,.05)!important}
+.dark .settings-bubble:hover,.dark .settings-bubble.is-open{background:rgba(255,255,255,.1)!important}
+.version-tab-bubble,.version-tab-neck,.settings-bubble{-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}
+/* The lines between columns (and between the sidebar and the first column) are thinner places in
+   the glass too, drawn by glass.ts, running the full height of the window. */

@@ -84,8 +84,6 @@ jobs:
           test -n "$APPLE_TEAM_ID"
           test -n "$APPLE_SIGNING_IDENTITY"
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun run demo:check
-      - run: shasum -a 256 -c SHA256SUMS
       - name: Import distribution certificate into a temporary keychain
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

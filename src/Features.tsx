@@ -1,8 +1,10 @@
 import {useEffect,useState,useRef} from 'react';
+import {AppearanceSetting,ShortcutList} from './AppearanceSwitch';
 import {ArrowLeft,ArrowUpRight,ArrowUp,Plus,Download,RefreshCw,RotateCcw,Folder,Check,LoaderCircle,Trash2,Copy} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {api,restartApp} from './client';
 import {ModelSettings} from './ModelSettings';
+import {MacPreferences} from './MacPreferences';
 import {FeatureHandoff,type HandoffTarget} from './FeatureHandoff';
 import {OfficialUpdate} from './OfficialUpdate';
 import {timeRemaining} from '../desktop/feature-queue';
@@ -119,6 +121,9 @@ export function Features({onBack,onBeforeApply,onUpdating}:{onBack:()=>void;onBe
         {changes.length?changes.map(feature=>featureRow(feature,true)):<div className="features-empty"><Check size={21}/><p>You’re using official Draft.</p><span>Your updates will appear here.</span></div>}
       </section>
     </div>
+    <AppearanceSetting/>
+    <MacPreferences/>
+    <ShortcutList/>
     {!data?.demo&&<div className="features-footer"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button>{data?.canUndo&&<Button variant="ghost" size="sm" disabled={blocked} onClick={()=>void prepare('rollback')}><RotateCcw size={13}/>Undo last update</Button>}</div>}
     {!!data?.updates.some(u=>!busy(u)&&!['ready','needs-attention'].includes(u.state))&&<details className="update-history"><summary>Update history</summary>
       {data.updates.filter(u=>!busy(u)&&!['ready','needs-attention'].includes(u.state)).map(u=><div className="history-row" key={u.id}>

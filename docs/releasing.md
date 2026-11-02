@@ -4,7 +4,7 @@ The macOS application and editable application source ship together. Version val
 
 ## Automatic releases from main
 
-Every push to `main` runs **Check**, including the full homepage walkthrough on desktop, mobile and compact landscape. A successful push starts **Release Mac app** for that exact checked commit. Failed checks, pull requests, forks, and superseded main heads cannot start a release. Rapid pushes can be combined into the newest checked main head; all included changes ship together.
+Every push to `main` runs **Check**. A successful push starts **Release Mac app** for that exact checked commit. Failed checks, pull requests, forks, and superseded main heads cannot start a release. Rapid pushes can be combined into the newest checked main head; all included changes ship together.
 
 The preparation script reserves the next `alpha.N` version above every existing version tag, including unpublished candidates. It creates a release commit with the checked main commit as its only parent and stamps all six version locations together. Only the release tag points to that commit: main is never rewritten or given a recursive bot version commit. Retrying preparation reuses the same release commit; an already public release is skipped. The current run builds the generated tag directly, because tags created with `GITHUB_TOKEN` do not trigger another workflow.
 
@@ -12,7 +12,7 @@ The signing, notarization, authenticated manifest, and separate clean-Mac instal
 
 `main` currently follows the alpha channel. Stable releases remain explicit version tags. Before beginning a new release series after a stable version, advance main's package baseline to that series with `bun scripts/release-version.ts 0.3.0-alpha.1` (substitute the intended version). Automatic preparation refuses to issue a version below a later stable tag.
 
-Keep `release-notes.json` consumer-friendly and current. Run `bun run demo:check` before pushing; see [demo maintenance](demo-maintenance.md). Main's package version is a baseline, while each generated release tag contains the exact shipped version.
+Keep `release-notes.json` consumer-friendly and current. Main's package version is a baseline, while each generated release tag contains the exact shipped version.
 
 ## Build and verify
 

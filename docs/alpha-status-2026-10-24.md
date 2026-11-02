@@ -14,7 +14,6 @@ The accepted product baseline describes the intended product. This first alpha i
 - Native typing, reopening, window closing, and Quit were checked. The native Quit path now waits for a save acknowledgment; the last text was verified on disk while the editor had still shown Saving.
 - A real two-feature batch through Claude Opus 5.5 created reading time and focus mode together in 144 seconds. Both passed the independent checks. The native Restart to update reopened the process with both features, retained saved writing, and kept an idea added after the download for a later update. Focus and Escape were checked in the restarted app. Returning to official Draft also restarted successfully while preserving the document and later idea.
 - The repo website runs the actual editor and Features UI in an isolated in-memory demo. Its looping tour reaches both working example features; generation is labeled as sped up and simulated.
-- Original transcript and initial-spec checksums match their archived copies.
 
 ## Remaining release work
 

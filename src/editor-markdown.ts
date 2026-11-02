@@ -1,9 +1,12 @@
-import {StateField,StateEffect,type EditorState,type Range} from '@codemirror/state';
+import {StateField,StateEffect,Facet,type EditorState,type Range} from '@codemirror/state';
 import {Decoration,EditorView,WidgetType,type DecorationSet} from '@codemirror/view';
 import {Language,defineLanguageFacet,languageDataProp,syntaxTree} from '@codemirror/language';
 import {markdownParser} from './markdown';
 import {linkEditing} from './editor-links';
-import {safeImageSource} from './images';
+import {safeImageSource,mediaURL} from './images';
+
+// The draft whose media folder holds this editor's images.
+export const draftMedia=Facet.define<string,string>({combine:values=>values[0]??''});
 
 export const showMarkdown=StateEffect.define<boolean>();
 const sourceMode=StateField.define({create:()=>false,update:(value,tr)=>tr.effects.find(e=>e.is(showMarkdown))?.value as boolean??value});
@@ -29,7 +32,7 @@ class ImageWidget extends WidgetType {
   toDOM(view:EditorView){
     const frame=document.createElement('span'),image=document.createElement('img');
     frame.className='md-image';frame.dataset.imageSrc=this.src;frame.title='Right-click to copy this image';
-    image.src=this.src;image.alt=this.alt;image.draggable=false;image.decoding='async';
+    image.src=mediaURL(view.state.facet(draftMedia),this.src);image.alt=this.alt;image.draggable=false;image.decoding='async';
     // Wrapped lines below an image move once its real height is known.
     image.addEventListener('load',()=>view.requestMeasure());image.addEventListener('error',()=>{frame.classList.add('is-missing');frame.dataset.missing='Image unavailable';});
     frame.append(image);return frame;

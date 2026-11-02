@@ -12,7 +12,7 @@ The desktop menu always offers Check for Updates, including when a personal rend
 
 The portable suite has 74 passing checks. The host suite has 12 passing checks covering signed release discovery, forged metadata, version ordering, three-way source merging, personal removals, dependency conflicts, explicit replacement of one feature while keeping another, real candidate tests and builds, cancellation, missing model access, retained personal checks, interrupted installation, native app replacement, changed archive rejection, failed startup recovery, and native Undo. Native installer checks compile and sign disposable macOS application bundles and execute the actual helper; source update integration uses real files, archives, builds, and document storage. Only the external model boundary is supplied deterministically in those automated checks.
 
-The desktop package builds successfully. The original transcript, initial product specification, and provenance checksums still match their preserved copies.
+The desktop package builds successfully.
 
 ## Installed-app end-to-end verification
 

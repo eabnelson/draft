@@ -24,9 +24,9 @@
     "desktop",
     "scripts",
     "vite.config.ts",
-    "website/demo",
-    "website/vite.config.ts",
-    "website/player.ts",
-    "host-ui"
+    "host-ui",
+    "website/build.ts",
+    "website/serve.ts",
+    "website/download.ts"
   ]
 }

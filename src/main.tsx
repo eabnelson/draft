@@ -4,8 +4,11 @@ import App from './App';
 import './studio-theme.css';
 import './style.css';
 import './writing.css';
+import './appearance.css';
+import {applySavedAppearance} from './theme';
 import {api} from './client';
 (window as any).__draftUpdateUI=true;
+applySavedAppearance();
 try {
   const [library,health]=await Promise.all([api('/api/library'),api('/api/health')]);
   window.draftBoot={library,version:health.version};

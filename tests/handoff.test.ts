@@ -4,7 +4,8 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {Updates} from '../desktop/updates';
 import {atomicWrite,readJSON,sourceHash} from '../desktop/files';
-import {DocumentStore} from '../desktop/documents';
+import {DraftStore} from '../desktop/documents';
+import {fresh,editVersion} from '../src/model';
 import type {Catalog,Update,Version} from '../desktop/types';
 const baseline:Catalog={schemaVersion:1,appVersion:'1.0.0',name:'Draft',features:[{id:'writing',title:'Writing',description:'Write locally.',updatedAt:'2026-10-24T16:00:00Z',origin:'official',state:'active'}]};
 
@@ -15,7 +16,7 @@ async function fixture(){
   for(const folder of ['desktop','scripts','src-tauri'])await atomicWrite(join(template,folder,'host.txt'),'trusted controller');
   await atomicWrite(join(template,'features.json'),JSON.stringify(baseline));
   const host=new Updates(data,template,dependencies,process.execPath);Object.assign(host,{builds:join(root,'Builds')});await host.initialize();
-  const docs=new DocumentStore(join(data,'Documents')),library=await docs.load();library.drafts[0].text='Private writing stays here';library.drafts[0].variants=[];await docs.save(library);
+  const docs=new DraftStore(join(data,'Drafts')),draft=fresh();await docs.save(editVersion(draft,draft.versions[0].id,'Private writing stays here'));
   return {root,template,data,dependencies,host,docs};
 }
 function request(host:Updates,state:Update['state']='failed',featureId?:string){const now=new Date().toISOString();const update:Update={id:crypto.randomUUID(),kind:'add',request:'Add reading time beside the word count.',featureId,title:'Reading time',state,stage:'Technical detail not for the update screen',createdAt:now,updatedAt:now,baseVersion:host.active.id,error:state==='failed'?'TypeScript diagnostic: missing a declaration':undefined};host.state.updates.push(update);return update;}
@@ -37,7 +38,7 @@ test('external work becomes a separate verified update and preserves the documen
   await addFeature(record.workspace);
   Object.assign(f.host,{buildCandidate:async(workspace:string)=>{expect(workspace).not.toBe(record.workspace);expect(await readFile(join(workspace,'src/feature.ts'),'utf8')).toBe('finished feature');await mkdir(join(workspace,'dist'));await atomicWrite(join(workspace,'dist/index.html'),'checked app');return [{name:'Internal test details',passed:true}];}});
   const update=await f.host.checkHandoff(handoff.id),ready=await settled(f.host,update.id);expect(ready.state).toBe('ready');expect(ready.featureId).toBe('reading-time');expect(f.host.active.id).toBe(active);
-  await f.host.apply(update.id);await f.host.confirm(f.host.active.id);expect(f.host.active.catalog.features.at(-1)?.id).toBe('reading-time');expect((await f.docs.load()).drafts[0].text).toBe('Private writing stays here');
+  await f.host.apply(update.id);await f.host.confirm(f.host.active.id);expect(f.host.active.catalog.features.at(-1)?.id).toBe('reading-time');expect((await f.docs.load()).drafts[0].versions[0].text).toBe('Private writing stays here');
  }finally{await rm(f.root,{recursive:true,force:true});}
 });
 test('failed external checks retain both editable work and the previously ready update',async()=>{
@@ -63,7 +64,7 @@ test('a packaged update is offered explicitly and preserves the old version and 
  const f=await fixture();try{
   const old=f.host.active.id,catalog=await readJSON<Catalog>(join(f.template,'features.json'));catalog.appVersion='9.0.0';await atomicWrite(join(f.template,'features.json'),JSON.stringify(catalog));
   const host=new Updates(f.data,f.template,f.dependencies,process.execPath);Object.assign(host,{builds:f.host.builds});await host.initialize();expect(host.active.id).toBe(old);const update=host.state.updates.find(u=>u.state==='ready')!;expect(update.kind).toBe('official');
-  await host.apply(update.id);await host.confirm(host.active.id);expect(host.active.catalog.appVersion).toBe('9.0.0');expect(host.state.versions.some(v=>v.id===old)).toBe(true);expect((await f.docs.load()).drafts[0].text).toBe('Private writing stays here');
+  await host.apply(update.id);await host.confirm(host.active.id);expect(host.active.catalog.appVersion).toBe('9.0.0');expect(host.state.versions.some(v=>v.id===old)).toBe(true);expect((await f.docs.load()).drafts[0].versions[0].text).toBe('Private writing stays here');
  }finally{await rm(f.root,{recursive:true,force:true});}
 });
 test('a packaged update does not replace edited source automatically',async()=>{

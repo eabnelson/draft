@@ -1,30 +1,18 @@
 import {test,expect} from 'bun:test';
-import {mkdtemp,readFile,rm,mkdir} from 'node:fs/promises';
+import {mkdtemp,rm,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {DocumentStore} from '../desktop/documents';
-import {fresh,addCandidate,choose} from '../src/model';
 import {validateCatalog,differences,likelyMatch} from '../desktop/catalog';
 import {readJSON,atomicWrite,sourceHash,safeId,within,copySource} from '../desktop/files';
 import {Updates,parseAgentResult} from '../desktop/updates';
 import type {Catalog,HostState,Version} from '../desktop/types';
 const catalog=await readJSON<Catalog>(join(import.meta.dir,'../features.json'));
 
-test('local files preserve complete writing state across reopen and archiving',async()=>{
- const root=await mkdtemp(join(tmpdir(),'draft-documents-'));try{
-  const store=new DocumentStore(root);const initial=await store.load();let draft=initial.drafts[0];const variant=draft.variants[0];draft=choose(draft,variant.id,variant.candidates[0].id);draft.overflow='Keep this nearby';
-  await store.save({active:draft.id,drafts:[draft]});const reopened=(await new DocumentStore(root).load()).drafts[0];expect(reopened.text).toBe(draft.text);expect(reopened.variants[0].active).toBe(draft.variants[0].active);expect(reopened.overflow).toBe(draft.overflow);
-  const other=fresh();await store.save({active:other.id,drafts:[other],archived:[reopened]});expect((await store.load()).archived?.[0].text).toBe(draft.text);expect((await readFile(join(root,`${draft.id}.draft.json`),'utf8')).length).toBeGreaterThan(100);
- }finally{await rm(root,{recursive:true,force:true});}
-});
-test('invalid saving cannot overwrite the last confirmed document library',async()=>{
- const root=await mkdtemp(join(tmpdir(),'draft-invalid-'));try{const store=new DocumentStore(root);const before=await store.load();await expect(store.save({active:before.active,drafts:[{...before.drafts[0],version:99} as any]})).rejects.toThrow();expect((await store.load()).drafts[0].text).toBe(before.drafts[0].text);}finally{await rm(root,{recursive:true,force:true});}
-});
 test('catalog uses stable identities and detects user changes',()=>{
  expect(validateCatalog(catalog).features.some(f=>f.id==='writing')).toBe(true);
  expect(()=>validateCatalog({...catalog,features:[catalog.features[0],catalog.features[0]]})).toThrow();
  const official={...catalog,features:catalog.features.filter(f=>f.origin==='official')};
- const modified={...official,features:official.features.map((f,i)=>i?f:{...f,state:'removed' as const})};expect(differences(official,modified).length).toBe(1);expect(likelyMatch(catalog,'alternate wording')?.id).toBe('alternatives');
+ const modified={...official,features:official.features.map((f,i)=>i?f:{...f,state:'removed' as const})};expect(differences(official,modified).length).toBe(1);expect(likelyMatch(catalog,'crop images for social')?.id).toBe('images');
 });
 test('agent completion must carry a complete structured outcome',()=>{
  expect(parseAgentResult('{"outcome":"implemented","title":"Reading time","summary":"Added reading time.","featureId":"reading-time"}').featureId).toBe('reading-time');

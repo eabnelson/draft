@@ -4,7 +4,6 @@ import {EditorState,ChangeSet,Text} from '@codemirror/state';
 import {markdownEditing,showMarkdown} from '../src/editor-markdown';
 import {markdownLinks,unlinkMarkdown} from '../src/links';
 import {formatMarkdown,safeLinkURL} from '../src/markdown';
-import {fresh,addVariant,addCandidate,applyChanges,parseDraft} from '../src/model';
 import {openExternalLink} from '../desktop/links';
 
 function edit(text:string,from:number,to:number,insert='',source=false){
@@ -37,18 +36,11 @@ test('deletion across two links never leaves hidden brackets or destinations',()
 test('source mode keeps literal Markdown editing available',()=>{
   assert.equal(edit('[x](https://example.com)',1,2,'',true),'[](https://example.com)');
 });
-test('unlinking preserves label formatting, nearby alternatives, and the caret',()=>{
+test('unlinking preserves label formatting and the caret',()=>{
   const text='A [**clear** idea](https://example.com) stays.';
-  const link=markdownLinks(text)[0],result=addVariant({...fresh(),text},{from:5,to:10},'word');
-  const draft=addCandidate(result.draft,result.variantId,'simple');
-  const edit=unlinkMarkdown(text,link,link.to),changes=ChangeSet.of(edit.changes,text.length);
-  const unlinked=applyChanges(draft,changes);
-  assert.equal(unlinked.text,'A **clear** idea stays.');
-  assert.equal(unlinked.variants.length,1);
-  assert.equal(unlinked.text.slice(unlinked.variants[0].from,unlinked.variants[0].to),'clear');
-  assert.equal(unlinked.variants[0].candidates[0].text,'simple');
+  const link=markdownLinks(text)[0],edit=unlinkMarkdown(text,link,link.to);
+  assert.equal(ChangeSet.of(edit.changes,text.length).apply(Text.of([text])).toString(),'A **clear** idea stays.');
   assert.equal(edit.selection.from,'A **clear** idea'.length);
-  parseDraft(JSON.stringify(unlinked));
 });
 test('links parse formatted labels, titles, references, and autolinks',()=>{
   for(const text of ['[**bold**](https://example.com "Title")','[word][ref]\n\n[ref]: https://example.com','<https://example.com>']){

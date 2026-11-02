@@ -33,10 +33,10 @@ test('sign-in retries the queued feature, passes real builds and installs withou
   assert.equal(f.loginCalls(),1);assert.ok(result.update);assert.notEqual(result.update.id,f.failed.id);
   assert.deepEqual(f.host.state.featureQueue,queued);assert.ok(f.failed.reconnectedAt);
   const ready=await settled(f.host,result.update.id);assert.equal(ready.state,'ready',ready.error);
-  assert.equal(f.host.active.id,'personal-start');assert.equal((await f.docs.load()).drafts[0].text,'My writing stays on this Mac.');
+  assert.equal(f.host.active.id,'personal-start');assert.equal((await f.docs.load()).drafts[0].versions[0].text,'My writing stays on this Mac.');
   await f.host.apply(ready.id);await f.host.confirm(f.host.active.id);
   assert.deepEqual(f.host.active.catalog.features.filter(f=>f.origin==='personal').map(f=>f.id).sort(),['appearance','find','reading']);
-  assert.equal((await f.docs.load()).drafts[0].text,'My writing stays on this Mac.');assert.equal(f.host.state.featureQueue?.length,0);
+  assert.equal((await f.docs.load()).drafts[0].versions[0].text,'My writing stays on this Mac.');assert.equal(f.host.state.featureQueue?.length,0);
  }finally{await f.close();}
 });
 

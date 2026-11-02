@@ -72,10 +72,10 @@ try{
  void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  let launched=false;for(let i=0;i<300;i++){
   if(child.exitCode!==null)throw Error('The downloaded app stopped during first launch.');
-  try{const library=await Bun.file(join(data,'Documents/library.json')).json();if(library.version===1&&library.drafts.length){launched=true;break;}}catch{}
+  try{const library=await Bun.file(join(data,'Drafts/library.json')).json();if(library.schemaVersion===1){launched=true;break;}}catch{}
   await new Promise(resolve=>setTimeout(resolve,100));
  }
- if(!launched)throw Error('The fresh Mac launch did not open its local document library.');
+ if(!launched)throw Error('The fresh Mac launch did not open its drafts.');
  console.log('FIRST_LAUNCH_MS',Date.now()-started);
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
