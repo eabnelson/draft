@@ -1,10 +1,10 @@
-// The landing page walkthrough: it drives the real app the way a person would, with a glass
-// cursor drawn by the page around it, in three scenes: write a draft, version it, and mark it
-// ready to post. It loops until the visitor pauses it.
+// The landing page walkthrough: Erik showing how he writes, in the real app driven the way a
+// person would, with a glass cursor drawn by the page around it. A brain dump, new versions
+// beside it, refining more than one, then marking one ready. It loops until the visitor pauses it.
 import {EditorView} from '@codemirror/view';
 import {TOUR} from './store';
 
-export const OPENING='Write it, version it, post it.';
+export const OPENING='Hi, I’m Erik. Here’s how I write.';
 const ease=(t:number)=>t*t*(3-2*t);
 type Point={x:number;y:number};
 
@@ -105,52 +105,73 @@ export class Tour{
 
   private async fade(opacity:number,signal:AbortSignal){const start=Number(getComputedStyle(this.root).opacity);await this.animate(this.reduced?0:320,p=>{this.root.style.opacity=String(start+(opacity-start)*ease(p));},signal);}
 
+  // Opens a copy of the version you are in beside it, then selects all of it and types a rewrite.
+  private async newVersion(index:number,text:string,signal:AbortSignal){
+    await this.shortcut(['⌘','T'],'New version',{key:'t',metaKey:true},signal);
+    await this.until(()=>document.querySelectorAll('.version-column').length===index+1,signal);
+    await this.wait(500,signal);
+    const view=this.editor(index),end=view.state.doc.length,start=view.coordsAtPos(0),stop=view.coordsAtPos(end);
+    if(!start||!stop)throw Error('The walkthrough text is outside the window.');
+    await this.move({x:start.left,y:(start.top+start.bottom)/2},signal,800);
+    this.pointer('press');
+    await this.move({x:stop.left,y:(stop.top+stop.bottom)/2},signal,1000,p=>view.dispatch({selection:{anchor:0,head:Math.round(end*p)}}));
+    this.pointer('release');await this.wait(400,signal);
+    await this.type(view,text,signal,true);
+  }
+  // Names a version from its tab's right-click menu.
+  private async rename(index:number,name:string,signal:AbortSignal){
+    const tab=document.querySelectorAll('.version-tab-pill')[index];
+    await this.press(tab,signal,()=>{const at=this.center(tab);tab.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:at.x,clientY:at.y}));});
+    await this.click(await this.until(()=>this.menuItem('Rename'),signal),signal);
+    const field=await this.until(()=>document.querySelector<HTMLInputElement>('.version-rename'),signal);
+    field.value='';
+    for(const ch of name){field.value+=ch;await this.wait(this.reduced?0:70,signal);}
+    await this.wait(300,signal);
+    field.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    await this.wait(700,signal);
+  }
+  // Switches to a version by pressing its tab, then adds to the end of it.
+  private async refine(index:number,text:string,signal:AbortSignal){
+    const tab=document.querySelectorAll('.version-tab-pill')[index];
+    await this.press(tab,signal,()=>tab.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0})));
+    await this.until(()=>tab.getAttribute('aria-selected')==='true',signal);
+    await this.type(this.editor(index),text,signal);
+  }
+
   private async loop(signal:AbortSignal){
     for(;;){
       this.reset();this.position={x:640,y:420};await this.fade(1,signal);
       this.scene='Intro';this.headline=OPENING;this.announce();
-      await this.wait(1400,signal);
+      await this.wait(1800,signal);
 
-      // Write: a new draft from the keyboard. Its first sentence names it until the AI suggests a title.
-      await this.step('Write','Write it.',signal);
+      // A brain dump in a new draft. Its first sentence names it until the AI suggests a title.
+      await this.step('Dump','I start with a brain dump.',signal);
       await this.shortcut(['⌘','N'],'New draft',{key:'n',metaKey:true},signal);
       await this.until(()=>document.querySelector('.inbox-row.is-active .inbox-title')?.textContent==='Untitled draft',signal);
-      await this.type(this.editor(0),TOUR.first,signal);
+      await this.type(this.editor(0),TOUR.dump,signal);
       const row=await this.until(()=>document.querySelector('.inbox-row.is-active .inbox-title')?.textContent===TOUR.title&&document.querySelector('.inbox-row.is-active'),signal);
-      await this.move(this.center(row.querySelector('.inbox-title')!),signal,900);await this.wait(1400,signal);
+      await this.move(this.center(row.querySelector('.inbox-title')!),signal,900);await this.wait(1200,signal);
 
-      // Version: a copy opens beside it, gets a shorter rewrite and a name of its own.
-      await this.step('Version','Version it.',signal);
-      await this.shortcut(['⌘','T'],'New version',{key:'t',metaKey:true},signal);
-      await this.until(()=>document.querySelectorAll('.version-column').length===2,signal);
-      await this.wait(500,signal);
-      const view=this.editor(1),end=view.state.doc.length,start=view.coordsAtPos(0),stop=view.coordsAtPos(end);
-      if(!start||!stop)throw Error('The walkthrough text is outside the window.');
-      await this.move({x:start.left,y:(start.top+start.bottom)/2},signal,800);
-      this.pointer('press');
-      await this.move({x:stop.left,y:(stop.top+stop.bottom)/2},signal,1000,p=>view.dispatch({selection:{anchor:0,head:Math.round(end*p)}}));
-      this.pointer('release');await this.wait(500,signal);
-      await this.type(view,TOUR.short,signal,true);
-      const tab=document.querySelectorAll('.version-tab-pill')[1];
-      await this.press(tab,signal,()=>{const at=this.center(tab);tab.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:at.x,clientY:at.y}));});
-      await this.click(await this.until(()=>this.menuItem('Rename'),signal),signal);
-      const field=await this.until(()=>document.querySelector<HTMLInputElement>('.version-rename'),signal);
-      field.value='';
-      for(const ch of TOUR.versionName){field.value+=ch;await this.wait(this.reduced?0:70,signal);}
-      await this.wait(350,signal);
-      field.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
-      await this.wait(900,signal);
-      await this.shortcut(['⌃','Tab'],'Switch tabs',{key:'Tab',ctrlKey:true},signal);
-      await this.wait(500,signal);
+      // New versions beside it: a clean rewrite, then a short one made from that.
+      await this.step('Versions','Then I make new versions.',signal);
+      await this.newVersion(1,TOUR.clean,signal);
+      await this.rename(1,TOUR.cleanName,signal);
+      await this.newVersion(2,TOUR.short,signal);
+      await this.rename(2,TOUR.shortName,signal);
 
-      // Post: mark it ready from the sidebar.
-      await this.step('Post','Post it.',signal);
+      // Going back and forth, refining more than one.
+      await this.step('Refine','And refine a few side by side.',signal);
+      await this.refine(1,TOUR.cleanMore,signal);
+      await this.refine(2,TOUR.shortMore,signal);
+
+      // When one feels right, it is marked ready in the sidebar.
+      await this.step('Ready','When one feels right, it’s ready.',signal);
       const chip=await this.until(()=>document.querySelector('.inbox-row.is-active [data-stage-chip]'),signal);
       await this.click(chip,signal);
       await this.click(await this.until(()=>this.menuItem('Ready'),signal),signal);
-      await this.wait(1600,signal);
+      await this.wait(1400,signal);
 
-      this.scene='Intro';this.headline=OPENING;this.announce();this.pointer('hide');
+      this.scene='Try';this.headline='Want to write like this? Try Draft.';this.announce();this.pointer('hide');
       await this.wait(4500,signal);
       await this.fade(0,signal);
     }

@@ -17,8 +17,8 @@ test('the walkthrough starts from a believable library with one draft open in tw
 });
 
 test('what the tour types is long enough for the AI title and summary it shows',()=>{
-  expect(proseWords(TOUR.first)).toBeGreaterThanOrEqual(IDEA_WORDS);
-  expect(proseWords(TOUR.first)).toBeGreaterThanOrEqual(SUMMARY_WORDS);
+  expect(proseWords(TOUR.dump)).toBeGreaterThanOrEqual(IDEA_WORDS);
+  expect(proseWords(TOUR.dump)).toBeGreaterThanOrEqual(SUMMARY_WORDS);
 });
 
 test('the stand-in server saves drafts in memory and answers the AI with canned JSON',async()=>{

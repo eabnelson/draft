@@ -13,13 +13,18 @@ function draft(text:string,minutes:number,shape:(d:Draft)=>Draft=d=>d):Draft{
   const d=fresh();return dated(shape(editVersion(d,d.versions[0].id,text)),minutes);
 }
 
-// What the tour types, and what the stand-in AI answers once there is enough of it.
+// What the tour types, and what the stand-in AI answers once there is enough of it. The
+// walkthrough is Erik showing how he writes: a brain dump, then new versions, refining a few.
 export const TOUR={
-  first:'Most ideas die in the notes app. Not because they are bad, but because there is nowhere for them to go next. Draft gives every idea a place to grow. Write it down, try another version right beside it, and keep track of where each one went live. Small ideas turn into posts when they have room.',
-  short:'Ideas die in the notes app. Draft gives them somewhere to go.',
-  versionName:'Short take',
-  title:'Give every idea somewhere to go',
-  summary:'Why ideas stall in notes apps, and how a place to version and publish them helps.',
+  dump:"hi, I'm Erik. this is how I like to write. I start with a brain dump: every thought, out of order, no fixing typos or worrying if it's any good. half sentences are fine, it just needs to get out of my head. once it's down I make new versions and shape them side by side until one feels right.",
+  clean:"Hi, I'm Erik. I start every post with a brain dump, then shape it into new versions side by side.",
+  cleanName:'Clean',
+  short:'Brain dump first. Versions second.',
+  shortName:'Short',
+  cleanMore:' Then I post the one that feels right.',
+  shortMore:' Post the best one.',
+  title:'How I write: brain dump, then versions',
+  summary:"Erik's process: dump every thought first, then shape new versions side by side until one is ready to post.",
 };
 
 export function seedLibrary():Library{
