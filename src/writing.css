@@ -279,24 +279,27 @@ html,body{height:100%;overflow:clip;overscroll-behavior:none}
 ::-webkit-scrollbar{display:none;width:0;height:0}
 
 /* Glass: the window is frosted (the Mac blurs what is behind it) and .glass-fill tints it. Nothing
-   else paints a solid background; the selected draft and the dividers are thinner places in the
-   fill, drawn by glass.ts. */
+   else paints a solid background; the dividers are thinner places in the fill, drawn by glass.ts. */
+:root{--selected-glass:rgba(0,0,0,.07)}
+:root.dark{--selected-glass:rgba(255,255,255,.1)}
 :root{--glass-fill:rgba(251,251,251,.8)}
 :root.dark{--glass-fill:rgba(26,26,26,.78)}
 html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-column,.features-scroll{background:transparent!important}
 .glass-fill{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--glass-fill);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
-.inbox-list>li.is-active,.inbox-row.is-active{background:transparent}
+.inbox-row.is-active{background:transparent}
+/* The open draft in the sidebar is the same frosted pane as the tab you are in. */
+.inbox-list>li.is-active{background:var(--selected-glass)}
 /* The tabs and the Settings button are frosted panes laid on the glass: a light wash with their
    own blur, so text scrolling under them is softened rather than showing straight through. The
-   tab you are in is the strongest wash, a hovered tab a little less, the others least. They are
-   not holes in the fill (unlike the selected draft), so the blur only ever sees the even tint and
-   the necks match the bubbles they join. */
+   tab you are in is the strongest wash (the same as the open draft in the sidebar), a hovered tab
+   a little less, the others least. They are not holes in the fill, so the blur only ever sees the
+   even tint and the necks match the bubbles they join. */
 .version-column{--tab-glass:rgba(0,0,0,.035)}
 .version-column:not(.is-active):has(.version-tab-pill:hover){--tab-glass:rgba(0,0,0,.05)}
-.version-column.is-active{--tab-glass:rgba(0,0,0,.07)}
+.version-column.is-active{--tab-glass:var(--selected-glass)}
 .dark .version-column{--tab-glass:rgba(255,255,255,.05)}
 .dark .version-column:not(.is-active):has(.version-tab-pill:hover){--tab-glass:rgba(255,255,255,.07)}
-.dark .version-column.is-active{--tab-glass:rgba(255,255,255,.1)}
+.dark .version-column.is-active{--tab-glass:var(--selected-glass)}
 .version-tab-bubble,.version-tab-neck,.version-column.is-active .version-tab-bubble{background:var(--tab-glass)!important}
 .settings-bubble{background:rgba(0,0,0,.035)!important}
 .settings-bubble:hover,.settings-bubble.is-open{background:rgba(0,0,0,.07)!important}
