@@ -3,11 +3,13 @@ import {Plus,ArrowUpRight,Undo2,FolderOpen,X,ArrowDownToLine,LoaderCircle,ArrowR
 import { Editor, type EditorHandle } from './Editor';
 import {parseWritingResult} from './writing-assistance';
 import { Button } from './components/ui/button';
-import { Features } from './Features';
+import { Features, type SectionId } from './Features';
+import { SyncButton } from './ZoSync';
+import type { SyncStatus } from '../desktop/zo-sync';
 import { Inbox, Marquee, NameField, sortedVersions, versionPreview } from './Inbox';
 import { startGlass } from './glass';
 import { ContextMenu, type MenuItem } from './ContextMenu';
-import { api, uploadImage, copyImage } from './client';
+import { api, uploadImage, copyImage, type LibraryChange } from './client';
 import { ImagePanel } from './ImageEditor';
 import { imageMarkdown, imageInsertion, imageAt, findImage, type ImageCrop } from './images';
 import { type Draft, type Span, type Version, type Stage, fresh, versionById, byShortcut, openVersions, addVersion, deleteVersion, setVersionHidden, displayTitle, chooseStage, setPinned, inboxOrder, needsSummary, setSummary, shortReadingTime, characters, versionTitle, latest, editVersion, renameVersion, rename, aiTitle, isEmpty, stage, proseWords, IDEA_WORDS, STAGES } from './model';
@@ -33,6 +35,10 @@ export default function App(){
   const [updating,setUpdating]=useState(false);
   const [drafts,setDrafts]=useState<Draft[]>(boot.library.drafts),draftsRef=useRef(drafts);draftsRef.current=drafts;
   const [activeId,setActiveId]=useState(boot.library.active),[archived,setArchived]=useState(boot.library.archived);
+  // How sync with Zo is going, from the change check below. Once a folder is chosen, drafts are
+  // synced with that workspace, even while a new credential is needed: changes go up after.
+  const [sync,setSync]=useState<SyncStatus>(),syncsWith=sync?.folder?sync.workspace??'Zo':undefined;
+  const [settingsTarget,setSettingsTarget]=useState<{id:SectionId;at:number}>();
   const draft=drafts.find(d=>d.id===activeId)??drafts[0],draftRef=useRef(draft);draftRef.current=draft;
   // Each draft remembers which version you were looking at, like an open tab.
   const [viewing,setViewing]=useState<Record<string,string>>(()=>{try{return JSON.parse(localStorage.getItem('draft:viewing')??'{}');}catch{return {};}}),viewingRef=useRef(viewing);viewingRef.current=viewing;
@@ -66,14 +72,61 @@ export default function App(){
   const ed=()=>editors.current.get(viewed(draftRef.current).id);
 
   const saveQueue=useRef<Promise<unknown>>(Promise.resolve());
+  // Sync can change a draft while it is open (see zo-sync.ts). seen is the last change from sync each
+  // draft has taken in; a save sends it, so the Mac merges a save that started from an older copy.
+  // A draft the window has not taken a change in for counts as seen as of when the window loaded.
+  const bootSeq=boot.library.seq??0,feedSeq=useRef(bootSeq),seen=useRef<Record<string,number>>({});
   async function persist(d:Draft):Promise<boolean>{
     try {
-      const save=saveQueue.current.then(()=>api('/api/drafts/save',{draft:d}));
+      // The newest copy when this save's turn comes, not the one it was queued with.
+      let sent=d;
+      const save=saveQueue.current.then(async()=>{
+        sent=draftsRef.current.find(x=>x.id===d.id)??d;
+        const result=await api<{draft?:Draft;seq?:number}>('/api/drafts/save',{draft:sent,seen:seen.current[d.id]??bootSeq});
+        if(typeof result.seq==='number')seen.current[d.id]=Math.max(seen.current[d.id]??0,result.seq);
+        if(result.draft)adopt(result.draft,sent);
+      });
       saveQueue.current=save.catch(()=>{});await save;
-      if(draftsRef.current.find(x=>x.id===d.id)===d)unsaved.current.delete(d.id);
+      if(draftsRef.current.find(x=>x.id===d.id)===sent)unsaved.current.delete(d.id);
       if(!unsaved.current.size)setSaveState('Saved');setSaveError('');return true;
     }catch{setSaveError('Saving failed. Your changes are still open. Export this draft to keep a copy.');setSaveState('Unsaved changes');return false;}
   }
+  // Put a draft in place without counting it as an edit to save.
+  function replaceDraft(next:Draft){
+    const exists=draftsRef.current.some(d=>d.id===next.id);
+    const list=exists?draftsRef.current.map(d=>d.id===next.id?next:d):[...draftsRef.current,next];
+    draftsRef.current=list;if(next.id===draftRef.current.id)draftRef.current=next;setDrafts(list);
+  }
+  // A save came back merged with changes from Zo. Anything typed since it was sent stays on top.
+  function adopt(merged:Draft,sent:Draft){
+    const current=draftsRef.current.find(x=>x.id===merged.id);if(!current)return;
+    if(current===sent){replaceDraft(merged);return;}
+    const before=new Map(sent.versions.map(v=>[v.id,v.text]));let number=Math.max(...merged.versions.map(v=>v.number));
+    const versions=merged.versions.map(v=>{const typed=current.versions.find(x=>x.id===v.id);return typed&&typed.text!==before.get(v.id)?{...v,text:typed.text,updatedAt:typed.updatedAt}:v;});
+    for(const v of current.versions)if(!before.has(v.id)&&!versions.some(x=>x.id===v.id))versions.push({...v,number:++number});
+    replaceDraft({...merged,versions});unsaved.current.add(merged.id);
+  }
+  // Take in what sync changed. A draft with typing not yet saved is left alone: its next save is
+  // merged on the Mac and comes back with both.
+  useEffect(()=>{
+    let live=true,busy=false;
+    const check=async()=>{
+      if(busy)return;busy=true;
+      try{
+        const result=await api<{seq:number;changes:LibraryChange[];archived:number;sync?:SyncStatus}>(`/api/library/changes?since=${feedSeq.current}`);
+        if(!live)return;
+        for(const change of result.changes){
+          if(unsaved.current.has(change.id))continue;
+          const current=draftsRef.current.find(d=>d.id===change.id);
+          if(change.draft){seen.current[change.id]=change.seq;if(!current||JSON.stringify(current)!==JSON.stringify(change.draft))replaceDraft(change.draft);}
+          else if(current){removeFromList(current);notice(`“${displayTitle(current)}” was ${change.gone==='archived'?'archived':'deleted'} on another Mac or in ${result.sync?.workspace??'Zo'}.`);}
+        }
+        feedSeq.current=result.seq;setArchived(result.archived);setSync(result.sync);
+      }catch{}finally{busy=false;}
+    };
+    void check();const timer=setInterval(()=>void check(),2000);
+    return()=>{live=false;clearInterval(timer);};
+  },[]);
   async function persistAll():Promise<boolean>{
     for(;;){const pending=draftsRef.current.filter(d=>unsaved.current.has(d.id));if(!pending.length)return true;for(const d of pending)if(!await persist(d))return false;}
   }
@@ -120,7 +173,7 @@ export default function App(){
     update(setVersionHidden(d,versionId,true));
   }
   function askDeleteVersion(d:Draft,v:Version){
-    setConfirm({title:`Delete “${versionPreview(v)}”?`,detail:'Its text moves to Draft’s Recovery folder on this Mac. The other versions are not changed.',action:'Delete version',run:()=>{
+    setConfirm({title:`Delete “${versionPreview(v)}”?`,detail:syncsWith?`This deletes it from ${syncsWith} and your other Macs too. A copy stays in Draft’s Recovery folder on this Mac. Other versions aren’t changed.`:'Its text moves to Draft’s Recovery folder on this Mac. The other versions are not changed.',action:'Delete version',run:()=>{
       try{const current=draftsRef.current.find(x=>x.id===d.id)??d;update(deleteVersion(current,v.id));notice(`“${versionPreview(v)}” deleted.`);}catch(e){notice(e instanceof Error?e.message:'This version could not be deleted.');}
     }});
   }
@@ -139,7 +192,7 @@ export default function App(){
     removeFromList(d);setArchived(n=>n+1);notice('Draft archived.');
   }
   function askDeleteDraft(d:Draft){
-    setConfirm({title:`Delete “${displayTitle(d)}”?`,detail:`All ${d.versions.length===1?'of its writing':`${d.versions.length} versions`} and its media move to Draft’s Recovery folder on this Mac.`,action:'Delete draft',run:()=>void deleteDraft(d)});
+    setConfirm({title:`Delete “${displayTitle(d)}”?`,detail:syncsWith?`This deletes it from ${syncsWith} and your other Macs too. A copy stays in Draft’s Recovery folder on this Mac.`:`All ${d.versions.length===1?'of its writing':`${d.versions.length} versions`} and its media move to Draft’s Recovery folder on this Mac.`,action:'Delete draft',run:()=>void deleteDraft(d)});
   }
   async function deleteDraft(d:Draft){
     // Stop saving it first, so a pending save cannot bring it back.
@@ -301,16 +354,20 @@ export default function App(){
   function copyImageToClipboard(source:string|Promise<Blob>){void copyImage(draftRef.current.id,source).then(()=>notice('Image copied.')).catch(e=>notice(e instanceof Error?e.message:'This image could not be copied.'));}
 
   // Settings: a glass button in the sidebar's lower left corner, in writing and in Settings.
-  const settingsButton=<button type="button" className={`settings-bubble ${featuresOpen?'is-open':''}`} aria-pressed={featuresOpen} aria-label={updateLabel==='Preferences'?'Settings':updateLabel} title={updateLabel==='Preferences'?'Settings · ⌘,':updateLabel} onClick={()=>setFeaturesOpen(open=>!open)}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>;
+  const settingsButton=<button type="button" className={`version-tab-bubble settings-bubble ${featuresOpen?'is-open':''}`} aria-pressed={featuresOpen} aria-label={updateLabel==='Preferences'?'Settings':updateLabel} title={updateLabel==='Preferences'?'Settings · ⌘,':updateLabel} onClick={()=>setFeaturesOpen(open=>!open)}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>;
+  // Sync: an icon beside Settings while sync is on, showing done, in progress or needs you.
+  const syncButton=sync&&sync.state!=='off'?<SyncButton status={sync} onClick={()=>{setSettingsTarget({id:'sync',at:Date.now()});setFeaturesOpen(true);}}/>:null;
+  // Together they're one glass pill, joined by a neck like a tab's pieces.
+  const footer=<div className="version-tab-pill footer-pill">{settingsButton}{syncButton&&<><Neck/>{syncButton}</>}</div>;
   return <><div className="glass-fill" ref={glassRef} aria-hidden="true"/><div className={`app ${inboxOpen?'with-panel':'without-panel'} ${focusedImage?'with-image':''}`} inert={updating}>
     <input ref={file} type="file" accept=".txt,.md,.markdown" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value='';}}/>
     {saveError&&<div className="save-error" role="alert">{saveError}<Button variant="ghost" onClick={()=>void exportDraft()}>Export a safe copy <ArrowUpRight size={14}/></Button></div>}
-    {featuresOpen&&<Features sidebar={inboxOpen} footer={settingsButton} onUpdating={setUpdating} onBeforeApply={persistAll}/>}
+    {featuresOpen&&<Features sidebar={inboxOpen} footer={footer} openTo={settingsTarget} onUpdating={setUpdating} onBeforeApply={persistAll}/>}
     <main className="workspace" style={featuresOpen?{display:'none'}:undefined}>
       {inboxOpen&&<Inbox drafts={listed} activeId={draft.id} activeVersionId={version.id} renamingId={renamingId} onOpen={d=>{
         // Clicking another draft opens it with its versions showing; clicking the open draft shows or hides them.
         if(d.id!==draftRef.current.id){void open(d);expand(d.id,true);}else expand(d.id,!expanded.has(d.id));
-      }} onVersion={(d,versionId)=>{void open(d);showVersion(versionId);}} expanded={expanded} onRename={renameDraft} onMenu={openMenu} onStage={(d,at)=>setStageMenu({x:at.left,y:at.bottom+4,draftId:d.id})} footer={settingsButton} onBackgroundMenu={e=>{e.preventDefault();setBackgroundMenu({x:e.clientX,y:e.clientY});}}/>}
+      }} onVersion={(d,versionId)=>{void open(d);showVersion(versionId);}} expanded={expanded} onRename={renameDraft} onMenu={openMenu} onStage={(d,at)=>setStageMenu({x:at.left,y:at.bottom+4,draftId:d.id})} footer={footer} onBackgroundMenu={e=>{e.preventDefault();setBackgroundMenu({x:e.clientX,y:e.clientY});}}/>}
       <section className="writing-area">
         <div className={`version-columns ${columns.length>1?'is-split':''}`} ref={columnsRef}>{columns.map((v,i)=>{
           const active=v.id===version.id;

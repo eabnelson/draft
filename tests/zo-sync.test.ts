@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {DraftStore} from '../desktop/documents';
 import {ZoSync,workspaceOf,parseCredentials,normalizeFolder,type Secrets} from '../desktop/zo-sync';
-import {fresh,editVersion,addVersion} from '../src/model';
+import {fresh,editVersion,addVersion,type Draft} from '../src/model';
 
 const CLAIMS='https://zo.computer/claims/system-api';
 const BASE='/workspace/Draft';
@@ -19,13 +19,19 @@ class MemorySecrets implements Secrets{
   async delete(a:string){this.values.delete(a);}
 }
 
-// A small stand-in for Zo: client-credential tokens, and Knowledge files by path.
+// A small stand-in for Zo: client-credential tokens, and Knowledge files by path, with a trash,
+// folder moves that keep file IDs, a recursive search, and download links.
 function fakeZo(){
-  const files=new Map<string,{id:string;revision:number;content:Uint8Array}>(),uploads=new Map<string,{path:string;bytes?:Uint8Array}>();
+  type File={id:string;revision:number;content:Uint8Array;updatedAt:number};
+  const files=new Map<string,File>(),trash=new Map<string,File&{path:string}>(),uploads=new Map<string,{path:string;bytes?:Uint8Array}>();
   const calls:string[]=[],credentials=new Map([['cred1','secret-1']]),folders=new Set(['/workspace','/shared','/workspace/Writing','/workspace/Plans']);
-  let access=new Set<string>(),serial=0,flaky=new Set<string>(['zo.file.create']),racing=0,exchanges=0,expiresIn=300,canUpdate=true,workspaceHidden=false,homeHidden=false;
+  let access=new Set<string>(),serial=0,flaky=new Set<string>(['zo.file.create']),racing=0,exchanges=0,expiresIn=300,canUpdate=true,workspaceHidden=false,homeHidden=false,clock=Date.now();
+  const hidden=new Set<string>();
   const error=(code:string,status=400)=>Response.json({request_id:'r',error:{code,message:code,details:{outcome:'not_started'}}},{status});
   const find=(id:string)=>[...files.entries()].find(([,f])=>f.id===id);
+  const tick=()=>++clock;
+  const ancestors=(path:string)=>{const parts=path.split('/'),out:string[]=[];for(let i=2;i<parts.length;i++)out.push(parts.slice(0,i).join('/'));return out;};
+  const allFolders=()=>new Set([...folders,...[...files.keys(),...[...trash.values()].map(t=>t.path)].flatMap(ancestors)]);
   const server=Bun.serve({port:0,hostname:'127.0.0.1',async fetch(request){
     const url=new URL(request.url);
     if(url.pathname==='/zo-system-api/oauth/token'){
@@ -36,49 +42,77 @@ function fakeZo(){
       return Response.json({access_token:token,token_type:'Bearer',expires_in:expiresIn});
     }
     if(url.pathname.startsWith('/upload/')&&request.method==='PUT'){const u=uploads.get(url.pathname.slice(8));if(!u)return new Response(null,{status:404});u.bytes=new Uint8Array(await request.arrayBuffer());return new Response(null,{status:200});}
+    if(url.pathname.startsWith('/download/')){const found=find(url.pathname.slice(10));return found?new Response(found[1].content):new Response(null,{status:404});}
     if(url.pathname!=='/zo-system-api/v1/invoke')return new Response('no',{status:404});
     if(!access.has(request.headers.get('authorization')?.slice(7)??''))return error('unauthenticated',401);
-    const lastBody=await request.text();const {action,input}=JSON.parse(lastBody);calls.push(action);
+    const lastBody=await request.text();const {action,input,options}=JSON.parse(lastBody);calls.push(action);
     if(flaky.delete(action))return error('implementation_unavailable',503);
-    const view=(path:string)=>{const f=files.get(path)!;return {id:f.id,revision:f.revision,name:path.split('/').pop(),current_version_id:`v${f.revision}`};};
-    const children=(at:string)=>{
-      const names=new Set<string>();
-      for(const p of [...folders,...[...files.keys()].flatMap(f=>{const parts=f.split('/');return parts.slice(2,-1).map((_,i)=>parts.slice(0,i+2+1).join('/'));})])if(p.startsWith(at+'/')&&p.split('/').length===at.split('/').length+1)names.add(p);
-      return [...names].map(p=>({kind:'folder',path:p,folder:{name:p.split('/').pop()}}));
-    };
+    const view=(path:string)=>{const f=files.get(path)!;return {id:f.id,revision:f.revision,name:path.split('/').pop(),current_version_id:`v${f.revision}`,updated_at:new Date(f.updatedAt).toISOString(),deleted_at:null};};
+    const children=(at:string)=>[...allFolders()].filter(p=>p.startsWith(at+'/')&&p.split('/').length===at.split('/').length+1).map(p=>({kind:'folder',path:p,folder:{name:p.split('/').pop()}}));
+    const put=(path:string,content:Uint8Array)=>{files.set(path,{id:`f${++serial}`,revision:1,content,updatedAt:tick()});return Response.json({result:view(path)});};
     switch(action){
       case 'zo.kb.list':{
         if(!input.path&&homeHidden)return error('permission_denied',403);
         if(!input.path)return Response.json({result:{view:'home',entries:[{kind:'folder',path:'/shared',folder:{name:'shared'}},{kind:'folder',path:'/workspace',folder:{name:'workspace'}}],next_cursor:null}});
-        if(!folders.has(input.path)&&!children(input.path).length)return error('resource_not_found',404);
+        if(!allFolders().has(input.path))return error('resource_not_found',404);
         // Two pages, so the cursor is followed.
-        const all=children(input.path),cursor=JSON.parse(lastBody).options?.query?.cursor??null;
-        return Response.json({result:{view:'folder',entries:cursor?all.slice(1):all.slice(0,1),next_cursor:cursor||all.length<2?null:'next'}});
+        const all=children(input.path),cursor=options?.query?.cursor??null;
+        return Response.json({result:{view:'folder',folder:{id:`fold:${input.path}`,path:input.path},entries:cursor?all.slice(1):all.slice(0,1),next_cursor:cursor||all.length<2?null:'next'}});
       }
-      case 'zo.folder.create':{const path=`${input.parent_path}/${input.name}`;if(folders.has(path)||children(input.parent_path).some(e=>e.path===path))return error('conflict',409);folders.add(path);return Response.json({result:{id:`d${++serial}`,name:input.name,revision:1}});}
+      case 'zo.kb.search':{
+        const at=String(input.folder_id).slice(5),start=Number(options?.query?.cursor??0),limit=options?.query?.limit??20;
+        const all=[...files.entries()].filter(([p])=>p.startsWith(at+'/')&&p.includes(input.query)&&!hidden.has(p)).sort((a,b)=>b[1].updatedAt-a[1].updatedAt);
+        return Response.json({result:{hits:all.slice(start,start+limit).map(([p,f])=>({source:'file',path:p,file:{id:f.id,revision:f.revision,updated_at:new Date(f.updatedAt).toISOString()}})),next_cursor:start+limit<all.length?String(start+limit):null}});
+      }
+      case 'zo.folder.create':{const path=`${input.parent_path}/${input.name}`;if(allFolders().has(path)||files.has(path))return error('conflict',409);folders.add(path);return Response.json({result:{id:`fold:${path}`,name:input.name,revision:1}});}
+      case 'zo.folder.update':{
+        const from=input.path,to=`${String(input.destination_folder_id).slice(5)}/${from.split('/').pop()}`;
+        if(!allFolders().has(from))return error('resource_not_found',404);if(allFolders().has(to))return error('conflict',409);
+        for(const [p,f] of [...files])if(p.startsWith(from+'/')){files.delete(p);files.set(to+p.slice(from.length),f);}
+        for(const p of [...folders])if(p===from||p.startsWith(from+'/')){folders.delete(p);folders.add(to+p.slice(from.length));}
+        return Response.json({result:{id:`fold:${to}`}});
+      }
+      case 'zo.folder.delete':{
+        const path=input.path;if(!allFolders().has(path))return error('resource_not_found',404);
+        if([...files.keys(),...[...trash.values()].map(t=>t.path)].some(p=>p.startsWith(path+'/'))||[...allFolders()].some(p=>p.startsWith(path+'/')))return error('conflict',409);
+        folders.delete(path);return Response.json({result:{id:`fold:${path}`}});
+      }
       case 'zo.workspace.get':if(workspaceHidden)return error('permission_denied',403);return Response.json({result:{id:input.workspace_id,display_name:'MyCloud'}});
       case 'zo.file.create':{
-        if(input.upload_id){const u=uploads.get(input.upload_id)!;if(files.has(u.path))return error('conflict',409);files.set(u.path,{id:`f${++serial}`,revision:1,content:u.bytes!});return Response.json({result:view(u.path)});}
+        if(input.upload_id){const u=uploads.get(input.upload_id)!;if(files.has(u.path))return error('conflict',409);return put(u.path,u.bytes!);}
         if(!input.create_parent_folders||!input.parent_path.startsWith('/workspace'))return error('resource_not_found',404);
         if(racing>0){racing--;return error('conflict',409);}
         const path=`${input.parent_path}/${input.name}`;if(files.has(path))return error('conflict',409);
-        files.set(path,{id:`f${++serial}`,revision:1,content:new TextEncoder().encode(input.content)});return Response.json({result:view(path)});
+        return put(path,new TextEncoder().encode(input.content));
       }
       case 'zo.file.prepare_create':{const id=`u${++serial}`;uploads.set(id,{path:`${input.parent_path}/${input.name}`});return Response.json({result:{upload_id:id,upload_url:`http://127.0.0.1:${server.port}/upload/${id}`}});}
       case 'zo.file.update':{
         if(!canUpdate)return error('permission_denied',403);
         const found=find(input.file_id);if(!found)return error('resource_not_found',404);
         const [path,f]=found;if(input.expected_revision!==f.revision)return error('conflict',409);
-        files.set(path,{...f,revision:f.revision+1,content:new TextEncoder().encode(input.content)});return Response.json({result:view(path)});
+        files.set(path,{...f,revision:f.revision+1,content:new TextEncoder().encode(input.content),updatedAt:tick()});return Response.json({result:view(path)});
       }
       case 'zo.file.get_metadata':{const path=input.path??find(input.file_id)?.[0];return path&&files.has(path)?Response.json({result:view(path)}):error('resource_not_found',404);}
+      case 'zo.file.read':{const found=find(input.file_id);if(!found)return error('resource_not_found',404);return Response.json({result:{file:view(found[0]),content:{format:'url',url:`http://127.0.0.1:${server.port}/download/${found[1].id}`}}});}
+      case 'zo.file.delete':{const found=find(input.file_id);if(!found)return error('resource_not_found',404);files.delete(found[0]);trash.set(found[1].id,{...found[1],path:found[0]});return Response.json({result:{id:found[1].id}});}
+      case 'zo.file.purge':{if(!trash.delete(input.file_id))return error('resource_not_found',404);return Response.json({result:{job_id:'1'}});}
     }
     return error('unknown_action',404);
   }});
-  return {server,files,calls,credentials,folders,
+  const at=(path:string,base=BASE)=>`${base}/${path}`;
+  return {server,files,trash,calls,credentials,folders,
     origin:`http://127.0.0.1:${server.port}`,
-    text:(path:string,base=BASE)=>new TextDecoder().decode(files.get(`${base}/${path}`)?.content),
-    edit(path:string,text:string){const f=files.get(`${BASE}/${path}`)!;files.set(`${BASE}/${path}`,{...f,revision:f.revision+1,content:new TextEncoder().encode(text)});},
+    text:(path:string,base=BASE)=>new TextDecoder().decode(files.get(at(path,base))?.content),
+    has:(path:string,base=BASE)=>files.has(at(path,base)),
+    folder:(path:string)=>allFolders().has(path),
+    id:(path:string)=>files.get(at(path))?.id,
+    // Someone changing a file in Zo directly.
+    edit(path:string,text:string){const f=files.get(at(path))!;files.set(at(path),{...f,revision:f.revision+1,content:new TextEncoder().encode(text),updatedAt:tick()});},
+    // Someone deleting a whole draft in Zo: its files go to the trash.
+    removeDraft(prefix:string){for(const [p,f] of [...files])if(p.startsWith(at(prefix)+'/')){files.delete(p);trash.set(f.id,{...f,path:p});}},
+    // Zo's search not having caught up with a file yet.
+    hide(path:string){hidden.add(at(path));},
+    unhide(){hidden.clear();},
     revoke(id:string){credentials.delete(id);access=new Set();},
     shortTokens(){expiresIn=1;},
     builderOnly(){canUpdate=false;},
@@ -94,7 +128,7 @@ async function fixture(run:(f:Fixture)=>Promise<void>){
   try{
     const drafts=join(root,'Drafts'),store=new DraftStore(drafts),secrets=new MemorySecrets();
     await store.load();
-    const sync=new ZoSync(root,drafts,{secrets,config:{authOrigin:zo.origin,apiOrigin:zo.origin},sleep:async()=>{},timers:false});
+    const sync=new ZoSync(root,store,{secrets,config:{authOrigin:zo.origin,apiOrigin:zo.origin},sleep:async()=>{},timers:false});
     await sync.initialize();
     await run({root,drafts,store,zo,secrets,sync});
   }finally{zo.server.stop(true);await rm(root,{recursive:true,force:true});}
@@ -126,7 +160,7 @@ test('connecting checks the service account with Zo and keeps its secret only in
   expect(JSON.parse(saved)).toMatchObject({clientId:'cred1',workspaceId:'wsp_test',base:BASE});
   expect(saved).not.toContain('secret-1');
   // It comes back after a restart.
-  const again=new ZoSync(f.root,f.drafts,{secrets:f.secrets,config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false});
+  const again=new ZoSync(f.root,f.store,{secrets:f.secrets,config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false});
   await again.initialize();expect(again.status()).toMatchObject({state:'waiting',workspace:'MyCloud',folder:BASE});
 }));
 
@@ -144,25 +178,29 @@ test('every draft, version and image is saved to the folder, and only changes ar
   // Undo history stays on this Mac.
   expect([...f.zo.files.keys()].some(p=>p.includes('/history/'))).toBe(false);
 
-  const sent=f.zo.calls.length;await f.sync.run();
-  expect(f.zo.calls.length).toBe(sent);
+  // Checking Zo again sends nothing when nothing changed.
+  const writes=()=>f.zo.calls.filter(c=>c.startsWith('zo.file')||c==='zo.folder.update');
+  const sent=writes().length;await f.sync.run();
+  expect(writes().length).toBe(sent);
 
   d=editVersion(d,d.versions[1].id,'Punchier still.');await f.store.save(d);await f.sync.run();
-  expect(f.zo.calls.slice(sent)).toEqual(['zo.file.update','zo.file.update']);
+  expect(writes().slice(sent)).toEqual(['zo.file.update','zo.file.update']);
   expect(f.zo.text(`${d.id}.draft/versions/v2.md`)).toBe('Punchier still.');
   expect(f.zo.files.get(`${BASE}/${d.id}.draft/versions/v2.md`)?.revision).toBe(2);
 }));
 
-test('sync only reads the drafts on this Mac, even when the copy in Zo was changed',()=>fixture(async f=>{
+test('writing changed both here and in Zo is kept twice, never lost',()=>fixture(async f=>{
   let d=fresh();d=editVersion(d,d.versions[0].id,'Mine.');await f.store.save(d);
   await link(f);await f.sync.run();
   f.zo.edit(`${d.id}.draft/versions/v1.md`,'Edited in Zo.');
   d=editVersion(d,d.versions[0].id,'Mine, later.');await f.store.save(d);
-  const before=await snapshot(f.drafts);
   await f.sync.run();
-  expect(await snapshot(f.drafts)).toEqual(before);
+  const here=await f.store.readAt(d.id,'live');
+  expect(here.versions.map(v=>[v.number,v.text,v.name])).toEqual([[1,'Mine, later.',undefined],[2,'Edited in Zo.','Version 1 (from Zo)']]);
+  // And Zo ends up with both.
   expect(f.zo.text(`${d.id}.draft/versions/v1.md`)).toBe('Mine, later.');
-  expect(f.zo.files.get(`${BASE}/${d.id}.draft/versions/v1.md`)?.revision).toBe(3);
+  expect(f.zo.text(`${d.id}.draft/versions/v2.md`)).toBe('Edited in Zo.');
+  expect(f.sync.status().state).toBe('synced');
 }));
 
 test('a file removed in Zo is saved again, and reconnecting takes over what is already there',()=>fixture(async f=>{
@@ -212,9 +250,137 @@ test('a service account that can only add files says what access it needs',()=>f
   f.zo.builderOnly();
   d=editVersion(d,d.versions[0].id,'Two.');await f.store.save(d);
   const before=await snapshot(f.drafts);await f.sync.run();
-  expect(f.sync.status()).toMatchObject({state:'error',message:`This service account can’t save to ${BASE}. In Zo, let it edit that folder or give it Full access, then choose Save now.`});
+  expect(f.sync.status()).toMatchObject({state:'error',message:`This service account can’t save to ${BASE}. In Zo, let it edit that folder or give it Full access, then choose Sync now.`});
   expect(await snapshot(f.drafts)).toEqual(before);
 }));
+
+// A second Mac connected to the same folder.
+async function secondMac(f:Fixture,run:(m:{store:DraftStore;sync:ZoSync;drafts:string;root:string})=>Promise<void>){
+  const root=await mkdtemp(join(tmpdir(),'draft-zo-mac-'));
+  try{
+    const drafts=join(root,'Drafts'),store=new DraftStore(drafts);await store.load();
+    const sync=new ZoSync(root,store,{secrets:new MemorySecrets(),config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false});
+    await sync.initialize();await sync.connect({credentials:env()});await sync.chooseFolder(BASE);
+    await run({store,sync,drafts,root});
+  }finally{await rm(root,{recursive:true,force:true});}
+}
+const written=(text:string,title='')=>{let d=fresh();d=editVersion(d,d.versions[0].id,text);return title?{...d,title,titleSource:'manual' as const}:d;};
+
+test('a draft written on one Mac appears on the other, and edits travel both ways',()=>fixture(async f=>{
+  let d=written('Started on the laptop.','Laptop draft');await f.store.save(d);
+  await link(f);await f.sync.run();
+  await secondMac(f,async mac=>{
+    await mac.sync.run();
+    expect((await mac.store.readAt(d.id,'live')).versions[0].text).toBe('Started on the laptop.');
+    // The window there is told about it.
+    expect((await mac.store.changesSince(0)).changes.some(c=>c.id===d.id&&c.draft?.title==='Laptop draft')).toBe(true);
+    let there=await mac.store.readAt(d.id,'live');there=editVersion(there,there.versions[0].id,'Finished on the desktop.');await mac.store.save(there);
+    await mac.sync.run();
+  });
+  const seq=(await f.store.changesSince(0)).seq;
+  await f.sync.run();
+  expect((await f.store.readAt(d.id,'live')).versions[0].text).toBe('Finished on the desktop.');
+  const changes=await f.store.changesSince(seq);
+  expect(changes.changes.map(c=>[c.id,c.draft?.versions[0].text])).toEqual([[d.id,'Finished on the desktop.']]);
+  // Taking it in sends nothing back.
+  const writes=f.zo.calls.filter(c=>c.startsWith('zo.file.update')||c.startsWith('zo.file.create')).length;await f.sync.run();
+  expect(f.zo.calls.filter(c=>c.startsWith('zo.file.update')||c.startsWith('zo.file.create')).length).toBe(writes);
+}));
+
+test('deleting a draft on one Mac deletes it in Zo and on the other',()=>fixture(async f=>{
+  const d=written('Short-lived.');await f.store.save(d);const keep=written('Stays.');await f.store.save(keep);
+  await link(f);await f.sync.run();
+  await secondMac(f,async mac=>{
+    await mac.sync.run();expect(await mac.store.place(d.id)).toBe('live');
+    await f.store.delete(d.id);await f.sync.run();
+    expect(f.zo.has(`${d.id}.draft/draft.json`)).toBe(false);
+    expect(f.zo.trash.size).toBe(0);
+    expect(f.zo.has(`${keep.id}.draft/draft.json`)).toBe(true);
+    // Its emptied folders go once Zo allows it.
+    await f.sync.run();expect(f.zo.folder(`${BASE}/${d.id}.draft`)).toBe(false);
+    const seq=(await mac.store.changesSince(0)).seq;
+    await mac.sync.run();
+    expect(await mac.store.place(d.id)).toBe(null);
+    expect((await mac.store.deletedIds()).has(d.id)).toBe(true);
+    expect((await mac.store.changesSince(seq)).changes).toEqual([expect.objectContaining({id:d.id,gone:'deleted'})]);
+    expect(await mac.store.place(keep.id)).toBe('live');
+  });
+  // It does not come back.
+  await f.sync.run();expect(await f.store.place(d.id)).toBe(null);expect(f.zo.has(`${d.id}.draft/draft.json`)).toBe(false);
+}));
+
+test('archiving moves the draft in Zo, keeping its files, and the other Mac follows',()=>fixture(async f=>{
+  const d=written('Put away for now.');await f.store.save(d);
+  await link(f);await f.sync.run();
+  const fileId=f.zo.id(`${d.id}.draft/versions/v1.md`);
+  await secondMac(f,async mac=>{
+    await mac.sync.run();
+    await f.store.archive(d.id);await f.sync.run();
+    expect(f.zo.has(`${d.id}.draft/draft.json`)).toBe(false);
+    expect(f.zo.id(`Archive/${d.id}.draft/versions/v1.md`)).toBe(fileId);
+    await mac.sync.run();
+    expect(await mac.store.place(d.id)).toBe('archived');
+    expect((await mac.store.changesSince(0)).changes.find(c=>c.id===d.id)?.gone).toBe('archived');
+    // Restored there, it comes back here.
+    await mac.store.restoreLast();await mac.sync.run();
+  });
+  await f.sync.run();
+  expect(await f.store.place(d.id)).toBe('live');
+  expect(f.zo.id(`${d.id}.draft/versions/v1.md`)).toBe(fileId);
+}));
+
+test('a draft deleted in Zo leaves this Mac too, unless it was written in since',()=>fixture(async f=>{
+  const gone=written('Deleted in Zo.');await f.store.save(gone);
+  let kept=written('Deleted in Zo, but I kept writing.');await f.store.save(kept);
+  const other=written('Untouched.');await f.store.save(other);
+  const fourth=written('Also untouched.');await f.store.save(fourth);
+  await link(f);await f.sync.run();
+  f.zo.removeDraft(`${gone.id}.draft`);f.zo.removeDraft(`${kept.id}.draft`);
+  kept=editVersion(kept,kept.versions[0].id,'Deleted in Zo, but I kept writing, and it wins.');await f.store.save(kept);
+  await f.sync.run();
+  expect(await f.store.place(gone.id)).toBe(null);
+  expect((await f.store.deletedIds()).has(gone.id)).toBe(true);
+  expect(await f.store.place(kept.id)).toBe('live');
+  expect(f.zo.text(`${kept.id}.draft/versions/v1.md`)).toBe('Deleted in Zo, but I kept writing, and it wins.');
+}));
+
+test('when most drafts vanish from Zo at once, Draft keeps them and says so',()=>fixture(async f=>{
+  const ids:string[]=[];for(let i=0;i<4;i++){const d=written(`Draft ${i}.`);await f.store.save(d);ids.push(d.id);}
+  await link(f);await f.sync.run();
+  for(const id of ids)f.zo.removeDraft(`${id}.draft`);
+  await f.sync.run();
+  for(const id of ids)expect(await f.store.place(id)).toBe('live');
+  expect(f.sync.status().message).toContain('4 drafts are missing from /workspace/Draft');
+}));
+
+test('a file Zo’s search has not caught up with is not taken as removed',()=>fixture(async f=>{
+  const d=written('Just saved.');await f.store.save(d);
+  await link(f);await f.sync.run();
+  f.zo.hide(`${d.id}.draft/versions/v1.md`);
+  const before=await snapshot(f.drafts);await f.sync.run();
+  expect(await snapshot(f.drafts)).toEqual(before);
+  expect(f.zo.text(`${d.id}.draft/versions/v1.md`)).toBe('Just saved.');
+  expect(f.sync.status().state).toBe('synced');
+}));
+
+test('a save that started before sync changed the draft is merged, keeping both',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'draft-merge-'));
+  try{
+    const store=new DraftStore(join(root,'Drafts'));await store.load();
+    let d:Draft=written('Before.');const second=addVersion(d);d=editVersion(second.draft,second.version.id,'Second, untouched here.');
+    await store.save(d);const seen=(await store.changesSince(0)).seq;
+    // Sync brings in Zo's copy: both versions changed there, and a third added.
+    const [v1,v2]=d.versions;let fromZo=editVersion(editVersion(d,v1.id,'Changed in Zo.'),v2.id,'Second, changed in Zo.');
+    const third=addVersion(fromZo);fromZo=editVersion(third.draft,third.version.id,'New in Zo.');
+    await store.writeExternal(fromZo,'live');
+    // The window, not knowing, saves its own edit to the first version only.
+    const result=await store.save(editVersion(d,v1.id,'Typed here.'),seen);
+    expect(result.draft?.versions.map(v=>[v.text,v.name])).toEqual([['Typed here.',undefined],['Second, changed in Zo.',undefined],['New in Zo.',undefined],['Changed in Zo.','Version 1 (from Zo)']]);
+    expect((await store.readAt(d.id,'live')).versions.map(v=>v.text)).toEqual(['Typed here.','Second, changed in Zo.','New in Zo.','Changed in Zo.']);
+    // Once the window has the merged copy, saves are plain again.
+    expect((await store.save(result.draft!,result.seq)).draft).toBeUndefined();
+  }finally{await rm(root,{recursive:true,force:true});}
+});
 
 test('the folder can be chosen by browsing the workspace, or made new',()=>fixture(async f=>{
   await expect(f.sync.folders()).rejects.toThrow('Connect');

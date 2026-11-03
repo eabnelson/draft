@@ -1,7 +1,9 @@
 import type {Draft} from './model';
 import {safeLinkURL} from './markdown';
 import {copyImageToClipboard,mediaURL} from './images';
-export type Library={active:string;drafts:Draft[];archived:number};
+export type Library={active:string;drafts:Draft[];archived:number;seq?:number};
+// A draft that sync changed, added or took away while Draft was open.
+export type LibraryChange={id:string;seq:number;draft?:Draft;gone?:'deleted'|'archived'};
 declare global {interface Window {draftBoot:{library:Library;version:string;error?:string};}}
 // The website walkthrough cancels this event to stand in for a restart without reloading the page.
 export function restartApp(){if(window.dispatchEvent(new Event('draft:restart',{cancelable:true})))window.location.reload();}

@@ -25,8 +25,8 @@ const spelling=new NativeSpelling(spellingExecutable(runtime));
 const testHost=process.env.DRAFT_BUNDLE_ID?.endsWith('.update-check')===true;
 const updates=new Updates(root,template,dependencies,process.execPath,{appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID,hostVersion:process.env.DRAFT_HOST_VERSION,...(testHost?{feed:process.env.DRAFT_UPDATE_FEED,allowLocal:true}:{} )});
 await updates.initialize();
-// A copy of every draft in the person's Zo workspace, made in the background after saves.
-const sync=new ZoSync(root,documents.root);
+// Drafts kept in sync with a folder in the person's Zo workspace, in the background.
+const sync=new ZoSync(root,documents);
 await sync.initialize();
 if(!dev)updates.startAutomaticChecks();
 // Mac preferences the native shell reads from /api/health.
@@ -69,7 +69,9 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
           return json(await spelling.request({word:input.word}));
         }
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
-        if(url.pathname==='/api/drafts/save'&&request.method==='POST'){await documents.save(input.draft);sync.changed();return json({saved:true});}
+        if(url.pathname==='/api/drafts/save'&&request.method==='POST'){const result=await documents.save(input.draft,typeof input.seen==='number'?input.seen:undefined);sync.changed();return json({saved:true,...result});}
+        // Drafts sync changed since the window last asked.
+        if(url.pathname==='/api/library/changes'&&request.method==='GET')return json({...await documents.changesSince(Number(url.searchParams.get('since')??0)||0),sync:sync.status()});
         if(url.pathname==='/api/drafts/active'&&request.method==='POST'){await documents.setActive(String(input.id??''));return json({saved:true});}
         if(url.pathname==='/api/drafts/archive'&&request.method==='POST'){await documents.archive(String(input.id??''));sync.changed();return json({archived:true});}
         if(url.pathname==='/api/drafts/delete'&&request.method==='POST'){await documents.delete(String(input.id??''));sync.changed();return json({deleted:true});}

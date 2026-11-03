@@ -1,10 +1,10 @@
 import {useEffect,useRef,useState} from 'react';
-import {Cloud,LoaderCircle,RefreshCw,Unplug,Check,CircleAlert,ArrowUpRight,FileUp,Folder,FolderPlus,ChevronRight,Copy} from 'lucide-react';
+import {Cloud,CloudAlert,CloudUpload,LoaderCircle,RefreshCw,Unplug,Check,CircleAlert,ArrowUpRight,FileUp,Folder,FolderPlus,ChevronRight,Copy} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {api,openLink} from './client';
 import type {SyncStatus,FolderList} from '../desktop/zo-sync';
 
-// Draft's copy of your drafts in a Zo workspace, read every couple of seconds while Settings is open.
+// How syncing with a Zo workspace is going, read every couple of seconds while Settings is open.
 export function useSyncStatus(enabled=true){
   const [status,setStatus]=useState<SyncStatus>();
   useEffect(()=>{
@@ -19,6 +19,16 @@ export function syncLabel(status?:SyncStatus){
   if(status.state==='needs-credentials'||status.state==='error'||status.state==='choose-folder')return 'Needs you';
   return status.workspace??'On';
 }
+// The icon beside Settings while sync is on: a cloud when everything is in Zo, a cloud with an
+// arrow while changes are on their way, and a cloud with a warning when sync needs you.
+export function SyncButton({status,onClick}:{status:SyncStatus;onClick:()=>void}){
+  const place=status.workspace??'Zo',problem=needsYou(status),moving=status.state==='syncing'||status.state==='waiting';
+  const label=problem?'Sync needs you':moving?`Syncing with ${place}`:`Synced with ${place}`;
+  return <button type="button" className={`version-tab-bubble settings-bubble sync-bubble ${problem?'is-warning':''} ${status.state==='syncing'?'is-syncing':''}`} aria-label={label} title={label} onClick={onClick}>
+    {problem?<CloudAlert size={15}/>:moving?<CloudUpload size={15}/>:<Cloud size={15}/>}
+  </button>;
+}
+function needsYou(status:SyncStatus){return ['error','needs-credentials','choose-folder'].includes(status.state)||(status.state==='synced'&&!!status.message);}
 function ago(value?:string){
   if(!value)return '';
   const seconds=Math.max(0,(Date.now()-new Date(value).getTime())/1000);
@@ -30,9 +40,9 @@ function ago(value?:string){
 function line(status:SyncStatus){
   const place=status.workspace??'Zo';
   switch(status.state){
-    case 'syncing':return status.pending?`Saving ${status.pending} ${status.pending===1?'file':'files'} to ${place}…`:'Checking your drafts…';
-    case 'waiting':return `Saves to ${place} when you pause writing`;
-    case 'synced':return `Saved to ${place}${status.lastSyncedAt?` · ${ago(status.lastSyncedAt)}`:''}`;
+    case 'syncing':return status.pending?`Syncing ${status.pending} ${status.pending===1?'file':'files'} with ${place}…`:`Checking ${place} for changes…`;
+    case 'waiting':return `Sync is on. Changes go to ${place} when you pause writing.`;
+    case 'synced':return status.message??`Synced with ${place}${status.lastSyncedAt?` · ${ago(status.lastSyncedAt)}`:''}`;
     default:return status.message??'';
   }
 }
@@ -40,11 +50,11 @@ function line(status:SyncStatus){
 // The prompt an agent connected to Zo (Claude Code, Codex, Zo itself) follows to set Draft up: a
 // service account that can edit one folder, and a block with its credential to paste back here.
 export const SETUP_FOLDER='/workspace/Draft';
-export const SETUP_PROMPT=`Set up Draft, my Mac writing app, to save a copy of my drafts in my Zo workspace. Use your Zo tools. Draft needs a service account credential; leave everything else in Zo as it is.
+export const SETUP_PROMPT=`Set up Draft, my Mac writing app, to keep my drafts in sync with my Zo workspace. Use your Zo tools. Draft needs a service account credential; leave everything else in Zo as it is.
 
 1. Workspace: use the Zo workspace you're connected to. If there's more than one, ask me which to use before doing anything.
 2. Folder: use ${SETUP_FOLDER}. Create it if it doesn't exist (zo.folder.create with parent_path "/workspace" and name "Draft"). Note its folder ID.
-3. Service account: create one named "Draft" with the description "Draft (Mac app) saves a copy of my drafts in ${SETUP_FOLDER}. Delete it to disconnect Draft." If one named Draft already exists, ask me before reusing it.
+3. Service account: create one named "Draft" with the description "Draft (Mac app) keeps my drafts in sync with ${SETUP_FOLDER}. Delete it to disconnect Draft." If one named Draft already exists, ask me before reusing it.
 4. Access: give the service account two grants.
    - role_zo_builder at the workspace scope, so it can create files.
    - policy_zo_knowledge_all at the scope of the folder from step 2, so it can update the files in it.
@@ -136,14 +146,14 @@ function FolderPicker({workspace,current,onChosen,onCancel}:{workspace?:string;c
   }
   const parts=path?path.split('/').slice(1):[];
   return <div className="zo-folder-picker">
-    <p className="zo-sync-status"><Folder size={14}/>Choose where your drafts go in {workspace??'your workspace'}</p>
+    <p className="zo-sync-status"><Folder size={14}/>Choose the folder in {workspace??'your workspace'} to sync your drafts with</p>
     <nav className="zo-folder-path" aria-label="Folder">
       <button type="button" onClick={()=>setPath(null)} disabled={busy}>{workspace??'Zo'}</button>
       {parts.map((part,i)=><span key={i}><ChevronRight size={12} aria-hidden="true"/><button type="button" disabled={busy||i===parts.length-1} onClick={()=>setPath('/'+parts.slice(0,i+1).join('/'))}>{part}</button></span>)}
     </nav>
     <ul className="zo-folder-list" aria-busy={loading}>
       {loading?<li className="zo-folder-empty"><LoaderCircle size={13} className="spin"/>Loading folders…</li>
-        :list?.folders.length?list.folders.map(folder=><li key={folder.path}><button type="button" disabled={busy} onClick={()=>setPath(folder.path)}><Folder size={14}/><span>{folder.name}</span>{folder.path===current&&<small>Drafts save here</small>}<ChevronRight size={13} className="zo-folder-open"/></button></li>)
+        :list?.folders.length?list.folders.map(folder=><li key={folder.path}><button type="button" disabled={busy} onClick={()=>setPath(folder.path)}><Folder size={14}/><span>{folder.name}</span>{folder.path===current&&<small>Syncing here</small>}<ChevronRight size={13} className="zo-folder-open"/></button></li>)
         :!error&&<li className="zo-folder-empty">{path?'No folders inside.':'No folders this service account can see.'}</li>}
     </ul>
     {path&&(naming?<form className="zo-folder-new" onSubmit={event=>void create(event)}>
@@ -152,10 +162,10 @@ function FolderPicker({workspace,current,onChosen,onCancel}:{workspace?:string;c
       <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={()=>setNaming(false)}>Cancel</Button>
     </form>:<Button type="button" variant="ghost" size="sm" className="zo-folder-add" disabled={busy||loading} onClick={()=>{setName('Draft');setNaming(true);}}><FolderPlus size={13}/>New folder</Button>)}
     <div className="settings-actions zo-folder-choose">
-      <Button size="sm" disabled={busy||!path} onClick={()=>void choose()}>{busy&&!naming?<LoaderCircle size={13} className="spin"/>:<Check size={13}/>}{path?`Save drafts in ${parts.at(-1)}`:'Open a folder'}</Button>
+      <Button size="sm" disabled={busy||!path} onClick={()=>void choose()}>{busy&&!naming?<LoaderCircle size={13} className="spin"/>:<Check size={13}/>}{path?`Sync with ${parts.at(-1)}`:'Open a folder'}</Button>
       {onCancel&&<Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>}
     </div>
-    {path&&<p className="settings-detail zo-sync-note">Draft saves each draft as its own folder inside <code>{path}</code>.{current&&current!==path?' The copy already in your current folder stays there.':''}</p>}
+    {path&&<p className="settings-detail zo-sync-note">Your drafts sync with <code>{path}</code>. Drafts already in it come to this Mac.{current&&current!==path?' Your old folder keeps its copy.':''}</p>}
     {error&&<div className="inline-error" role="alert">{error}</div>}
   </div>;
 }
@@ -169,7 +179,7 @@ export function ZoSyncSettings({status,onChange}:{status?:SyncStatus;onChange:(s
     finally{setBusy(false);}
   }
   if(!status)return null;
-  const warning=['error','needs-credentials'].includes(status.state);
+  const warning=needsYou(status)&&status.state!=='choose-folder';
   const icon=status.state==='syncing'?<LoaderCircle size={14} className="spin"/>:status.state==='synced'?<Check size={14}/>:warning?<CircleAlert size={14}/>:<Cloud size={14}/>;
   const done=(next:SyncStatus)=>{setChanging(null);onChange(next);};
   let body:React.ReactNode;
@@ -182,16 +192,15 @@ export function ZoSyncSettings({status,onChange}:{status?:SyncStatus;onChange:(s
     <p className={`zo-sync-status ${warning?'is-warning':''}`} role="status">{icon}{line(status)}</p>
     {status.folder&&<p className="zo-sync-folder" title={status.folder}>{status.folder}</p>}
     <div className="settings-actions">
-      <Button variant="outline" size="sm" disabled={busy||status.state==='syncing'} onClick={()=>void act('/api/sync/now')}><RefreshCw size={13}/>Save now</Button>
+      <Button variant="outline" size="sm" disabled={busy||status.state==='syncing'} onClick={()=>void act('/api/sync/now')}><RefreshCw size={13}/>Sync now</Button>
       <Button variant="ghost" size="sm" disabled={busy} onClick={()=>setChanging('folder')}><Folder size={13}/>Change folder</Button>
       <Button variant="ghost" size="sm" disabled={busy} onClick={()=>setChanging('credential')}>New credential</Button>
       <Button variant="ghost" size="sm" disabled={busy} onClick={()=>void act('/api/sync/disconnect')}><Unplug size={13}/>Disconnect</Button>
     </div>
-    <p className="settings-detail zo-sync-note">Undo history stays on this Mac. Archived and deleted drafts stay in Zo until you remove them there. Disconnecting keeps everything already saved; delete the service account in Zo to revoke it.</p>
   </>;
-  return <section className="settings-section zo-sync" aria-label="Save to Zo">
-    <h2>Save to Zo</h2>
-    <p className="settings-detail">Draft keeps a copy of every draft in a folder you choose in your Zo workspace. Your drafts stay on this Mac, and saving to Zo happens in the background, so it never gets in the way of your writing.</p>
+  return <section className="settings-section zo-sync" aria-label="Sync with Zo">
+    <h2>Sync with Zo</h2>
+    <p className="settings-detail">{status.folder?'Your drafts are synced with a folder in your Zo workspace, on every Mac you connect.':'Sync your drafts with a folder in your Zo workspace, so they’re on every Mac you connect.'}</p>
     {body}
     {error&&<div className="inline-error" role="alert">{error}</div>}
   </section>;

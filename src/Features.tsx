@@ -35,16 +35,18 @@ function savedSection():SectionId{
   try{const value=JSON.parse(localStorage.getItem(SETTINGS_KEY)??'null');if(SECTIONS.includes(value?.active))return value.active;}catch{}
   return 'customize';
 }
-export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBeforeApply:()=>Promise<boolean>;onUpdating:(value:boolean)=>void;sidebar?:boolean;footer?:React.ReactNode}){
+export function Features({onBeforeApply,onUpdating,sidebar=true,footer,openTo}:{onBeforeApply:()=>Promise<boolean>;onUpdating:(value:boolean)=>void;sidebar?:boolean;footer?:React.ReactNode;openTo?:{id:SectionId;at:number}}){
   const [data,setData]=useState<FeaturesState>(),[request,setRequest]=useState(''),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[settings,setSettings]=useState(false),[submitting,setSubmitting]=useState(false),[applying,setApplying]=useState(false);
   const [handoffTarget,setHandoffTarget]=useState<HandoffTarget>();
   const [reconnecting,setReconnecting]=useState('');
   const [sync,setSync]=useSyncStatus(!!data&&!data.demo);
   const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null),scrollRef=useRef<HTMLDivElement>(null);
-  const [active,setActive]=useState(savedSection);
+  const [active,setActive]=useState(()=>openTo?.id??savedSection());
   useEffect(()=>{localStorage.setItem(SETTINGS_KEY,JSON.stringify({active}));},[active]);
   // Choosing a section shows it in place of the one before, from the top.
   function openSection(id:SectionId){setActive(id);requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0}));}
+  // Opened for one section, such as Sync from the sync icon.
+  useEffect(()=>{if(!openTo)return;openSection(openTo.id);requestAnimationFrame(()=>document.querySelector(`.settings-sidebar [data-section="${openTo.id}"]`)?.scrollIntoView({block:'nearest'}));},[openTo?.at]);
   const sectionsRef=useRef<SectionId[]>(SECTIONS);
   useEffect(()=>{
     // ⌃Tab and ⌃⇧Tab step through the sections in sidebar order.
@@ -120,7 +122,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
     shortcuts:{title:'Shortcuts',detail:'Every keyboard shortcut in Draft.'},
     ai:{title:'AI',detail:'The model that writes titles, summaries and your features.'},
     files:{title:'Files',detail:'Your documents and Draft’s source code.'},
-    sync:{title:'Sync',detail:'Save a copy of every draft to your Zo workspace.',meta:syncLabel(sync)},
+    sync:{title:'Sync',detail:'Sync your drafts with your Zo workspace.',meta:syncLabel(sync)},
   };
   // The demo on the website has no Mac, no model and no files to show.
   const sections=SECTIONS.filter(id=>!data?.demo||!['mac','ai','files','sync'].includes(id)),shown:SectionId=sections.includes(active)?active:'customize';
@@ -173,7 +175,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
     case 'shortcuts':return <ShortcutList/>;
     case 'ai':return <section className="settings-section"><h2>Your connected AI</h2><p className="settings-detail">Draft uses the AI you connect for titles, summaries and the features you ask for.</p><div className="settings-actions"><Button variant="outline" size="sm" disabled={!!reconnecting} onClick={()=>setSettings(true)}>Model settings</Button></div></section>;
     case 'sync':return <ZoSyncSettings status={sync} onChange={setSync}/>;
-    case 'files':return <section className="settings-section"><h2>Your files</h2><p className="settings-detail">Your writing and your copy of Draft’s source code live on this Mac.</p><div className="settings-actions"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button></div></section>;
+    case 'files':return <section className="settings-section"><h2>Your files</h2><p className="settings-detail">{sync?.folder?`Your writing is synced with ${sync.workspace??'your Zo workspace'}. Draft’s source code stays on this Mac.`:'Your writing and your copy of Draft’s source code live on this Mac.'}</p><div className="settings-actions"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button></div></section>;
   }}
   // Settings is laid out like writing: the sidebar lists the sections and each one you open is a
   // column with a glass tab, like a version. The highlighted section is the column you are in.

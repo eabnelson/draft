@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.3.0-alpha.65",
+  "appVersion": "0.3.0-alpha.67",
   "name": "Draft",
   "features": [
     {
@@ -108,9 +108,9 @@
     },
     {
       "id": "zo-sync",
-      "title": "Save to Zo",
-      "description": "Connect a Zo workspace with a service account and Draft keeps a copy of every draft in a folder there. It saves in the background when you pause writing and never changes what you’re editing.",
-      "updatedAt": "2026-11-02T21:00:00Z",
+      "title": "Sync with Zo",
+      "description": "Connect a Zo workspace with a service account and Draft works like any notes app that syncs: drafts you add, edit, archive or delete are the same in a Zo folder and on every Mac you connect. Writing changed in two places is kept twice, never lost, and nothing moves while you type.",
+      "updatedAt": "2026-11-03T15:00:00Z",
       "origin": "official",
       "state": "active",
       "code": [

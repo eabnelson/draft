@@ -3,8 +3,16 @@ import {mkdir,readFile,readdir,rename,cp} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {atomicWrite,exists,readJSON,safeId} from './files';
 import {parseDraft,toRecord,migrateLegacy,fresh,type Draft,type DraftRecord} from '../src/model';
+import {mergeDrafts} from './draft-merge';
 
-export type Library={active:string;drafts:Draft[];archived:number};
+export type Library={active:string;drafts:Draft[];archived:number;seq:number};
+// A draft that sync changed, added or took away while Draft was open.
+export type LibraryChange={id:string;seq:number;draft?:Draft;gone?:'deleted'|'archived'};
+export type Place='live'|'archived';
+// What a version and the draft's details were before sync replaced them, to merge a save that
+// started from them.
+type Pulled={seq:number;meta:string;texts:Map<string,string>};
+const metaKey=(d:Draft)=>JSON.stringify({...toRecord(d),versions:d.versions.map(({text:_t,updatedAt:_u,...v})=>v),updatedAt:undefined});
 type Index={schemaVersion:1;active:string;migratedFrom?:string};
 const MEDIA_TYPES={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'} as const;
 const CONTENT_TYPES:Record<string,string>={png:'image/png',jpg:'image/jpeg',webp:'image/webp',gif:'image/gif'};
@@ -40,7 +48,7 @@ export class DraftStore {
     if(!drafts.length){const d=fresh();await this.save(d);drafts.push(d);}
     drafts.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
     const archived=(await this.packages(this.archiveRoot)).length;
-    return {active:drafts.some(d=>d.id===index.active)?index.active:drafts[0].id,drafts,archived};
+    return {active:drafts.some(d=>d.id===index.active)?index.active:drafts[0].id,drafts,archived,seq:this.seq};
   }
   private async packages(folder:string){
     if(!await exists(folder))return [];
@@ -101,13 +109,23 @@ export class DraftStore {
   }
   private async recoveryFolder(id:string){const folder=join(this.recovery,safeId(id));await mkdir(folder,{recursive:true});return folder;}
 
-  save(input:Draft):Promise<void>{
+  // A save from the window. If sync replaced this draft after the window last saw it, the two are
+  // merged so neither the writing nor what came from Zo is lost, and the merged draft goes back.
+  save(input:Draft,seen?:number):Promise<{draft?:Draft;seq:number}>{
     return this.serial(async()=>{
       safeId(input?.id??'');const texts=Object.fromEntries((input.versions??[]).map(v=>[v.id,v.text]));
-      const draft=parseDraft(toRecord(input),texts);
+      let draft=parseDraft(toRecord(input),texts);
       if(await exists(this.package(draft.id,true)))throw Error('This draft is archived. Restore it before editing.');
       if(this.deleted.has(draft.id))throw Error('This draft was deleted.');
-      await this.write(this.package(draft.id),draft);
+      const pulled=this.pulled.get(draft.id),path=this.package(draft.id);let merged=false;
+      if(pulled&&seen!==undefined&&pulled.seq>seen&&await exists(join(path,'draft.json'))){
+        const disk=await this.read(path),client=draft;
+        const changed=(v:{id:string;text:string})=>pulled.texts.get(v.id)!==v.text;
+        draft=mergeDrafts({draft:client,metaChanged:metaKey(client)!==pulled.meta,changed},{draft:disk,metaChanged:metaKey(disk)!==pulled.meta,changed},new Set(pulled.texts.keys()));
+        merged=JSON.stringify(draft)!==JSON.stringify(client);
+      }
+      await this.write(path,draft);
+      return merged?{draft,seq:this.seq}:{seq:this.seq};
     });
   }
   setActive(id:string):Promise<void>{
@@ -116,14 +134,65 @@ export class DraftStore {
   archive(id:string):Promise<void>{
     return this.serial(async()=>{const from=this.package(id);if(!await exists(from))throw Error('This draft is no longer available.');await mkdir(this.archiveRoot,{recursive:true});await rename(from,this.package(id,true));});
   }
-  // Deleting moves the whole draft into Recovery, so nothing is lost by accident.
+  // Deleting moves the whole draft into Recovery, so nothing is lost by accident. Sync reads the
+  // Recovery folder to know which drafts were deleted on this Mac.
   private deleted=new Set<string>();
   delete(id:string):Promise<void>{
+    return this.serial(async()=>{await this.moveToDeleted(id);this.deleted.add(safeId(id));});
+  }
+  private async moveToDeleted(id:string,from=this.package(id)){
+    if(!await exists(from))throw Error('This draft is no longer available.');
+    const folder=join(this.recovery,'Deleted');await mkdir(folder,{recursive:true});
+    await rename(from,join(folder,`${Date.now()}-${safeId(id)}.draft`));
+  }
+  // Drafts deleted on this Mac, and when.
+  async deletedIds():Promise<Map<string,number>>{
+    const ids=new Map<string,number>(),folder=join(this.recovery,'Deleted');
+    if(await exists(folder))for(const name of await readdir(folder)){const m=/^(\d+)-(.+)\.draft$/.exec(name);if(m)ids.set(m[2],Math.max(ids.get(m[2])??0,Number(m[1])));}
+    return ids;
+  }
+
+  // Changes from sync. Each is noted for the window, which asks for them with changesSince.
+  private seq=0;private changes=new Map<string,number>();private pulled=new Map<string,Pulled>();
+  private note(id:string){this.changes.set(id,++this.seq);return this.seq;}
+  async place(id:string):Promise<Place|null>{
+    if(await exists(join(this.package(id),'draft.json')))return 'live';
+    if(await exists(join(this.package(id,true),'draft.json')))return 'archived';
+    return null;
+  }
+  async readAt(id:string,place:Place):Promise<Draft>{return this.read(this.package(id,place==='archived'));}
+  // Write a draft as it came from Zo, merged with this Mac's copy by the caller.
+  writeExternal(draft:Draft,place:Place):Promise<void>{
     return this.serial(async()=>{
-      const from=this.package(id);if(!await exists(from))throw Error('This draft is no longer available.');
-      const folder=join(this.recovery,'Deleted');await mkdir(folder,{recursive:true});
-      await rename(from,join(folder,`${Date.now()}-${safeId(id)}.draft`));this.deleted.add(safeId(id));
+      const path=this.package(draft.id,place==='archived');
+      if(place==='live'&&await exists(join(path,'draft.json'))){const before=await this.read(path);this.pulled.set(draft.id,{seq:this.seq+1,meta:metaKey(before),texts:new Map(before.versions.map(v=>[v.id,v.text]))});}
+      await this.write(path,draft);this.deleted.delete(draft.id);this.note(draft.id);
     });
+  }
+  writeMediaExternal(id:string,place:Place,name:string,bytes:Uint8Array):Promise<void>{
+    if(!MEDIA_NAME.test(name))return Promise.resolve();
+    return this.serial(async()=>{await atomicWrite(join(this.package(id,place==='archived'),'media',name),bytes);});
+  }
+  moveExternal(id:string,to:Place):Promise<void>{
+    return this.serial(async()=>{
+      const from=this.package(id,to==='live'),target=this.package(id,to==='archived');
+      if(!await exists(from)||await exists(target))return;
+      await mkdir(to==='archived'?this.archiveRoot:this.root,{recursive:true});await rename(from,target);this.note(id);
+    });
+  }
+  // Deleted in Zo: into Recovery here too.
+  removeExternal(id:string):Promise<void>{
+    return this.serial(async()=>{const place=await this.place(id);if(!place)return;await this.moveToDeleted(id,this.package(id,place==='archived'));this.pulled.delete(id);this.note(id);});
+  }
+  async changesSince(since:number):Promise<{seq:number;changes:LibraryChange[];archived:number}>{
+    const changes:LibraryChange[]=[];
+    for(const [id,seq] of this.changes){
+      if(seq<=since)continue;
+      const place=await this.place(id);
+      if(place==='live'){try{changes.push({id,seq,draft:await this.read(this.package(id))});}catch{}}
+      else changes.push({id,seq,gone:place==='archived'?'archived':'deleted'});
+    }
+    return {seq:this.seq,changes,archived:(await this.packages(this.archiveRoot)).length};
   }
   // Restores the most recently archived draft.
   restoreLast():Promise<Draft|null>{

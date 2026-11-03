@@ -232,14 +232,19 @@
 
 /* Help and settings sit at the bottom of the sidebar. */
 .inbox{position:relative}
-.inbox-list{padding-bottom:60px}
+.inbox-list{padding-bottom:60px;scroll-padding-bottom:60px}
 .inbox-footer{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:4px}
-/* The same glass as the version tabs; the draft list scrolls behind it. */
-.settings-bubble{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;color:var(--muted-foreground);cursor:pointer;
-  background:rgba(241,241,241,.94);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);transition:background-color .12s,color .12s}
-.settings-bubble:hover,.settings-bubble.is-open{background:rgba(232,232,232,.92);color:var(--foreground)}
+/* The Settings and sync icons, one glass pill like a tab (see .footer-pill). Hovering darkens the icon. */
+.settings-bubble{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:28px;padding:0;border:0;border-radius:8px;color:var(--muted-foreground);cursor:pointer;
+  background:transparent;transition:background-color .12s,color .12s}
+.settings-bubble:hover,.settings-bubble.is-open{color:var(--foreground)}
 .settings-bubble:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .settings-bubble .update-badge{top:3px;right:3px}
+/* Sync's icon: amber when it needs you, and gently pulsing while changes are moving. */
+.sync-bubble.is-warning{color:#d9480f}
+.sync-bubble.is-syncing svg{animation:sync-pulse 1.2s ease-in-out infinite}
+@keyframes sync-pulse{50%{opacity:.4}}
+@media (prefers-reduced-motion:reduce){.sync-bubble.is-syncing svg{animation:none}}
 /* Where dragged text will land: a blinking cursor like the caret. */
 .editor-host .cm-dropCursor{border-left:2px solid var(--foreground)!important;margin-left:-1px;pointer-events:none;animation:drop-cursor-blink 1s steps(1) infinite}
 @keyframes drop-cursor-blink{50%{opacity:0}}
@@ -312,11 +317,14 @@ html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-c
   -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
   -webkit-mask-image:var(--pill-shape);mask-image:var(--pill-shape);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .version-tab-pill>.version-tab-bubble,.version-tab-pill>.version-tab-neck{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
-.settings-bubble{background:rgba(0,0,0,.035)!important}
-.settings-bubble:hover,.settings-bubble.is-open{background:rgba(0,0,0,.07)!important}
-.dark .settings-bubble{background:rgba(255,255,255,.05)!important}
-.dark .settings-bubble:hover,.dark .settings-bubble.is-open{background:rgba(255,255,255,.1)!important}
-.settings-bubble{-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)}
+.settings-bubble,.settings-bubble:hover{background:transparent!important}
+/* The sidebar's corner icons wear the same glass as a tab that isn't open, so drafts scrolling
+   under them are softened. */
+.footer-pill{flex:none;--tab-glass:rgba(0,0,0,.035)}
+/* A 24px blur, as on the tabs, is too wide for a pill this small and leaves the text under it
+   sharp in Chromium, so this one blurs less. */
+.footer-pill::before{-webkit-backdrop-filter:blur(10px) saturate(180%);backdrop-filter:blur(10px) saturate(180%)}
+.dark .footer-pill{--tab-glass:rgba(255,255,255,.05)}
 /* The lines between columns (and between the sidebar and the first column) are thinner places in
    the glass too, drawn by glass.ts, running the full height of the window. */
 

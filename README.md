@@ -52,9 +52,9 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 
 The update builder edits candidate source rather than live files. Its process is restricted from your drafts and the activation record; verification also runs without network access. New package dependencies are installed in the candidate with lifecycle scripts disabled. Personal backend code runs as part of the app after you apply it, so request features you trust.
 
-## Save to Zo
+## Sync with Zo
 
-**Settings → Sync** keeps a copy of every draft in a folder you choose in your [Zo](https://www.zo.computer/) workspace. Draft connects the way any outside app does, with a service account in your own workspace, so nothing needs to be set up on Zo's side.
+**Settings → Sync** keeps your drafts in sync with a folder you choose in your [Zo](https://www.zo.computer/) workspace, so they live in Zo and on every Mac you connect. Draft connects the way any outside app does, with a service account in your own workspace, so nothing needs to be set up on Zo's side.
 
 The quickest setup is **Copy setup prompt**. Give the prompt to an AI agent that's connected to your Zo workspace, such as Claude Code, Codex or Zo. The agent:
 1. creates `/workspace/Draft`;
@@ -62,17 +62,27 @@ The quickest setup is **Copy setup prompt**. Give the prompt to an AI agent that
 3. grants it the Builder role, so it can add files, plus edit access to that one folder (`policy_zo_knowledge_all`, which Zo's app can't grant yet);
 4. creates a credential.
 
-It then replies with a block containing the client ID, secret, workspace name and folder. Paste that block into Draft and choose **Connect**. Draft checks the credential with Zo, then starts saving to that folder. The secret appears only in that reply; Draft keeps it in your Keychain.
+It then replies with a block containing the client ID, secret, workspace name and folder. Paste that block into Draft and choose **Connect**. Draft checks the credential with Zo, then starts syncing with that folder. The secret appears only in that reply; Draft keeps it in your Keychain.
 
 To set it up by hand instead, open **Set it up yourself in Zo instead**:
 
 1. In your Zo workspace, open **Access control → Service accounts** and create one named **Draft**. Choose **Full access** and keep **Create credential** checked. Builder alone can add files but not update them.
 2. Download the `.env` file, choose it in Draft, and choose **Connect**.
-3. Choose where your drafts go. Draft lists the folders the service account can see. Open one, or make a **New folder**, then choose **Save drafts in …**. Nothing is uploaded until you do.
+3. Choose the folder your drafts sync with. Draft lists the folders the service account can see. Open one, or make a **New folder**, then choose **Sync with …**. Nothing syncs until you do.
 
-The workspace is the one you created the service account in; to use another, create a service account there. **Change folder** starts a full copy in the new folder and leaves the old one in place. **New credential** replaces the secret and keeps the folder. The secret is stored in your login Keychain; `zo-sync.json` keeps only the client ID and folder. A service account can't reach a person's private folder, so choose a folder under `/workspace` or one you've given it access to.
+The workspace is the one you created the service account in; to use another, create a service account there. **Change folder** syncs with the new folder: drafts already in it come to this Mac, this Mac's go to it, and the old folder keeps its copy. **New credential** replaces the secret and keeps the folder. The secret is stored in your login Keychain; `zo-sync.json` keeps only the client ID and folder. A service account can't reach a person's private folder, so choose a folder under `/workspace` or one you've given it access to.
 
-Your drafts on this Mac stay the source of truth. Sync only reads them and copies them up, so it never changes what you're editing, and saving never waits on the network. Uploads start once you pause writing for 15 seconds, or after 2 minutes of steady writing. Each draft folder in Zo holds `draft.json`, every version as Markdown, and its images. `Drafts.md` lists them by title. Undo history stays on this Mac. If a file was changed in Zo, Draft's copy replaces it, and Zo keeps the earlier version in that file's history. Archived and deleted drafts stay in Zo until you remove them there. **Disconnect** forgets the credential on this Mac and keeps everything already saved. To revoke the credential everywhere, delete the service account in Zo.
+Sync works both ways. New drafts, edits, archiving, restoring and deleting on this Mac change Zo, and changes made in Zo or on another connected Mac come here. Each Mac keeps a working copy, so writing never waits on the network:
+- **When it syncs.** Changes go up once you pause writing for 15 seconds, or after 2 minutes of steady writing. Draft checks Zo for changes made elsewhere every 30 seconds.
+- **Your typing comes first.** A draft with typing not yet saved is never replaced while you write. Its next save is merged on this Mac.
+- **Nothing is lost.** What changed on only one side is taken from that side. If the same version changed in both places, this Mac's text stays and Zo's becomes a new version named "(from Zo)".
+- **Deleting.** A deleted draft goes to Zo's trash and is cleared; its folder in Zo goes once Zo allows it. A draft deleted in Zo, or on another Mac, moves to Draft's Recovery folder here. If you kept writing in it here, your writing wins and it's saved to Zo again.
+- **Archiving.** Archived drafts move to `Archive/` in Zo, keeping each file's history.
+- **A safety stop.** If most drafts disappear from Zo at once, Draft keeps them and says so in Settings rather than deleting them here.
+- **What's in Zo.** Each draft folder holds `draft.json`, every version as Markdown, and its images. `Drafts.md` lists them by title. Undo history stays on each Mac.
+- **Blank drafts stay put.** A blank draft that was never synced stays on its Mac.
+
+**Disconnect** forgets the credential on this Mac and keeps your drafts here and in Zo. To revoke the credential everywhere, delete the service account in Zo. Without Zo, Draft works entirely on this Mac.
 
 ## Landing page
 

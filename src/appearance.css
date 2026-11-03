@@ -17,8 +17,6 @@
 .dark .version-column{--glass:rgba(29,29,29,.94)}
 .dark .version-column:not(.is-active):has(.version-tab-pill:hover){--glass:rgba(33,33,33,.95)}
 .dark .version-column.is-active{--glass:rgba(38,38,38,.96)}
-.dark .settings-bubble{background:rgba(38,38,38,.94)}
-.dark .settings-bubble:hover,.dark .settings-bubble.is-open{background:rgba(48,48,48,.92)}
 
 /* Sidebar */
 .dark .inbox-rename{border-color:#444}
@@ -29,6 +27,7 @@
 .dark .stage-chip.stage-live,.dark .stage-pill.stage-live{background:#1b3324;color:#8fd3a8}
 .dark .stage-menu button:hover .stage-pill,.dark .stage-menu button:focus-visible .stage-pill,.dark .inbox-row [data-stage-chip]:hover{box-shadow:0 0 0 2px #ffffff1f}
 .dark .update-badge{background:#ff7a45}
+.dark .sync-bubble.is-warning{color:#ff7a45}
 
 /* Menus, popovers and dialogs */
 .dark .context-menu,.dark .text-menu{background:color-mix(in srgb,#1f1f1f 96%,transparent);border-color:#363636;color:#e0e0e0;box-shadow:0 8px 30px #0008}
