@@ -1,6 +1,6 @@
 {
   "name": "draft",
-  "version": "0.3.0-alpha.65",
+  "version": "0.3.0-alpha.66",
   "type": "module",
   "scripts": {
     "dev": "bun desktop/server.ts --dev",
