@@ -271,6 +271,9 @@ fn main() {
         .title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true).traffic_light_position(tauri::LogicalPosition::new(16.0,20.0))
         // The whole window is frosted glass: the Mac blurs what is behind it and the page tints it.
         .transparent(true)
+        // Tauri's file-drop handler claims every drag over the window, so dragging selected text
+        // in a draft went nowhere. Draft never uses Tauri's drop events; WebKit handles drags itself.
+        .disable_drag_drop_handler()
         .effects(tauri::utils::config::WindowEffectsConfig{effects:vec![tauri::window::Effect::UnderWindowBackground],state:Some(tauri::window::EffectState::FollowsWindowActiveState),radius:None,color:None,..Default::default()})
         // Opened at login, Draft waits in the background until you need it.
         .visible(!std::env::args().any(|arg|arg=="--hidden"))

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.3.0-alpha.57",
+  "appVersion": "0.3.0-alpha.65",
   "name": "Draft",
   "features": [
     {
@@ -104,6 +104,20 @@
         "desktop/official-merge.ts",
         "desktop/native-update.ts",
         "native/InstallUpdate.swift"
+      ]
+    },
+    {
+      "id": "zo-sync",
+      "title": "Save to Zo",
+      "description": "Connect a Zo workspace with a service account and Draft keeps a copy of every draft in a folder there. It saves in the background when you pause writing and never changes what you’re editing.",
+      "updatedAt": "2026-11-02T21:00:00Z",
+      "origin": "official",
+      "state": "active",
+      "code": [
+        "desktop/zo-sync.ts",
+        "src/ZoSync.tsx",
+        "src/Features.tsx",
+        "desktop/server.ts"
       ]
     }
   ]

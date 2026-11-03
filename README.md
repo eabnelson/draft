@@ -44,12 +44,35 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 - `Documents/`: Draft 1 files. They are migrated into `Drafts/` once and left in place as a recovery copy.
 - `versions/`: the exact source and built application for official and personal versions.
 - `Workspaces/`: unfinished feature work shared with your local agent, kept until you finish iterating.
+- `zo-sync.json`: the connected Zo workspace, folder and service-account client ID, and what has already been saved there. The secret is in the Keychain.
 - `state.json`: model choice, queued ideas, feature-update history, and active/previous version pointers.
 - `Exports/`: exported drafts, each a plain folder with every version as Markdown and text plus its media.
 
 **Your source code** and **Your documents** in Preferences open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its build dependencies; ordinary personal updates do not require Node, Rust, Xcode, Git, or a GitHub account.
 
 The update builder edits candidate source rather than live files. Its process is restricted from your drafts and the activation record; verification also runs without network access. New package dependencies are installed in the candidate with lifecycle scripts disabled. Personal backend code runs as part of the app after you apply it, so request features you trust.
+
+## Save to Zo
+
+**Settings → Sync** keeps a copy of every draft in a folder you choose in your [Zo](https://www.zo.computer/) workspace. Draft connects the way any outside app does, with a service account in your own workspace, so nothing needs to be set up on Zo's side.
+
+The quickest setup is **Copy setup prompt**. Give the prompt to an AI agent that's connected to your Zo workspace, such as Claude Code, Codex or Zo. The agent:
+1. creates `/workspace/Draft`;
+2. creates a service account named **Draft**;
+3. grants it the Builder role, so it can add files, plus edit access to that one folder (`policy_zo_knowledge_all`, which Zo's app can't grant yet);
+4. creates a credential.
+
+It then replies with a block containing the client ID, secret, workspace name and folder. Paste that block into Draft and choose **Connect**. Draft checks the credential with Zo, then starts saving to that folder. The secret appears only in that reply; Draft keeps it in your Keychain.
+
+To set it up by hand instead, open **Set it up yourself in Zo instead**:
+
+1. In your Zo workspace, open **Access control → Service accounts** and create one named **Draft**. Choose **Full access** and keep **Create credential** checked. Builder alone can add files but not update them.
+2. Download the `.env` file, choose it in Draft, and choose **Connect**.
+3. Choose where your drafts go. Draft lists the folders the service account can see. Open one, or make a **New folder**, then choose **Save drafts in …**. Nothing is uploaded until you do.
+
+The workspace is the one you created the service account in; to use another, create a service account there. **Change folder** starts a full copy in the new folder and leaves the old one in place. **New credential** replaces the secret and keeps the folder. The secret is stored in your login Keychain; `zo-sync.json` keeps only the client ID and folder. A service account can't reach a person's private folder, so choose a folder under `/workspace` or one you've given it access to.
+
+Your drafts on this Mac stay the source of truth. Sync only reads them and copies them up, so it never changes what you're editing, and saving never waits on the network. Uploads start once you pause writing for 15 seconds, or after 2 minutes of steady writing. Each draft folder in Zo holds `draft.json`, every version as Markdown, and its images. `Drafts.md` lists them by title. Undo history stays on this Mac. If a file was changed in Zo, Draft's copy replaces it, and Zo keeps the earlier version in that file's history. Archived and deleted drafts stay in Zo until you remove them there. **Disconnect** forgets the credential on this Mac and keeps everything already saved. To revoke the credential everywhere, delete the service account in Zo.
 
 ## Landing page
 

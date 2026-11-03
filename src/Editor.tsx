@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,forwardRef,useImperativeHandle} from 'react';
 import {createPortal} from 'react-dom';
 import {EditorState,Prec,type Extension} from '@codemirror/state';
-import {EditorView,keymap,drawSelection,dropCursor,ViewPlugin} from '@codemirror/view';
+import {EditorView,keymap,drawSelection,dropCursor,ViewPlugin,Decoration} from '@codemirror/view';
 import {defaultKeymap,history,historyField,undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import type {Span} from './model';
 import {formatMarkdown,type TextFormat} from './markdown';
@@ -11,6 +11,11 @@ import {nativeSpelling,spellingAt,correctSpelling,type SpellingWord} from './edi
 import {pastedImage} from './images';
 import {ImageMenu} from './ImageEditor';
 import {api} from './client';
+
+// The highlight, as a mark on the selected text. WebKit's own highlight fills the whole 1.9 line
+// height; a mark's background covers only the height of the letters, at any text size.
+const selectedMark=Decoration.mark({class:'cm-selected-text'});
+const selectedText=EditorView.decorations.compute(['selection'],state=>Decoration.set(state.selection.ranges.filter(r=>!r.empty).map(r=>selectedMark.range(r.from,r.to))));
 
 export type EditorHandle={focus:()=>void;select:(range:Span)=>void;undo:()=>void;redo:()=>void;depth:()=>HistoryDepth};
 export type HistoryDepth={undo:number;redo:number};
@@ -67,9 +72,10 @@ export const Editor=forwardRef<EditorHandle,Props>(function Editor(props,ref){
     depth:()=>view.current?{undo:undoDepth(view.current.state),redo:redoDepth(view.current.state)}:{undo:0,redo:0},
   }));
   const extensions=(draftId:string):Extension[]=>[
-    markdownEditing,nativeSpelling,writingScrollRoom,history(),draftMedia.of(draftId),EditorView.lineWrapping,// The editor draws the caret at the height of the text; the highlight is left to the Mac
-    // (see .cm-selectionLayer in writing.css) so it is always centred on its line.
-    drawSelection({drawRangeCursor:false}),
+    markdownEditing,nativeSpelling,writingScrollRoom,history(),draftMedia.of(draftId),EditorView.lineWrapping,// The editor draws the caret at the height of the text, and the highlight is painted on the
+    // selected text itself (see .cm-selected-text in writing.css), so it is as tall as the letters
+    // rather than the whole line.
+    drawSelection({drawRangeCursor:false}),selectedText,
     // While dragging text, a blinking cursor shows where it will land.
     dropCursor(),
     // Keep the caret clear of the glass tab floating over the top of the text.

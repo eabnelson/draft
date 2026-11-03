@@ -1,7 +1,6 @@
 import {useEffect,useState,useRef} from 'react';
 import {AppearanceSetting,ShortcutList} from './AppearanceSwitch';
-import {ArrowUpRight,ArrowUp,Plus,Download,RefreshCw,RotateCcw,Folder,Check,LoaderCircle,Trash2,Copy,X} from 'lucide-react';
-import {ContextMenu} from './ContextMenu';
+import {ArrowUpRight,ArrowUp,Plus,Download,RefreshCw,RotateCcw,Folder,Check,LoaderCircle,Trash2,Copy} from 'lucide-react';
 import {savedAppearance} from './theme';
 import {Button} from './components/ui/button';
 import {api,restartApp} from './client';
@@ -9,6 +8,7 @@ import {ModelSettings} from './ModelSettings';
 import {MacPreferences} from './MacPreferences';
 import {FeatureHandoff,type HandoffTarget} from './FeatureHandoff';
 import {OfficialUpdate} from './OfficialUpdate';
+import {ZoSyncSettings,useSyncStatus,syncLabel} from './ZoSync';
 import {timeRemaining} from '../desktop/feature-queue';
 import type {FeaturesState,Feature,Update,UpdateKind} from '../desktop/types';
 
@@ -27,40 +27,30 @@ function status(u:Update){
     case 'already-exists':return 'Draft already does this.';
   }
 }
-// The parts of Settings, in sidebar order. Each opens as a column, like a version of a draft.
-export type SectionId='customize'|'changes'|'official'|'updates'|'appearance'|'mac'|'shortcuts'|'ai'|'files';
-export const SECTIONS:SectionId[]=['customize','changes','official','updates','appearance','mac','shortcuts','ai','files'];
+// The parts of Settings, in sidebar order. The one you choose fills the page, under its own tab.
+export type SectionId='customize'|'changes'|'official'|'updates'|'appearance'|'mac'|'shortcuts'|'ai'|'files'|'sync';
+export const SECTIONS:SectionId[]=['customize','changes','official','updates','appearance','mac','shortcuts','ai','files','sync'];
 const SETTINGS_KEY='draft:settings';
-function savedColumns():{open:SectionId[];active:SectionId}{
-  try{const value=JSON.parse(localStorage.getItem(SETTINGS_KEY)??'null');const open=(value?.open as unknown[]).filter((id):id is SectionId=>SECTIONS.includes(id as SectionId));if(open.length)return {open,active:open.includes(value.active)?value.active:open[0]};}catch{}
-  return {open:['customize'],active:'customize'};
+function savedSection():SectionId{
+  try{const value=JSON.parse(localStorage.getItem(SETTINGS_KEY)??'null');if(SECTIONS.includes(value?.active))return value.active;}catch{}
+  return 'customize';
 }
 export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBeforeApply:()=>Promise<boolean>;onUpdating:(value:boolean)=>void;sidebar?:boolean;footer?:React.ReactNode}){
   const [data,setData]=useState<FeaturesState>(),[request,setRequest]=useState(''),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[settings,setSettings]=useState(false),[submitting,setSubmitting]=useState(false),[applying,setApplying]=useState(false);
   const [handoffTarget,setHandoffTarget]=useState<HandoffTarget>();
   const [reconnecting,setReconnecting]=useState('');
-  const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null),columnsRef=useRef<HTMLDivElement>(null);
-  const [columns,setColumns]=useState(savedColumns),[menu,setMenu]=useState<{x:number;y:number;id:SectionId}|null>(null);
-  const open=columns.open,active=columns.active;
-  useEffect(()=>{localStorage.setItem(SETTINGS_KEY,JSON.stringify(columns));},[columns]);
-  const setActive=(id:SectionId)=>setColumns(current=>current.active===id?current:{...current,active:id});
-  // Clicking a section opens its column beside the others (or goes to it if it is already open).
-  function openSection(id:SectionId){
-    setColumns(current=>({open:current.open.includes(id)?current.open:[...current.open,id],active:id}));
-    requestAnimationFrame(()=>columnsRef.current?.querySelector(`[data-section="${id}"]`)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'}));
-  }
-  // ⌘W or Close tab closes a section's column; the last one stays open.
-  function closeSection(id:SectionId){
-    setColumns(current=>{if(current.open.length<2||!current.open.includes(id))return current;const at=current.open.indexOf(id),next=current.open.filter(x=>x!==id);return {open:next,active:current.active===id?next[Math.min(at,next.length-1)]:current.active};});
-  }
-  const closeRef=useRef(closeSection);closeRef.current=closeSection;
-  const activeRef=useRef(active);activeRef.current=active;
+  const [sync,setSync]=useSyncStatus(!!data&&!data.demo);
+  const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null),scrollRef=useRef<HTMLDivElement>(null);
+  const [active,setActive]=useState(savedSection);
+  useEffect(()=>{localStorage.setItem(SETTINGS_KEY,JSON.stringify({active}));},[active]);
+  // Choosing a section shows it in place of the one before, from the top.
+  function openSection(id:SectionId){setActive(id);requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0}));}
+  const sectionsRef=useRef<SectionId[]>(SECTIONS);
   useEffect(()=>{
-    const close=()=>closeRef.current(activeRef.current);
-    // ⌃Tab and ⌃⇧Tab move between the open sections, like versions.
-    const cycle=(e:Event)=>setColumns(current=>{const step=(e as CustomEvent<number>).detail,at=current.open.indexOf(current.active);return {...current,active:current.open[(at+step+current.open.length)%current.open.length]};});
-    window.addEventListener('draft:settings-close-tab',close);window.addEventListener('draft:settings-cycle',cycle);
-    return()=>{window.removeEventListener('draft:settings-close-tab',close);window.removeEventListener('draft:settings-cycle',cycle);};
+    // ⌃Tab and ⌃⇧Tab step through the sections in sidebar order.
+    const cycle=(e:Event)=>setActive(current=>{const list=sectionsRef.current,step=(e as CustomEvent<number>).detail,at=Math.max(0,list.indexOf(current));return list[(at+step+list.length)%list.length];});
+    window.addEventListener('draft:settings-cycle',cycle);
+    return()=>window.removeEventListener('draft:settings-cycle',cycle);
   },[]);
   async function refresh(){try{const value=await api<FeaturesState>('/api/features');if(mounted.current){setData(value);setLoadError('');}}catch{if(mounted.current)setLoadError('Draft couldn’t load your features. Try again in a moment.');}}
   useEffect(()=>{mounted.current=true;void refresh();const interval=setInterval(()=>void refresh(),1000);return()=>{mounted.current=false;clearInterval(interval);};},[]);
@@ -130,9 +120,11 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
     shortcuts:{title:'Shortcuts',detail:'Every keyboard shortcut in Draft.'},
     ai:{title:'AI',detail:'The model that writes titles, summaries and your features.'},
     files:{title:'Files',detail:'Your documents and Draft’s source code.'},
+    sync:{title:'Sync',detail:'Save a copy of every draft to your Zo workspace.',meta:syncLabel(sync)},
   };
   // The demo on the website has no Mac, no model and no files to show.
-  const sections=SECTIONS.filter(id=>!data?.demo||!['mac','ai','files'].includes(id)),shown=open.filter(id=>sections.includes(id)).length?open.filter(id=>sections.includes(id)):['customize' as SectionId];
+  const sections=SECTIONS.filter(id=>!data?.demo||!['mac','ai','files','sync'].includes(id)),shown:SectionId=sections.includes(active)?active:'customize';
+  sectionsRef.current=sections;
   const messages=<>{(error||loadError)&&<div className="inline-error" role="alert">{error||loadError}</div>}{notice&&<p className="feature-notice" role="status">{notice}</p>}</>;
   function body(id:SectionId){switch(id){
     case 'customize':return <>
@@ -180,6 +172,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
     case 'mac':return <MacPreferences/>;
     case 'shortcuts':return <ShortcutList/>;
     case 'ai':return <section className="settings-section"><h2>Your connected AI</h2><p className="settings-detail">Draft uses the AI you connect for titles, summaries and the features you ask for.</p><div className="settings-actions"><Button variant="outline" size="sm" disabled={!!reconnecting} onClick={()=>setSettings(true)}>Model settings</Button></div></section>;
+    case 'sync':return <ZoSyncSettings status={sync} onChange={setSync}/>;
     case 'files':return <section className="settings-section"><h2>Your files</h2><p className="settings-detail">Your writing and your copy of Draft’s source code live on this Mac.</p><div className="settings-actions"><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'documents'})}><Folder size={13}/>Your documents</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/reveal',{kind:'source'})}><Folder size={13}/>Your source code</Button><Button variant="ghost" size="sm" onClick={()=>void api('/api/external',{kind:'source'})}>GitHub<ArrowUpRight size={12}/></Button></div></section>;
   }}
   // Settings is laid out like writing: the sidebar lists the sections and each one you open is a
@@ -187,7 +180,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
   return <main className="workspace settings-workspace" aria-label="Settings">
     {sidebar&&<aside className="inbox settings-sidebar" aria-label="Settings sections">
       <div className="inbox-top" data-drag-region/>
-      <ul className="inbox-list">{sections.map(id=>{const text=sectionText[id],selected=id===active;return <li key={id} className={selected?'is-active':undefined}>
+      <ul className="inbox-list">{sections.map(id=>{const text=sectionText[id],selected=id===shown;return <li key={id} className={selected?'is-active':undefined}>
         <button className={`inbox-row ${selected?'is-active':''}`} aria-current={selected?'true':undefined} data-section={id} onClick={()=>openSection(id)}>
           <span className="inbox-heading"><span className="inbox-title">{text.title}</span>{text.meta&&<span className="inbox-time">{text.meta}</span>}</span>
           <span className="inbox-preview">{text.detail}</span>
@@ -195,16 +188,15 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer}:{onBefor
       </li>;})}</ul>
       {footer&&<div className="inbox-footer">{footer}</div>}
     </aside>}
-    <section className="writing-area"><div className={`version-columns ${shown.length>1?'is-split':''}`} ref={columnsRef}>{shown.map(id=>{const text=sectionText[id],selected=id===active;return <section key={id} className={`version-column settings-column ${selected?'is-active':''}`} data-section={id} aria-label={text.title} onMouseDown={()=>setActive(id)}>
-      <div className="version-tab" data-drag-region onContextMenu={e=>{e.preventDefault();setMenu({x:e.clientX,y:e.clientY,id});}}>
-        <div className="version-tab-pill" role="tab" aria-selected={selected} aria-label={text.title}>
+    <section className="writing-area"><div className="version-columns">{(()=>{const text=sectionText[shown];return <section key={shown} className="version-column settings-column is-active" data-section={shown} aria-label={text.title}>
+      <div className="version-tab" data-drag-region>
+        <div className="version-tab-pill" role="tab" aria-selected="true" aria-label={text.title}>
           <span className="version-tab-bubble version-tab-title">{text.title}</span>
           {text.meta&&<><span className="version-tab-neck" aria-hidden="true"/><span className="version-tab-bubble version-tab-meta">{text.meta}</span></>}
         </div>
       </div>
-      <div className="version-scroll"><div className="settings-paper">{body(id)}</div></div>
-    </section>;})}</div></section>
-    {menu&&<ContextMenu x={menu.x} y={menu.y} label={sectionText[menu.id].title} onClose={()=>setMenu(null)} items={[{label:'Close tab',icon:<X size={14}/>,disabled:shown.length<2,title:shown.length<2?'The last open tab stays open.':undefined,onSelect:()=>closeSection(menu.id)}]}/>}
+      <div className="version-scroll" ref={scrollRef}><div className="settings-paper">{body(shown)}</div></div>
+    </section>;})()}</div></section>
     {settings&&<ModelSettings onClose={()=>{setSettings(false);void refresh();}}/>}
     {handoffTarget&&<FeatureHandoff target={handoffTarget} onClose={closeHandoff} onCreated={()=>void refresh()} onCheck={checkChanges} checking={submitting} canCheck={!blocked||pending?.state==='ready'}/>}
   </main>;

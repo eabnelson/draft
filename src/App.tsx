@@ -236,7 +236,8 @@ export default function App(){
       if(e.key==='Escape'){setMessage('');setContextMenu(null);setConfirm(null);}
     };
     const fromShortcut=()=>newDraft();
-    const closeTab=()=>{if(featuresOpenRef.current){window.dispatchEvent(new Event('draft:settings-close-tab'));return;}const d=draftRef.current;closeVersion(viewed(d).id);};
+    // In Settings there is one page, so ⌘W goes back to writing.
+    const closeTab=()=>{if(featuresOpenRef.current){setFeaturesOpen(false);return;}const d=draftRef.current;closeVersion(viewed(d).id);};
     const openSettings=()=>setFeaturesOpen(true);
     // Draft has no visible title bar: dragging the empty top row moves the window and double-clicking zooms it.
     const region=(e:MouseEvent)=>{const target=e.target as HTMLElement;return e.button===0&&!!target.closest('[data-drag-region]')&&!target.closest('button,input,a,[role=button],[role=radio]');};

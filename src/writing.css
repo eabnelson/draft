@@ -218,12 +218,11 @@
 .version-column.is-active .version-tab-bubble{color:var(--foreground)}
 .version-tab-title{flex:0 1 auto;min-width:48px;max-width:260px;padding:0 13px;font-size:12.5px;font-weight:550;text-overflow:ellipsis}
 .version-column.is-active .version-tab-title.is-untitled,.version-tab-title.is-untitled{color:var(--muted-foreground);font-weight:450}
-.version-tab-neck{flex:none;width:8px;height:28px;margin:0;background:var(--glass);transition:background-color .12s;
+.version-tab-neck{flex:none;width:5.25px;height:28px;margin:0;background:var(--glass);transition:background-color .12s;
   -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
-  /* A bridge between the bubbles' straight sides, scooped from above and below to a 10px neck,
-     as in Studio Four's nav. It meets each bubble edge to edge rather than tucking under it:
-     the tabs are a see-through wash, so any overlap would show as a darker line. */
-  clip-path:path('M0 6 L1 6 A3 3 0 0 0 7 6 L8 6 L8 22 L7 22 A3 3 0 0 0 1 22 L0 22 Z')}
+  /* The bridge between bubbles, as wide as Studio Four's 6px at Draft's 7/8 scale. Inside a tab,
+     glass.ts draws the neck as part of the tab's one outline; this shape only shows before then. */
+  clip-path:path('M0 7 A2.625 2.625 0 0 0 5.25 7 L5.25 21 A2.625 2.625 0 0 0 0 21 Z')}
 .version-tab-meta{font-size:11.5px;font-variant-numeric:tabular-nums}
 .version-column.is-active .version-tab-meta{color:var(--muted-foreground)}
 .version-column.is-active .version-tab-meta.is-selection{color:var(--foreground)}
@@ -246,8 +245,11 @@
 @keyframes drop-cursor-blink{50%{opacity:0}}
 /* The Mac's own highlight, which fills each line evenly; the editor only draws the caret. */
 .editor-host .cm-selectionLayer{display:none}
-.editor-host .cm-editor .cm-line::selection,.editor-host .cm-editor .cm-line ::selection{background-color:#dedede!important}
-.dark .editor-host .cm-editor .cm-line::selection,.dark .editor-host .cm-editor .cm-line ::selection{background-color:#3d3d3d!important}
+/* The highlight is painted on the selected text (Editor.tsx), as tall as the letters; WebKit's
+   own, which fills the line height, is hidden. */
+.editor-host .cm-editor .cm-line::selection,.editor-host .cm-editor .cm-line ::selection{background-color:transparent!important}
+.editor-host .cm-selected-text{background:#dedede;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.dark .editor-host .cm-selected-text{background:#3d3d3d}
 
 /* No title bar: the window buttons sit over the top of the sidebar, beside the version tabs. */
 .inbox-top{flex:none;height:40px}
@@ -333,3 +335,47 @@ html,body,#root,.app,.workspace,.writing-area,.inbox,.version-columns,.version-c
 .settings-column .update-history h2{font-size:13px;font-weight:600;margin:0 0 8px}
 .settings-column .appearance-choices{flex-wrap:wrap}
 .settings-column .appearance-choices button{white-space:nowrap}
+
+/* Sync: the state of Draft's copy in Zo, in one quiet line. */
+.zo-sync-status{display:flex;align-items:center;gap:7px;margin:16px 0 0;font-size:13px;font-weight:500}
+.zo-sync-status svg{flex:none;color:var(--muted-foreground)}
+.zo-sync-status.is-warning svg{color:#c2410c}
+.zo-sync-folder{margin:4px 0 0 21px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zo-sync-note{font-size:12px}
+.zo-sync-connect ol{margin:18px 0 0;padding-left:18px;list-style:decimal;font-size:13px;line-height:1.6;display:grid;gap:6px}
+.zo-sync-connect strong{font-weight:550}
+.zo-sync-field{display:grid;gap:5px;margin-top:12px}
+.zo-sync-field>span{font-size:12px;font-weight:550}
+.zo-sync-field textarea,.zo-sync-field input{width:100%;box-sizing:border-box;border:1px solid color-mix(in oklch,currentColor 16%,transparent);border-radius:8px;padding:8px 10px;background:color-mix(in oklch,currentColor 3%,transparent);color:inherit;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;outline:0;resize:none}
+.zo-sync-field textarea:focus,.zo-sync-field input:focus{border-color:color-mix(in oklch,var(--ring),transparent 30%)}
+.zo-sync-field textarea::placeholder{color:var(--muted-foreground)}
+/* Choosing the folder in Zo: a path you can click back through, and the folders inside it. */
+.zo-folder-picker{margin-top:4px}
+.zo-folder-path{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:12px 0 8px;font-size:12px}
+.zo-folder-path span{display:inline-flex;align-items:center;gap:2px}
+.zo-folder-path svg{color:var(--muted-foreground)}
+.zo-folder-path button{border:0;background:none;padding:2px 5px;border-radius:5px;color:var(--muted-foreground);font:inherit;cursor:pointer}
+.zo-folder-path button:hover:not(:disabled){background:var(--selected-glass);color:inherit}
+.zo-folder-path span:last-child button,.zo-folder-path button:only-child{color:inherit;font-weight:550;cursor:default}
+.zo-folder-list{list-style:none;margin:0;padding:4px;border:1px solid color-mix(in oklch,currentColor 12%,transparent);border-radius:10px;max-height:240px;overflow:auto}
+.zo-folder-list button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:7px 8px;border-radius:7px;font:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer}
+.zo-folder-list button:hover:not(:disabled){background:var(--selected-glass)}
+.zo-folder-list button>svg:first-child{flex:none;color:var(--muted-foreground)}
+.zo-folder-list button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zo-folder-list small{font-size:11px;color:var(--muted-foreground)}
+.zo-folder-open{flex:none;color:var(--muted-foreground);opacity:.6}
+.zo-folder-empty{display:flex;align-items:center;gap:7px;padding:9px 8px;font-size:12.5px;color:var(--muted-foreground)}
+.zo-folder-add{margin-top:8px}
+.zo-folder-new{display:flex;gap:6px;align-items:center;margin-top:8px}
+.zo-folder-new input{flex:1;min-width:0;border:1px solid color-mix(in oklch,currentColor 16%,transparent);border-radius:8px;padding:6px 9px;background:color-mix(in oklch,currentColor 3%,transparent);color:inherit;font:inherit;font-size:13px;outline:0}
+.zo-folder-new input:focus{border-color:color-mix(in oklch,var(--ring),transparent 30%)}
+.zo-folder-choose{margin-bottom:6px}
+.zo-sync-note code{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+/* Save to Zo: the setup prompt and the do-it-yourself steps fold away under the main path. */
+.zo-sync-connect code{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+.zo-sync-more{margin-top:12px;font-size:12px;color:var(--muted-foreground)}
+.zo-sync-more summary{cursor:pointer;width:fit-content}
+.zo-sync-more[open]{color:inherit}
+.zo-sync-more textarea{display:block;width:100%;box-sizing:border-box;margin-top:10px;border:1px solid color-mix(in oklch,currentColor 16%,transparent);border-radius:8px;padding:10px;background:color-mix(in oklch,currentColor 3%,transparent);color:inherit;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;outline:0}
+.zo-sync-more ol{margin-top:10px}
+.zo-sync-connect>.zo-sync-more:last-child{margin-top:20px}

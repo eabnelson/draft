@@ -26,18 +26,27 @@ function maskFor(width:number,height:number):string{
     `<rect width="${width}" height="${height}" fill="#000" mask="url(#m)"/></svg>`;
 }
 
-// Each tab is drawn as one shape: its bubbles and the necks joining them, unioned into a single
-// mask for the tab's glass. Painted separately, every piece blurred and antialiased its own edges,
-// which showed as faint lines where they met.
-const NECK='M-1 6 L1 6 A3 3 0 0 0 7 6 L9 6 L9 22 L7 22 A3 3 0 0 0 1 22 L-1 22 Z';
+// Each tab is drawn as one outline, shaped like Studio Four's sidebar rows: pills with rounded
+// corners, and between two pills a short bridge scooped round from above and below. A pill's
+// corner runs straight into the scoop, so the outline curves in one smooth line down to the neck
+// (Studio Four: 32px rows, 8px corners, a 6px bridge and a 10px neck; Draft's 28px tabs are the
+// same shape at 7/8 the size). Drawn as one path, the glass has no seams where pieces meet.
+const RADIUS=7;
 function pillShape(pill:Element):string|null{
   const box=pill.getBoundingClientRect();if(!box.width||!box.height)return null;
-  const parts:string[]=[];
-  for(const piece of pill.querySelectorAll(':scope > .version-tab-bubble, :scope > .version-tab-neck')){
-    const r=piece.getBoundingClientRect(),x=n(r.left-box.left),y=n(r.top-box.top);if(!r.width)continue;
-    parts.push(piece.classList.contains('version-tab-neck')?`<path transform="translate(${x} ${y})" d="${NECK}"/>`:`<rect x="${x}" y="${y}" width="${n(r.width)}" height="${n(r.height)}" rx="8"/>`);
-  }
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${n(box.width)}" height="${n(box.height)}" viewBox="0 0 ${n(box.width)} ${n(box.height)}"><g fill="#000">${parts.join('')}</g></svg>`;
+  const bubbles=[...pill.querySelectorAll(':scope > .version-tab-bubble')].map(b=>b.getBoundingClientRect()).filter(r=>r.width>0).map(r=>({left:r.left-box.left,right:r.right-box.left,top:r.top-box.top,bottom:r.bottom-box.top}));
+  if(!bubbles.length)return null;
+  const top=Math.min(...bubbles.map(b=>b.top)),bottom=Math.max(...bubbles.map(b=>b.bottom)),left=bubbles[0].left,right=bubbles.at(-1)!.right;
+  const r=Math.min(RADIUS,(bottom-top)/2,(right-left)/2);
+  // Each bridge as the two pill edges it joins; its scoops are half its width across.
+  const bridges=bubbles.slice(1).map((b,i)=>[bubbles[i].right,b.left] as const).filter(([a,b])=>b>a);
+  const arc=(radius:number,sweep:0|1,x:number,y:number)=>`A${n(radius)} ${n(radius)} 0 0 ${sweep} ${n(x)} ${n(y)}`;
+  let d=`M${n(left+r)} ${n(top)}`;
+  for(const [a,b] of bridges){const q=(b-a)/2;d+=`L${n(a-r)} ${n(top)}${arc(r,1,a,top+r)}${arc(q,0,b,top+r)}${arc(r,1,b+r,top)}`;}
+  d+=`L${n(right-r)} ${n(top)}${arc(r,1,right,top+r)}L${n(right)} ${n(bottom-r)}${arc(r,1,right-r,bottom)}`;
+  for(const [a,b] of [...bridges].reverse()){const q=(b-a)/2;d+=`L${n(b+r)} ${n(bottom)}${arc(r,1,b,bottom-r)}${arc(q,0,a,bottom-r)}${arc(r,1,a-r,bottom)}`;}
+  d+=`L${n(left+r)} ${n(bottom)}${arc(r,1,left,bottom-r)}L${n(left)} ${n(top+r)}${arc(r,1,left+r,top)}Z`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${n(box.width)}" height="${n(box.height)}" viewBox="0 0 ${n(box.width)} ${n(box.height)}"><path fill="#000" d="${d}"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 

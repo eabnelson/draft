@@ -7,6 +7,7 @@ import {Updates} from './updates';
 import {writingSchema} from './writing';
 import {NativeSpelling,spellingExecutable} from './spelling';
 import {openExternalLink} from './links';
+import {ZoSync} from './zo-sync';
 import {within,exists,readJSON,atomicWrite} from './files';
 import {plainText} from '../src/markdown';
 import type {AgentSelection,UpdateKind} from './types';
@@ -24,6 +25,9 @@ const spelling=new NativeSpelling(spellingExecutable(runtime));
 const testHost=process.env.DRAFT_BUNDLE_ID?.endsWith('.update-check')===true;
 const updates=new Updates(root,template,dependencies,process.execPath,{appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID,hostVersion:process.env.DRAFT_HOST_VERSION,...(testHost?{feed:process.env.DRAFT_UPDATE_FEED,allowLocal:true}:{} )});
 await updates.initialize();
+// A copy of every draft in the person's Zo workspace, made in the background after saves.
+const sync=new ZoSync(root,documents.root);
+await sync.initialize();
 if(!dev)updates.startAutomaticChecks();
 // Mac preferences the native shell reads from /api/health.
 type Preferences={menuBarIcon:boolean;openAtLogin:boolean};
@@ -49,7 +53,7 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
     if(media&&!media[2]&&request.method==='POST'){
       if(!/^image\/(png|jpeg|webp|gif)$/.test(request.headers.get('content-type')??''))return json({error:'Paste a PNG, JPEG, WebP or GIF image.'},415);
       if(Number(request.headers.get('content-length')??0)>MAX_MEDIA_BYTES)return json({error:'Images must be smaller than 25 MB.'},413);
-      try{return json(await documents.saveMedia(media[1],new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')!));}
+      try{const saved=await documents.saveMedia(media[1],new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')!);sync.changed();return json(saved);}
       catch(error){return json({error:error instanceof Error?error.message:'This image could not be added.'},400);}
     }
     if(url.pathname.startsWith('/api/')){
@@ -65,11 +69,18 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
           return json(await spelling.request({word:input.word}));
         }
         if(url.pathname==='/api/library'&&request.method==='GET')return json(await documents.load());
-        if(url.pathname==='/api/drafts/save'&&request.method==='POST'){await documents.save(input.draft);return json({saved:true});}
+        if(url.pathname==='/api/drafts/save'&&request.method==='POST'){await documents.save(input.draft);sync.changed();return json({saved:true});}
         if(url.pathname==='/api/drafts/active'&&request.method==='POST'){await documents.setActive(String(input.id??''));return json({saved:true});}
-        if(url.pathname==='/api/drafts/archive'&&request.method==='POST'){await documents.archive(String(input.id??''));return json({archived:true});}
-        if(url.pathname==='/api/drafts/delete'&&request.method==='POST'){await documents.delete(String(input.id??''));return json({deleted:true});}
-        if(url.pathname==='/api/drafts/restore'&&request.method==='POST')return json({draft:await documents.restoreLast()});
+        if(url.pathname==='/api/drafts/archive'&&request.method==='POST'){await documents.archive(String(input.id??''));sync.changed();return json({archived:true});}
+        if(url.pathname==='/api/drafts/delete'&&request.method==='POST'){await documents.delete(String(input.id??''));sync.changed();return json({deleted:true});}
+        if(url.pathname==='/api/drafts/restore'&&request.method==='POST'){const draft=await documents.restoreLast();sync.changed();return json({draft});}
+        if(url.pathname==='/api/sync'&&request.method==='GET')return json(sync.status());
+        if(url.pathname==='/api/sync/connect'&&request.method==='POST')return json(await sync.connect({credentials:input.credentials}));
+        if(url.pathname==='/api/sync/folders'&&request.method==='POST')return json(await sync.folders(input.path));
+        if(url.pathname==='/api/sync/folders/create'&&request.method==='POST')return json(await sync.createFolder(input.parent,input.name));
+        if(url.pathname==='/api/sync/folder'&&request.method==='POST')return json(await sync.chooseFolder(input.path));
+        if(url.pathname==='/api/sync/now'&&request.method==='POST')return json(sync.syncNow());
+        if(url.pathname==='/api/sync/disconnect'&&request.method==='POST')return json(await sync.disconnect());
         if(url.pathname==='/api/drafts/history/load'&&request.method==='POST')return json({history:await documents.history(String(input.id??''),String(input.versionId??''))});
         if(url.pathname==='/api/drafts/history'&&request.method==='POST'){await documents.saveHistory(String(input.id??''),String(input.versionId??''),input.history);return json({saved:true});}
         if(url.pathname==='/api/images/copy'&&request.method==='POST'){await copyImageFile(documents.mediaPath(String(input.id??''),String(input.src??'').replace(/^media\//,'')));return json({copied:true});}
