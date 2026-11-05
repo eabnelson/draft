@@ -2,6 +2,7 @@ import {test,expect} from 'bun:test';
 import {mkdtemp,readFile,readdir,rm,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
 import {DraftStore} from '../desktop/documents';
 import {ZoSync,workspaceOf,parseCredentials,normalizeFolder,type Secrets} from '../desktop/zo-sync';
 import {fresh,editVersion,addVersion,type Draft} from '../src/model';
@@ -26,7 +27,7 @@ function fakeZo(){
   const files=new Map<string,File>(),trash=new Map<string,File&{path:string}>(),uploads=new Map<string,{path:string;bytes?:Uint8Array}>();
   const calls:string[]=[],credentials=new Map([['cred1','secret-1']]),folders=new Set(['/workspace','/shared','/workspace/Writing','/workspace/Plans']);
   let access=new Set<string>(),serial=0,flaky=new Set<string>(['zo.file.create']),racing=0,exchanges=0,expiresIn=300,canUpdate=true,workspaceHidden=false,homeHidden=false,clock=Date.now();
-  const hidden=new Set<string>();
+  const hidden=new Set<string>();let duringUpdate:(()=>void)|undefined,repeatPages=false;const listInputs:{input:any;query:any}[]=[];
   const error=(code:string,status=400)=>Response.json({request_id:'r',error:{code,message:code,details:{outcome:'not_started'}}},{status});
   const find=(id:string)=>[...files.entries()].find(([,f])=>f.id===id);
   const tick=()=>++clock;
@@ -52,12 +53,14 @@ function fakeZo(){
     const put=(path:string,content:Uint8Array)=>{files.set(path,{id:`f${++serial}`,revision:1,content,updatedAt:tick()});return Response.json({result:view(path)});};
     switch(action){
       case 'zo.kb.list':{
+        listInputs.push({input,query:options?.query});
         if(!input.path&&homeHidden)return error('permission_denied',403);
         if(!input.path)return Response.json({result:{view:'home',entries:[{kind:'folder',path:'/shared',folder:{name:'shared'}},{kind:'folder',path:'/workspace',folder:{name:'workspace'}}],next_cursor:null}});
         if(!allFolders().has(input.path))return error('resource_not_found',404);
         // Two pages, so the cursor is followed.
-        const all=children(input.path),cursor=options?.query?.cursor??null;
-        return Response.json({result:{view:'folder',folder:{id:`fold:${input.path}`,path:input.path},entries:cursor?all.slice(1):all.slice(0,1),next_cursor:cursor||all.length<2?null:'next'}});
+        const after=options?.query?.filter?.updated_after;
+        const all=[...after?[]:children(input.path),...[...files.keys()].filter(p=>p.startsWith(input.path+'/')&&!p.slice(input.path.length+1).includes('/')&&!hidden.has(p)&&(!after||files.get(p)!.updatedAt>Date.parse(after))).map(p=>({kind:'file',path:p,file:view(p),md5:createHash('md5').update(files.get(p)!.content).digest('hex')}))],cursor=options?.query?.cursor??null;
+        return Response.json({result:{view:'folder',folder:{id:`fold:${input.path}`,path:input.path},entries:cursor?all.slice(1):all.slice(0,1),next_cursor:repeatPages?'repeat':cursor||all.length<2?null:'next'}});
       }
       case 'zo.kb.search':{
         const at=String(input.folder_id).slice(5),start=Number(options?.query?.cursor??0),limit=options?.query?.limit??20;
@@ -88,6 +91,7 @@ function fakeZo(){
       case 'zo.file.prepare_create':{const id=`u${++serial}`;uploads.set(id,{path:`${input.parent_path}/${input.name}`});return Response.json({result:{upload_id:id,upload_url:`http://127.0.0.1:${server.port}/upload/${id}`}});}
       case 'zo.file.update':{
         if(!canUpdate)return error('permission_denied',403);
+        const race=duringUpdate;duringUpdate=undefined;race?.();
         const found=find(input.file_id);if(!found)return error('resource_not_found',404);
         const [path,f]=found;if(input.expected_revision!==f.revision)return error('conflict',409);
         files.set(path,{...f,revision:f.revision+1,content:new TextEncoder().encode(input.content),updatedAt:tick()});return Response.json({result:view(path)});
@@ -100,7 +104,8 @@ function fakeZo(){
     return error('unknown_action',404);
   }});
   const at=(path:string,base=BASE)=>`${base}/${path}`;
-  return {server,files,trash,calls,credentials,folders,
+  return {server,files,trash,calls,credentials,folders,listInputs,
+    duringUpdate(run:()=>void){duringUpdate=run;},repeatPages(){repeatPages=true;},
     origin:`http://127.0.0.1:${server.port}`,
     text:(path:string,base=BASE)=>new TextDecoder().decode(files.get(at(path,base))?.content),
     has:(path:string,base=BASE)=>files.has(at(path,base)),
@@ -203,6 +208,30 @@ test('writing changed both here and in Zo is kept twice, never lost',()=>fixture
   expect(f.sync.status().state).toBe('synced');
 }));
 
+test('a concurrent edit during upload is preserved until the next reconciliation',()=>fixture(async f=>{
+  let d=fresh();d=editVersion(d,d.versions[0].id,'Original.');await f.store.save(d);
+  await link(f);await f.sync.run();
+  d=editVersion(d,d.versions[0].id,'Local change.');await f.store.save(d);
+  f.zo.duringUpdate(()=>f.zo.edit(`${d.id}.draft/versions/v1.md`,'Concurrent Zo change.'));
+  await f.sync.run();expect(f.sync.status().state).toBe('error');
+  expect(f.zo.text(`${d.id}.draft/versions/v1.md`)).toBe('Concurrent Zo change.');
+  await f.sync.run();expect(f.sync.status().state).toBe('synced');
+  expect((await f.store.readAt(d.id,'live')).versions.map(v=>v.text)).toEqual(['Local change.','Concurrent Zo change.']);
+}));
+
+test('folder scans use incremental timestamps, hashes, and reject repeated cursors',()=>fixture(async f=>{
+  let d=fresh();d=editVersion(d,d.versions[0].id,'Keep me.');await f.store.save(d);
+  await link(f);await f.sync.run();await f.sync.run();
+  const reads=f.zo.calls.filter(c=>c==='zo.file.read').length;
+  const version=f.zo.files.get(`${BASE}/${d.id}.draft/versions/v1.md`)!;version.revision++;
+  await f.sync.run();
+  expect(f.zo.listInputs.some(v=>v.query?.filter?.updated_after)).toBe(true);
+  expect(f.zo.calls).not.toContain('zo.kb.search');
+  expect(f.zo.calls.filter(c=>c==='zo.file.read').length).toBe(reads);
+  f.zo.repeatPages();await f.sync.run();expect(f.sync.status().state).toBe('error');
+  expect((await f.store.readAt(d.id,'live')).versions[0].text).toBe('Keep me.');
+}));
+
 test('a file removed in Zo is saved again, and reconnecting takes over what is already there',()=>fixture(async f=>{
   let d=fresh();d=editVersion(d,d.versions[0].id,'Hello.');await f.store.save(d);
   await link(f);await f.sync.run();
@@ -250,7 +279,7 @@ test('a service account that can only add files says what access it needs',()=>f
   f.zo.builderOnly();
   d=editVersion(d,d.versions[0].id,'Two.');await f.store.save(d);
   const before=await snapshot(f.drafts);await f.sync.run();
-  expect(f.sync.status()).toMatchObject({state:'error',message:`This service account can’t save to ${BASE}. In Zo, let it edit that folder or give it Full access, then choose Sync now.`});
+  expect(f.sync.status()).toMatchObject({state:'error',message:`Draft can’t save to ${BASE}. In Zo, give its service account edit access to that folder, then choose Sync now.`});
   expect(await snapshot(f.drafts)).toEqual(before);
 }));
 

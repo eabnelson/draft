@@ -1,7 +1,7 @@
 // Keeps a Mac's drafts and a folder in a Zo workspace in sync, both ways.
 //
-// Draft connects the way any outside app does: with a service account the person creates in their
-// workspace, so setting it up needs nothing from Zo itself. Zo holds the drafts; each Mac keeps a
+// Draft uses browser OAuth with a workspace identity, or an existing service-account credential.
+// Zo holds the drafts; each Mac keeps a
 // working copy so writing never waits on the network. New drafts, edits, archiving and deleting
 // travel in both directions. What changed on only one side is taken from that side; writing
 // changed on both sides is kept twice rather than lost (see draft-merge.ts). Changes from Zo are
@@ -16,6 +16,8 @@ import {atomicWrite,exists,readJSON} from './files';
 import {parseDraft,type Draft,type Version} from '../src/model';
 import {mergeDrafts} from './draft-merge';
 import type {DraftStore,Place} from './documents';
+import {ZoAuth,SignInNeeded,ZO_CLIENT_ID,type Workspace} from './zo-auth';
+import {openExternalLink} from './links';
 
 export type ZoConfig={authOrigin:string;apiOrigin:string};
 export const ZO:ZoConfig={
@@ -53,20 +55,21 @@ export class Keychain implements Secrets{
     const r=await this.run(['-i'],`add-generic-password -U -s "${this.service}" -a "${account}" -w "${value}"\n`);
     if(r.code!==0||await this.get(account)!==value)throw Error('Draft couldn’t save the secret to your Keychain.');
   }
-  async delete(account:string){await this.run(['delete-generic-password','-s',this.service,'-a',account]);}
+  async delete(account:string){const result=await this.run(['delete-generic-password','-s',this.service,'-a',account]);if(result.code!==0&&result.code!==44)throw Error('Draft couldn’t remove the credential from your Keychain. Try again.');}
 }
 
 export class ZoError extends Error{constructor(readonly code:string,message:string,readonly transient=false){super(message);}}
 class NeedsCredentials extends Error{}
 
-type FileState={id:string;revision:number;sha:string;size:number;mtime:number};
+type FileState={id:string;revision:number;sha:string;md5?:string;size:number;mtime:number};
 // No folder yet means connected, waiting for the person to choose where drafts go.
 // baseVersions: each draft's versions as both sides last agreed. deleted: drafts deleted on this Mac
 // and removed from Zo, and when. cleanup: emptied folders in Zo still to remove.
-type State={schemaVersion:3;clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];lastSyncedAt?:string;connectedAt:string};
-type RemoteEntry={id:string;revision:number;updatedAt:number};
+type State={schemaVersion:3;auth?:'oauth';clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];lastSyncedAt?:string;connectedAt:string};
+type RemoteEntry={id:string;revision:number;updatedAt:number;md5?:string|null};
+type KnowledgeEntry={kind:string;path:string;folder?:{name:string};file?:{id:string;revision:number;updated_at?:string};md5?:string|null};
 export type SyncStatus={
-  state:'off'|'choose-folder'|'waiting'|'syncing'|'synced'|'needs-credentials'|'error';
+  state:'off'|'signing-in'|'choose-workspace'|'choose-folder'|'waiting'|'syncing'|'synced'|'needs-credentials'|'error';
   workspace?:string;folder?:string;lastSyncedAt?:string;pending?:number;message?:string;
 };
 type LocalFile={rel:string;path:string;size:number;mtime:number};
@@ -102,28 +105,32 @@ export class ZoSync{
   private phase:SyncStatus['state']='off';private message?:string;private notice?:string;private pending=0;
   private firstChange=0;private lastChange=0;private timer?:ReturnType<typeof setTimeout>;private sweep?:ReturnType<typeof setInterval>;
   private running?:Promise<void>;private again=false;
+  private readonly auth:ZoAuth;
+  private folderCache=new Map<string,{entries:KnowledgeEntry[];watermark:number;checkedAt:number}>();
   private readonly secrets:Secrets;private readonly config:ZoConfig;private readonly fetch:Fetch;private readonly sleep:(ms:number)=>Promise<void>;private readonly timers:boolean;
   readonly draftsRoot:string;
   constructor(readonly dataRoot:string,readonly store:DraftStore,options:Options={}){
     this.draftsRoot=store.root;
     this.secrets=options.secrets??new Keychain();this.config=options.config??ZO;
     this.fetch=options.fetch??((input,init)=>globalThis.fetch(input,init));this.sleep=options.sleep??(ms=>new Promise(r=>setTimeout(r,ms)));this.timers=options.timers??true;
+    this.auth=new ZoAuth(dataRoot,this.secrets,this.account,this.config,this.fetch);
   }
   private get statePath(){return join(this.dataRoot,'zo-sync.json');}
   // One Keychain item per data folder, so a test or development copy of Draft never uses the real app's credential.
   private get account(){return `client-${sha256(this.dataRoot).slice(0,16)}`;}
   private get resource(){return `${this.config.apiOrigin}/zo-system-api`;}
-  private get stopped(){return this.phase==='needs-credentials';}
+  private get stopped(){return ['needs-credentials','signing-in','choose-workspace'].includes(this.phase);}
 
   async initialize(){
+    await this.auth.initialize();
     try{if(await exists(this.statePath)){const value=await readJSON<State>(this.statePath);if([2,3].includes((value as {schemaVersion:number})?.schemaVersion)&&typeof value.clientId==='string'&&typeof value.workspaceId==='string')this.state={...value,schemaVersion:3,files:value.files??{}};}}catch{}
-    if(!this.state)return;
+    if(!this.state){if(this.auth.enabled)this.phase='choose-workspace';return;}
     if(!this.state.base){this.phase='choose-folder';return;}
     this.phase='waiting';this.startSweep();this.schedule(0);
   }
   status():SyncStatus{
     const s=this.state;
-    return {state:s?this.phase:'off',workspace:s?.workspaceName,folder:s?.base,lastSyncedAt:s?.lastSyncedAt,pending:this.pending||undefined,message:this.message??this.notice};
+    return {state:this.phase,workspace:s?.workspaceName,folder:s?.base,lastSyncedAt:s?.lastSyncedAt,pending:this.pending||undefined,message:this.message??this.notice};
   }
   // Called after any save. It only notes the change; the upload happens later, off the save path.
   changed(){
@@ -154,7 +161,7 @@ export class ZoSync{
     return this.running;
   }
   private async pass(){
-    const state=this.state;if(!state?.base)return;
+    const state=this.state;if(!state?.base||this.stopped)return;
     this.phase='syncing';this.message=undefined;this.notice=undefined;
     try{
       await this.cleanup(state);
@@ -173,13 +180,14 @@ export class ZoSync{
       this.phase=this.firstChange?'waiting':'synced';
     }catch(error){
       if(this.state!==state)return;
-      if(error instanceof NeedsCredentials){this.phase='needs-credentials';this.message='Zo no longer accepts this service account. Connect again with a new credential.';return;}
+      if(error instanceof NeedsCredentials||error instanceof SignInNeeded){this.phase='needs-credentials';this.message=state.auth==='oauth'?'Your Zo sign-in ended. Connect to Zo again.':'Zo no longer accepts this service account. Connect again with a new credential.';return;}
       this.phase='error';
       const code=error instanceof ZoError?error.code:'';
       if(!(error instanceof ZoError))console.error('Draft sync:',error);
       // Zo answers the same way whether a folder is missing or out of reach.
       this.message=code==='quota_exceeded'?`${state.workspaceName??'Your workspace'} is out of storage. Your drafts are safe on this Mac.`
-        :code==='permission_denied'||code==='resource_not_found'?`This service account can’t save to ${state.base}. In Zo, let it edit that folder or give it Full access, then choose Sync now.`
+        :code==='permission_denied'||code==='resource_not_found'?`Draft can’t save to ${state.base}. In Zo, give its service account edit access to that folder, then choose Sync now.`
+        :code==='conflict'?'A draft changed in Zo while syncing. Draft will merge it on the next check. Your writing is safe on this Mac.'
         :'Draft couldn’t reach Zo. It will try again soon. Your drafts are safe on this Mac.';
       // Missing access needs a person; anything else is tried again in a minute.
       if(this.timers&&code!=='permission_denied'&&code!=='resource_not_found'){clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=undefined;void this.run();},60_000);(this.timer as any).unref?.();}
@@ -212,20 +220,47 @@ export class ZoSync{
     for(const [key,empty] of seen)if(empty)blank.add(key);
     return files.filter(f=>{const p=parseRel(f.rel)!;return !blank.has(`${p.place}:${p.id}`);});
   }
-  // Every draft file in the folder in Zo, found in one search rather than a listing per folder.
+  // Enumerate authoritative folder contents. Search indexing is not a sync inventory.
+  // Walk only package folders and their versions/media, and refuse an incomplete inventory.
   private async remoteFiles(state:State):Promise<Map<string,RemoteEntry>|null>{
     const folder=await this.folderId(state.base!,false);if(!folder)return null;
-    const files=new Map<string,RemoteEntry>();let cursor:string|undefined;
-    for(let page=0;page<500;page++){
-      const result=await this.invoke<{hits:{file?:{id:string;revision:number;updated_at?:string};path?:string}[];next_cursor:string|null}>('zo.kb.search',{query:'draft',sources:['file'],folder_id:folder,mode:'keyword',interpret:false,field:'path'},1,{sort:'updated_at.desc',limit:100,...cursor?{cursor}:{}});
-      for(const hit of result.hits){
-        if(!hit.file||!hit.path?.startsWith(`${state.base}/`))continue;
-        const rel=hit.path.slice(state.base!.length+1);
-        if(parseRel(rel))files.set(rel,{id:hit.file.id,revision:hit.file.revision,updatedAt:Date.parse(hit.file.updated_at??'')||0});
+    const files=new Map<string,RemoteEntry>(),queue=[state.base!];
+    for(let index=0;index<queue.length;index++){
+      if(index>20_000)throw Error('Too many folders to finish a sync safely.');
+      const path=queue[index];
+      for(const entry of await this.listFolder(path)){
+        if(!entry.path.startsWith(`${path}/`)||entry.path.slice(path.length+1).includes('/'))throw Error('Zo returned a file outside its folder.');
+        const rel=entry.path.slice(state.base!.length+1);
+        if(entry.kind==='folder'&&/^(Archive|(?:Archive\/)?[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.draft(?:\/(?:versions|media))?)$/.test(rel))queue.push(entry.path);
+        if(entry.file&&parseRel(rel)){
+          const known=state.files[rel];
+          // A metadata-only revision can be acknowledged without downloading unchanged bytes.
+          if(known?.id===entry.file.id&&known.md5&&entry.md5===known.md5)known.revision=entry.file.revision;
+          files.set(rel,{id:entry.file.id,revision:entry.file.revision,updatedAt:Date.parse(entry.file.updated_at??'')||0,md5:entry.md5});
+        }
       }
-      if(!result.next_cursor)break;cursor=result.next_cursor;
     }
     return files;
+  }
+  private async listFolder(path:string):Promise<KnowledgeEntry[]>{
+    const key=`${this.state!.workspaceId}:${path}`,cached=this.folderCache.get(key);
+    // Discover packages and subfolders every pass. Content-only folders use overlapping
+    // timestamp polls between complete inventories, which also discover deletes and moves.
+    const incremental=/\.draft\/(versions|media)$/.test(path)&&cached&&cached.watermark>0&&Date.now()-cached.checkedAt<5*60_000;
+    const entries:KnowledgeEntry[]=[],seen=new Set<string>();let cursor:string|undefined;
+    for(let page=0;page<500;page++){
+      const result=await this.invoke<{entries:KnowledgeEntry[];next_cursor:string|null}>('zo.kb.list',{path,details:true},1,{limit:100,...incremental?{filter:{updated_after:new Date(cached.watermark-5000).toISOString()}}:{},...cursor?{cursor}:{}});
+      entries.push(...result.entries);
+      if(!result.next_cursor){
+        const merged=incremental?new Map(cached.entries.map(e=>[e.file?.id??e.path,e])):new Map<string,KnowledgeEntry>();
+        for(const entry of entries)merged.set(entry.file?.id??entry.path,entry);
+        const result=[...merged.values()],watermark=Math.max(0,...result.map(e=>Date.parse(e.file?.updated_at??'')||0));
+        this.folderCache.set(key,{entries:result,watermark,checkedAt:incremental?cached.checkedAt:Date.now()});return result;
+      }
+      if(seen.has(result.next_cursor))throw Error('Zo repeated a folder page. Sync will try again.');
+      cursor=result.next_cursor;seen.add(cursor);
+    }
+    throw Error('Zo returned an incomplete folder listing. Sync will try again.');
   }
   private async changedHere(state:State,file:LocalFile|undefined):Promise<boolean>{
     if(!file)return false;const known=state.files[file.rel];if(!known)return true;
@@ -326,7 +361,7 @@ export class ZoSync{
     await this.store.writeExternal(merged,place);
     // Zo's copy is now the known one: anything the merge kept from this Mac differs from it and is
     // saved back to Zo by the push that follows.
-    for(const [rel,got] of downloaded)state.files[rel]={id:got.id,revision:got.revision,sha:sha256(got.bytes),size:-1,mtime:-1};
+    for(const [rel,got] of downloaded)state.files[rel]={id:got.id,revision:got.revision,sha:sha256(got.bytes),md5:createHash('md5').update(got.bytes).digest('hex'),size:-1,mtime:-1};
     await this.save();
   }
   private async download(fileId:string):Promise<{bytes:Buffer;revision:number;id:string}>{
@@ -402,7 +437,7 @@ export class ZoSync{
     for(const item of changed){
       if(this.state!==state)return;
       const remote=await this.upload(state,item.file.rel,item.bytes,item.sha);
-      state.files[item.file.rel]={...remote,sha:item.sha,size:item.file.size,mtime:item.file.mtime};
+      state.files[item.file.rel]={...remote,sha:item.sha,md5:createHash('md5').update(item.bytes).digest('hex'),size:item.file.size,mtime:item.file.mtime};
       this.pending--;await this.save();
     }
     for(const rel of removed){
@@ -427,8 +462,8 @@ export class ZoSync{
     const replace=async(file:RemoteFile):Promise<RemoteFile>=>{
       try{return await this.replace(file,bytes,text,key('update',file.revision));}
       catch(error){
-        // Changed in Zo since Draft last saved it: Zo keeps that version in the file's history.
-        if(error instanceof ZoError&&error.code==='conflict'){const now=await this.invoke<RemoteFile>('zo.file.get_metadata',{file_id:file.id});return this.replace(now,bytes,text,key('update',now.revision));}
+        // Leave both copies intact. The next pass rereads and merges concurrent writing.
+        if(error instanceof ZoError&&error.code==='conflict')this.again=false;
         throw error;
       }
     };
@@ -440,8 +475,12 @@ export class ZoSync{
       try{return await this.create(dirname(path),basename(path),bytes,text,key('create'));}
       catch(error){
         if(!(error instanceof ZoError&&error.code==='conflict'))throw error;
-        // Already there, from an earlier connection: take it over.
-        try{return await replace(await this.invoke<RemoteFile>('zo.file.get_metadata',{path}));}
+        try{
+          const found=await this.invoke<RemoteFile>('zo.file.get_metadata',{path});
+          // A file appeared after the inventory. Reconcile it before writing over its text.
+          if(parseRel(rel))throw error;
+          return await replace(found);
+        }
         catch(missing){
           // Not there after all: making its folders raced with something else in Zo. The same request is safe to repeat.
           if(!(missing instanceof ZoError&&missing.code==='resource_not_found')||attempt>=2)throw missing;
@@ -479,8 +518,8 @@ export class ZoSync{
     for(let attempt=0;;attempt++){
       const token=await this.token();
       let response:Response|undefined;
-      try{response=await this.fetch(`${this.config.apiOrigin}/zo-system-api/v1/invoke`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({action,input,options:query?{version,query}:{version}}),signal:AbortSignal.timeout(90_000)});}catch{}
-      if(response?.status===401&&!renewed){renewed=true;this.access=undefined;attempt--;continue;}
+      try{response=await this.fetch(`${this.config.apiOrigin}/zo-system-api/v1/invoke`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(this.state?.auth==='oauth'?{'Zo-Workspace-Id':this.state.workspaceId}:{})},body:JSON.stringify({action,input,options:query?{version,query}:{version}}),signal:AbortSignal.timeout(90_000)});}catch{}
+      if(response?.status===401&&!renewed){renewed=true;this.access=undefined;this.auth.invalidate();attempt--;continue;}
       const body=response?await response.json().catch(()=>null) as any:null;
       if(response?.ok&&body&&'result' in body)return body.result as T;
       const code=String(body?.error?.code??(response?`http_${response.status}`:'network')),transient=!response||response.status>=500||response.status===429||TRANSIENT.has(code);
@@ -492,6 +531,7 @@ export class ZoSync{
   }
   // Tokens last five minutes. A service account has no refresh token: it exchanges its secret again.
   private async token():Promise<string>{
+    if(this.state?.auth==='oauth')return this.auth.token();
     if(this.access&&this.access.expires>Date.now()+30_000)return this.access.token;
     const state=this.state;if(!state)throw new NeedsCredentials();
     this.exchanging??=(async()=>{
@@ -501,6 +541,34 @@ export class ZoSync{
       this.access=result;return result.token;
     })().finally(()=>{this.exchanging=undefined;});
     return this.exchanging;
+  }
+  async signIn(open:(url:string)=>Promise<void>=openExternalLink):Promise<SyncStatus>{
+    await this.pause();this.phase='signing-in';this.message=undefined;
+    try{
+      if(this.auth.enabled)await this.auth.disconnect();
+      const url=await this.auth.begin(async error=>{
+        if(error){this.phase='needs-credentials';this.message=error.message;return;}
+        this.state=null;this.access=undefined;
+        await atomicWrite(this.statePath,JSON.stringify({schemaVersion:3,disconnected:true})+'\n');
+        await this.secrets.delete(this.account);
+        this.phase='choose-workspace';this.message=undefined;
+      });
+      await open(url);return this.status();
+    }catch(error){this.auth.cancel();this.phase='needs-credentials';this.message=error instanceof Error?error.message:'Could not open Zo.';throw error;}
+  }
+  async workspaces():Promise<Workspace[]>{return this.auth.workspaces();}
+  async chooseWorkspace(id:unknown):Promise<SyncStatus>{
+    const workspace=(await this.auth.workspaces()).find(w=>w.workspace_id===id);
+    if(!workspace)throw Error('Choose a workspace you approved in Zo.');
+    await this.pause();
+    this.folderCache.clear();
+    this.state={schemaVersion:3,auth:'oauth',clientId:ZO_CLIENT_ID,workspaceId:workspace.workspace_id,workspaceName:workspace.name,files:{},connectedAt:new Date().toISOString()};
+    this.phase='choose-folder';this.message=undefined;await this.save();return this.status();
+  }
+  private async pause(){
+    clearTimeout(this.timer);this.timer=undefined;clearInterval(this.sweep);this.sweep=undefined;
+    this.again=false;await this.running;
+    clearTimeout(this.timer);this.timer=undefined;
   }
   private async exchange(clientId:string,clientSecret:string):Promise<{token:string;expires:number}|'rejected'>{
     for(let attempt=0;;attempt++){
@@ -523,6 +591,7 @@ export class ZoSync{
     try{access=await this.exchange(clientId,clientSecret);}catch{throw Error('Draft couldn’t reach Zo. Try again in a moment.');}
     if(access==='rejected')throw Error('Zo didn’t accept this credential. Check that you copied the whole file, or create a new credential.');
     const workspaceId=workspaceOf(access.token);
+    await this.pause();this.auth.cancel();this.folderCache.clear();
     await this.secrets.set(this.account,clientSecret);
     // A new credential for the same workspace keeps its folder and what is already saved there.
     const previous=this.state?.workspaceId===workspaceId?this.state:null,base=chosen??previous?.base;
@@ -541,8 +610,8 @@ export class ZoSync{
   async folders(path?:unknown):Promise<FolderList>{
     if(!this.state)throw Error('Connect a Zo workspace first.');
     const at=path===undefined||path===null||path===''?null:normalizeFolder(path);
-    const folders:{name:string;path:string}[]=[];let cursor:string|undefined;
-    for(let page=0;page<10;page++){
+    const folders:{name:string;path:string}[]=[],seen=new Set<string>();let cursor:string|undefined;
+    for(let page=0;page<500;page++){
       let result:{entries:{kind:string;path:string;folder?:{name:string}}[];next_cursor:string|null};
       try{result=await this.invoke('zo.kb.list',at?{path:at}:{},1,cursor?{cursor}:undefined);}
       catch(error){
@@ -554,7 +623,9 @@ export class ZoSync{
         // A draft's own package folder is not somewhere to save drafts.
         if(entry.kind==='folder'&&!name.endsWith('.draft'))folders.push({name,path:entry.path});
       }
-      if(!result.next_cursor)break;cursor=result.next_cursor;
+      if(!result.next_cursor)break;
+      if(page===499||seen.has(result.next_cursor))throw Error('Zo could not finish listing folders. Try again.');
+      cursor=result.next_cursor;seen.add(cursor);
     }
     folders.sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
     const parent=at&&at.split('/').length>2?at.split('/').slice(0,-1).join('/'):null;
@@ -577,6 +648,8 @@ export class ZoSync{
   async chooseFolder(path:unknown):Promise<SyncStatus>{
     const state=this.state;if(!state)throw Error('Connect a Zo workspace first.');
     const base=normalizeFolder(path);
+    await this.pause();
+    this.folderCache.clear();
     if(base!==state.base){state.base=base;state.files={};state.baseVersions=undefined;state.deleted=undefined;state.lastSyncedAt=undefined;await this.save();}
     if(!this.stopped){this.message=undefined;this.start();}
     return this.status();
@@ -584,7 +657,9 @@ export class ZoSync{
   // Forget the credential on this Mac. The drafts stay here, and everything already in Zo stays
   // there; deleting the service account in Zo revokes it everywhere.
   async disconnect(){
-    clearTimeout(this.timer);this.timer=undefined;clearInterval(this.sweep);this.sweep=undefined;
+    await this.pause();
+    await this.auth.disconnect();
+    this.folderCache.clear();
     this.state=null;this.access=undefined;this.phase='off';this.message=undefined;
     await this.secrets.delete(this.account);
     await atomicWrite(this.statePath,JSON.stringify({schemaVersion:2,disconnected:true})+'\n');

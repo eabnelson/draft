@@ -109,12 +109,13 @@
     {
       "id": "zo-sync",
       "title": "Sync with Zo",
-      "description": "Connect a Zo workspace with a service account and Draft works like any notes app that syncs: drafts you add, edit, archive or delete are the same in a Zo folder and on every Mac you connect. Writing changed in two places is kept twice, never lost, and nothing moves while you type.",
-      "updatedAt": "2026-11-03T15:00:00Z",
+      "description": "Sign in to Zo through your browser, choose a workspace and folder, and keep drafts in sync across Macs. Concurrent writing is preserved as separate versions, with offline editing and recoverable deletes.",
+      "updatedAt": "2026-11-05T21:00:00Z",
       "origin": "official",
       "state": "active",
       "code": [
         "desktop/zo-sync.ts",
+        "desktop/zo-auth.ts",
         "src/ZoSync.tsx",
         "src/Features.tsx",
         "desktop/server.ts"

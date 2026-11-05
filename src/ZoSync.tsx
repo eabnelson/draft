@@ -3,6 +3,7 @@ import {Cloud,CloudAlert,CloudUpload,LoaderCircle,RefreshCw,Unplug,Check,CircleA
 import {Button} from './components/ui/button';
 import {api,openLink} from './client';
 import type {SyncStatus,FolderList} from '../desktop/zo-sync';
+import type {Workspace} from '../desktop/zo-auth';
 
 // How syncing with a Zo workspace is going, read every couple of seconds while Settings is open.
 export function useSyncStatus(enabled=true){
@@ -16,7 +17,7 @@ export function useSyncStatus(enabled=true){
 }
 export function syncLabel(status?:SyncStatus){
   if(!status||status.state==='off')return 'Off';
-  if(status.state==='needs-credentials'||status.state==='error'||status.state==='choose-folder')return 'Needs you';
+  if(['needs-credentials','error','choose-folder','choose-workspace','signing-in'].includes(status.state))return 'Needs you';
   return status.workspace??'On';
 }
 // The icon beside Settings while sync is on: a cloud when everything is in Zo, a cloud with an
@@ -28,7 +29,7 @@ export function SyncButton({status,onClick}:{status:SyncStatus;onClick:()=>void}
     {problem?<CloudAlert size={15}/>:moving?<CloudUpload size={15}/>:<Cloud size={15}/>}
   </button>;
 }
-function needsYou(status:SyncStatus){return ['error','needs-credentials','choose-folder'].includes(status.state)||(status.state==='synced'&&!!status.message);}
+function needsYou(status:SyncStatus){return ['error','needs-credentials','choose-folder','choose-workspace','signing-in'].includes(status.state)||(status.state==='synced'&&!!status.message);}
 function ago(value?:string){
   if(!value)return '';
   const seconds=Math.max(0,(Date.now()-new Date(value).getTime())/1000);
@@ -47,31 +48,21 @@ function line(status:SyncStatus){
   }
 }
 
-// The prompt an agent connected to Zo (Claude Code, Codex, Zo itself) follows to set Draft up: a
-// service account that can edit one folder, and a block with its credential to paste back here.
+// Optional workspace setup. The browser issues credentials separately from these grants.
 export const SETUP_FOLDER='/workspace/Draft';
-export const SETUP_PROMPT=`Set up Draft, my Mac writing app, to keep my drafts in sync with my Zo workspace. Use your Zo tools. Draft needs a service account credential; leave everything else in Zo as it is.
+export const SETUP_PROMPT=`Prepare my Zo workspace for Draft, my Mac writing app. Use your Zo tools. Draft signs in through the browser; do not create or return a client secret.
 
 1. Workspace: use the Zo workspace you're connected to. If there's more than one, ask me which to use before doing anything.
 2. Folder: use ${SETUP_FOLDER}. Create it if it doesn't exist (zo.folder.create with parent_path "/workspace" and name "Draft"). Note its folder ID.
-3. Service account: create one named "Draft" with the description "Draft (Mac app) keeps my drafts in sync with ${SETUP_FOLDER}. Delete it to disconnect Draft." If one named Draft already exists, ask me before reusing it.
+3. Service account: create one named "Draft" with the description "Draft (Mac app) keeps my drafts in sync with ${SETUP_FOLDER}." If one named Draft already exists, ask me before reusing it or changing its grants.
 4. Access: give the service account two grants.
    - role_zo_builder at the workspace scope, so it can create files.
    - policy_zo_knowledge_all at the scope of the folder from step 2, so it can update the files in it.
-   If Zo won't let you make the folder grant, grant role_zo_full_access at the workspace scope instead and tell me you did.
-5. Credential: create a client_credentials credential for the service account, with no expiry.
-6. Reply with this block filled in, so I can paste it into Draft:
+   Do not grant workspace Full access. If folder access cannot be granted, stop and explain what is missing.
+5. Tell me the workspace name and folder path. I will return to Draft, choose Connect to Zo, and select the Draft service account on Zo's consent page.`;
 
-ZO_SYSTEM_API_CLIENT_ID=<the credential_id>
-ZO_SYSTEM_API_CLIENT_SECRET=<the secret>
-ZO_WORKSPACE_NAME=<the workspace's display name>
-DRAFT_ZO_FOLDER=${SETUP_FOLDER}
-
-Zo shows the secret only once. Don't write it to a file or save it anywhere else.`;
-
-// Draft connects the way any outside app does, with a service account in the person's own workspace.
-// Nothing needs to be set up on Zo's side.
-function Connect({onConnected,onCancel}:{onConnected:(status:SyncStatus)=>void;onCancel?:()=>void}){
+// Tokens stay in the desktop host and Keychain; the window only starts sign-in and reads status.
+function Connect({onConnected,onCancel,signingIn=false}:{onConnected:(status:SyncStatus)=>void;onCancel?:()=>void;signingIn?:boolean}){
   const [credentials,setCredentials]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false),[showPrompt,setShowPrompt]=useState(false);
   const file=useRef<HTMLInputElement>(null),prompt=useRef<HTMLTextAreaElement>(null);
   async function copy(){
@@ -86,41 +77,61 @@ function Connect({onConnected,onCancel}:{onConnected:(status:SyncStatus)=>void;o
     catch(e){setError(e instanceof Error?e.message:'Draft couldn’t connect. Try again.');}
     finally{setBusy(false);}
   }
-  return <form className="zo-sync-connect" onSubmit={event=>void connect(event)}>
-    <ol>
-      <li>Copy the setup prompt and give it to an AI agent that’s connected to your Zo workspace, like Claude Code, Codex or Zo.</li>
-      <li>It makes a service account named <strong>Draft</strong> that can edit <code>{SETUP_FOLDER}</code>, then replies with a short block.</li>
-      <li>Paste that block here and choose Connect.</li>
-    </ol>
+  async function signIn(){
+    setBusy(true);setError('');
+    try{onConnected(await api<SyncStatus>('/api/sync/sign-in',{}));}
+    catch(e){setError(e instanceof Error?e.message:'Draft couldn’t open Zo. Try again.');}
+    finally{setBusy(false);}
+  }
+  return <div className="zo-sync-connect">
+    <p className="settings-detail">Sign in through your browser, then choose a workspace and folder. On Zo’s consent page, choose the Draft service account with access to that folder.</p>
     <div className="settings-actions">
-      <Button type="button" size="sm" variant={credentials.trim()?'outline':'default'} disabled={busy} onClick={()=>void copy()}>{copied?<Check size={13}/>:<Copy size={13}/>}<span role="status">{copied?'Prompt copied':'Copy setup prompt'}</span></Button>
+      <Button type="button" size="sm" disabled={busy||signingIn} onClick={()=>void signIn()}>{signingIn?<LoaderCircle size={13} className="spin"/>:<Cloud size={13}/>}<span role="status">{signingIn?'Waiting for Zo…':'Connect to Zo'}</span></Button>
+      {signingIn&&<Button type="button" size="sm" variant="ghost" disabled={busy} onClick={()=>void signIn()}>Start again</Button>}
+      {signingIn&&<Button type="button" size="sm" variant="ghost" disabled={busy} onClick={()=>{setBusy(true);void api<SyncStatus>('/api/sync/disconnect',{}).then(onConnected).catch(e=>setError(e.message)).finally(()=>setBusy(false));}}>Cancel sign-in</Button>}
+      {onCancel&&<Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>}
     </div>
+    <details className="zo-sync-more">
+      <summary>First time? Prepare your workspace</summary>
+      <p className="settings-detail">Give this prompt to an agent connected to Zo. It creates a Draft service account and grants access to <code>{SETUP_FOLDER}</code>. Then return here to connect.</p>
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void copy()}>{copied?<Check size={13}/>:<Copy size={13}/>}<span role="status">{copied?'Prompt copied':'Copy setup prompt'}</span></Button>
     <details className="zo-sync-more" open={showPrompt} onToggle={event=>setShowPrompt(event.currentTarget.open)}>
       <summary>See the prompt</summary>
       <textarea ref={prompt} aria-label="Setup prompt" value={SETUP_PROMPT} readOnly rows={10}/>
     </details>
+    </details>
+    {error&&<div className="inline-error" role="alert">{error}</div>}
+    <details className="zo-sync-more">
+      <summary>Use an existing service-account credential</summary>
+      <form onSubmit={event=>void connect(event)}>
     <label className="zo-sync-field"><span>What your agent gave you</span>
       <textarea aria-label="Setup block from your agent" value={credentials} onChange={e=>setCredentials(e.target.value)} rows={4} spellCheck={false} autoComplete="off" placeholder={'ZO_SYSTEM_API_CLIENT_ID=…\nZO_SYSTEM_API_CLIENT_SECRET=…\nZO_WORKSPACE_NAME=…\nDRAFT_ZO_FOLDER=…'} disabled={busy}/>
     </label>
     <div className="settings-actions">
       <Button type="submit" size="sm" disabled={busy||!credentials.trim()}>{busy?<><LoaderCircle size={13} className="spin"/>Connecting…</>:<><Cloud size={13}/>Connect</>}</Button>
-      {onCancel&&<Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>}
     </div>
-    {error&&<div className="inline-error" role="alert">{error}</div>}
-    <details className="zo-sync-more">
-      <summary>Set it up yourself in Zo instead</summary>
-      <ol>
-        <li>In your Zo workspace, open <strong>Access control → Service accounts</strong> and create one named <strong>Draft</strong>. Choose <strong>Full access</strong> so it can update your drafts, and keep <strong>Create credential</strong> checked.</li>
-        <li>Download the <strong>.env</strong> file and choose it here, then choose Connect.</li>
-        <li>Choose the folder in Zo where your drafts go.</li>
-      </ol>
       <div className="settings-actions">
         <Button type="button" variant="ghost" size="sm" onClick={()=>void openLink('https://app.zo.computer')}>Open Zo<ArrowUpRight size={12}/></Button>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={()=>file.current?.click()}><FileUp size={13}/>Choose .env file</Button>
         <input ref={file} type="file" accept=".env,text/plain" hidden onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void f.text().then(setCredentials);}}/>
       </div>
+      </form>
     </details>
-  </form>;
+  </div>;
+}
+
+function WorkspacePicker({onChosen}:{onChosen:(status:SyncStatus)=>void}){
+  const [workspaces,setWorkspaces]=useState<Workspace[]>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const load=()=>{setError('');void api<Workspace[]>('/api/sync/workspaces').then(setWorkspaces).catch(e=>setError(e.message));};
+  useEffect(load,[]);
+  async function choose(id:string){setBusy(true);setError('');try{onChosen(await api<SyncStatus>('/api/sync/workspace',{id}));}catch(e){setError(e instanceof Error?e.message:'Choose a workspace again.');}finally{setBusy(false);}}
+  return <div className="zo-folder-picker">
+    <p className="settings-detail">Choose the workspace for your drafts.</p>
+    <ul className="zo-folder-list">{workspaces?.map(w=><li key={w.workspace_id}><button disabled={busy} onClick={()=>void choose(w.workspace_id)}><Cloud size={14}/><span>{w.name}</span><small>{w.subject.type==='service_account'?'Service account':'Your permissions'}</small><ChevronRight size={13}/></button></li>)}</ul>
+    {!workspaces&&!error&&<p role="status">Loading workspaces…</p>}
+    {workspaces?.length===0&&<p className="settings-detail">No workspaces are authorized. Connect again and approve a workspace.</p>}
+    {error&&<div className="inline-error" role="alert">{error}<Button variant="ghost" size="sm" onClick={load}>Try again</Button></div>}
+  </div>;
 }
 
 // Browse the workspace and pick the folder your drafts are saved in, or make a new one.
@@ -183,10 +194,11 @@ export function ZoSyncSettings({status,onChange}:{status?:SyncStatus;onChange:(s
   const icon=status.state==='syncing'?<LoaderCircle size={14} className="spin"/>:status.state==='synced'?<Check size={14}/>:warning?<CircleAlert size={14}/>:<Cloud size={14}/>;
   const done=(next:SyncStatus)=>{setChanging(null);onChange(next);};
   let body:React.ReactNode;
-  if(status.state==='off'||status.state==='needs-credentials'||changing==='credential')body=<>
+  if(status.state==='off'||status.state==='needs-credentials'||status.state==='signing-in'||changing==='credential')body=<>
     {status.state==='needs-credentials'&&<p className="zo-sync-status is-warning" role="status"><CircleAlert size={14}/>{status.message}</p>}
-    <Connect onConnected={done} onCancel={changing?()=>setChanging(null):undefined}/>
+    <Connect signingIn={status.state==='signing-in'} onConnected={done} onCancel={changing?()=>setChanging(null):undefined}/>
   </>;
+  else if(status.state==='choose-workspace')body=<><WorkspacePicker onChosen={done}/><Button variant="ghost" size="sm" onClick={()=>void act('/api/sync/sign-in')}>Connect again</Button></>;
   else if(status.state==='choose-folder'||changing==='folder')body=<FolderPicker workspace={status.workspace} current={status.folder} onChosen={done} onCancel={changing?()=>setChanging(null):undefined}/>;
   else body=<>
     <p className={`zo-sync-status ${warning?'is-warning':''}`} role="status">{icon}{line(status)}</p>
@@ -194,7 +206,7 @@ export function ZoSyncSettings({status,onChange}:{status?:SyncStatus;onChange:(s
     <div className="settings-actions">
       <Button variant="outline" size="sm" disabled={busy||status.state==='syncing'} onClick={()=>void act('/api/sync/now')}><RefreshCw size={13}/>Sync now</Button>
       <Button variant="ghost" size="sm" disabled={busy} onClick={()=>setChanging('folder')}><Folder size={13}/>Change folder</Button>
-      <Button variant="ghost" size="sm" disabled={busy} onClick={()=>setChanging('credential')}>New credential</Button>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={()=>setChanging('credential')}>Reconnect</Button>
       <Button variant="ghost" size="sm" disabled={busy} onClick={()=>void act('/api/sync/disconnect')}><Unplug size={13}/>Disconnect</Button>
     </div>
   </>;
