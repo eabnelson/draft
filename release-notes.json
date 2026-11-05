@@ -1,7 +1,5 @@
 [
-  "Draft 2.0 begins: each draft is its own file with room for versions, and your existing writing moves over automatically.",
-  "An inbox shows every draft with its stage, versions, and last edit. Press ⌘N for a new draft.",
-  "Titles come from your first sentence, or from your AI once there is enough to go on.",
-  "Undo and redo stay with each draft, even after restarting.",
-  "Alternate wording, set aside, overflow, and the Lab have been removed."
+  "Connect to Zo through your browser, then choose a workspace and folder. Existing service-account credentials still work.",
+  "Sync checks Knowledge folders directly, uses file hashes and incremental polls, and regularly checks for deletions and moves.",
+  "Edits made in Zo while Draft is uploading are merged on the next check, keeping both versions of your writing."
 ]

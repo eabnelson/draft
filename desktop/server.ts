@@ -77,6 +77,9 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/drafts/delete'&&request.method==='POST'){await documents.delete(String(input.id??''));sync.changed();return json({deleted:true});}
         if(url.pathname==='/api/drafts/restore'&&request.method==='POST'){const draft=await documents.restoreLast();sync.changed();return json({draft});}
         if(url.pathname==='/api/sync'&&request.method==='GET')return json(sync.status());
+        if(url.pathname==='/api/sync/sign-in'&&request.method==='POST')return json(await sync.signIn());
+        if(url.pathname==='/api/sync/workspaces'&&request.method==='GET')return json(await sync.workspaces());
+        if(url.pathname==='/api/sync/workspace'&&request.method==='POST')return json(await sync.chooseWorkspace(input.id));
         if(url.pathname==='/api/sync/connect'&&request.method==='POST')return json(await sync.connect({credentials:input.credentials}));
         if(url.pathname==='/api/sync/folders'&&request.method==='POST')return json(await sync.folders(input.path));
         if(url.pathname==='/api/sync/folders/create'&&request.method==='POST')return json(await sync.createFolder(input.parent,input.name));
