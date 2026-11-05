@@ -109,8 +109,8 @@
     {
       "id": "zo-sync",
       "title": "Sync with Zo",
-      "description": "Sign in to Zo through your browser, choose a workspace and folder, and keep drafts in sync across Macs. Concurrent writing is preserved as separate versions, with offline editing and recoverable deletes.",
-      "updatedAt": "2026-11-05T21:00:00Z",
+      "description": "Sync drafts with Zo after writing, check a small shared index on app activity, and reduce background checks while idle. Concurrent writing, offline edits and recoverable deletes are preserved.",
+      "updatedAt": "2026-11-05T23:00:00Z",
       "origin": "official",
       "state": "active",
       "code": [

@@ -27,8 +27,10 @@ export const ZO:ZoConfig={
 export const DEFAULT_FOLDER='/workspace/Draft';
 const CLAIMS='https://zo.computer/claims/system-api';
 // Wait for a pause in typing so every keystroke is not a new version in Zo, but never hold
-// changes back for long. Zo is checked for changes made elsewhere every half minute.
-export const QUIET_MS=15_000,MAX_WAIT_MS=120_000,SWEEP_MS=30_000;
+// changes back for long. Quiet cloud checks read one small index, not every folder.
+export const QUIET_MS=15_000,MAX_WAIT_MS=120_000,CHECK_MS=120_000,IDLE_CHECK_MS=900_000,AUDIT_MS=1_800_000;
+export const SYNC_INDEX='Draft-sync.json';
+const IDLE_MS=300_000,ACTIVITY_CHECK_MS=15_000;
 const INLINE_BYTES=512*1024;
 const TRANSIENT=new Set(['authorization_changed','implementation_unavailable','temporarily_unavailable','unavailable','rate_limited','internal_error','timeout']);
 const MEDIA_NAME=/^[a-f0-9]{32}\.(png|jpg|webp|gif)$/,VERSION_NAME=/^v\d+\.md$/;
@@ -65,7 +67,10 @@ type FileState={id:string;revision:number;sha:string;md5?:string;size:number;mti
 // No folder yet means connected, waiting for the person to choose where drafts go.
 // baseVersions: each draft's versions as both sides last agreed. deleted: drafts deleted on this Mac
 // and removed from Zo, and when. cleanup: emptied folders in Zo still to remove.
-type State={schemaVersion:3;auth?:'oauth';clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];lastSyncedAt?:string;connectedAt:string};
+type IndexChange={change:string;place:Place|'deleted'};
+type IndexHead={id:string;revision:number};
+type SyncIndex={schemaVersion:1;generation:string;changes:Record<string,IndexChange>};
+type State={schemaVersion:3;auth?:'oauth';clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];lastSyncedAt?:string;connectedAt:string;indexHead?:IndexHead;pendingIndex?:Record<string,IndexChange>;lastInventoryAt?:number};
 type RemoteEntry={id:string;revision:number;updatedAt:number;md5?:string|null};
 type KnowledgeEntry={kind:string;path:string;folder?:{name:string};file?:{id:string;revision:number;updated_at?:string};md5?:string|null};
 export type SyncStatus={
@@ -76,7 +81,7 @@ type LocalFile={rel:string;path:string;size:number;mtime:number};
 type RemoteFile={id:string;revision:number};
 export type FolderList={path:string|null;parent:string|null;folders:{name:string;path:string}[]};
 type Fetch=(input:string,init?:RequestInit)=>Promise<Response>;
-type Options={secrets?:Secrets;config?:ZoConfig;fetch?:Fetch;sleep?:(ms:number)=>Promise<void>;timers?:boolean};
+type Options={secrets?:Secrets;config?:ZoConfig;fetch?:Fetch;sleep?:(ms:number)=>Promise<void>;timers?:boolean;now?:()=>number};
 
 const sha256=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 export function workspaceOf(accessToken:string):string{
@@ -103,16 +108,19 @@ export class ZoSync{
   private state:State|null=null;
   private access?:{token:string;expires:number};private exchanging?:Promise<string>;
   private phase:SyncStatus['state']='off';private message?:string;private notice?:string;private pending=0;
-  private firstChange=0;private lastChange=0;private timer?:ReturnType<typeof setTimeout>;private sweep?:ReturnType<typeof setInterval>;
+  private firstChange=0;private lastChange=0;private timer?:ReturnType<typeof setTimeout>;private sweep?:ReturnType<typeof setTimeout>;
+  private lastActivity:number;private foreground=true;private lastCheck=0;private forceScan=false;private paused=false;
+  private indexResponse?:IndexHead&{etag?:string};
   private running?:Promise<void>;private again=false;
   private readonly auth:ZoAuth;
   private folderCache=new Map<string,{entries:KnowledgeEntry[];watermark:number;checkedAt:number}>();
-  private readonly secrets:Secrets;private readonly config:ZoConfig;private readonly fetch:Fetch;private readonly sleep:(ms:number)=>Promise<void>;private readonly timers:boolean;
+  private readonly secrets:Secrets;private readonly config:ZoConfig;private readonly fetch:Fetch;private readonly sleep:(ms:number)=>Promise<void>;private readonly timers:boolean;private readonly now:()=>number;
   readonly draftsRoot:string;
   constructor(readonly dataRoot:string,readonly store:DraftStore,options:Options={}){
     this.draftsRoot=store.root;
     this.secrets=options.secrets??new Keychain();this.config=options.config??ZO;
     this.fetch=options.fetch??((input,init)=>globalThis.fetch(input,init));this.sleep=options.sleep??(ms=>new Promise(r=>setTimeout(r,ms)));this.timers=options.timers??true;
+    this.now=options.now??Date.now;this.lastActivity=this.now();
     this.auth=new ZoAuth(dataRoot,this.secrets,this.account,this.config,this.fetch);
   }
   private get statePath(){return join(this.dataRoot,'zo-sync.json');}
@@ -135,42 +143,72 @@ export class ZoSync{
   // Called after any save. It only notes the change; the upload happens later, off the save path.
   changed(){
     if(!this.state?.base||this.stopped)return;
-    const now=Date.now();this.lastChange=now;if(!this.firstChange)this.firstChange=now;
+    const now=this.now();this.lastActivity=now;this.lastChange=now;if(!this.firstChange)this.firstChange=now;
     if(this.phase==='synced')this.phase='waiting';
     if(!this.timer)this.schedule(QUIET_MS);
   }
-  syncNow(){if(!this.state)throw Error('Connect a Zo workspace first.');if(!this.state.base)throw Error('Choose a folder in Zo first.');if(this.stopped)throw Error('Connect again with a new credential first.');this.firstChange=this.firstChange||Date.now();this.schedule(0);return this.status();}
+  syncNow(){if(!this.state)throw Error('Connect a Zo workspace first.');if(!this.state.base)throw Error('Choose a folder in Zo first.');if(this.stopped)throw Error('Connect again with a new credential first.');this.forceScan=true;this.firstChange=this.firstChange||this.now();this.schedule(0);return this.status();}
+  activity(reason:'foreground'|'background'|'online'){
+    if(reason!=='online')this.foreground=reason==='foreground';
+    if(this.foreground)this.lastActivity=this.now();
+    if(this.state?.base&&!this.paused&&!this.stopped&&reason!=='background'&&this.now()-this.lastCheck>=ACTIVITY_CHECK_MS)this.schedule(0);
+    this.startSweep();return this.status();
+  }
+  nextCheckDelay(now=this.now()){return this.foreground&&now-this.lastActivity<IDLE_MS?CHECK_MS:IDLE_CHECK_MS;}
   private schedule(ms:number){
-    if(!this.timers)return;
+    if(!this.timers||this.paused)return;
     clearTimeout(this.timer);
     this.timer=setTimeout(()=>{this.timer=undefined;
-      const now=Date.now(),quiet=now-this.lastChange>=QUIET_MS,overdue=this.firstChange&&now-this.firstChange>=MAX_WAIT_MS;
+      const now=this.now(),quiet=now-this.lastChange>=QUIET_MS,overdue=this.firstChange&&now-this.firstChange>=MAX_WAIT_MS;
       if(ms>0&&!quiet&&!overdue){this.schedule(Math.min(QUIET_MS-(now-this.lastChange),MAX_WAIT_MS-(now-this.firstChange)));return;}
-      void this.run();
+      void this.run(false);
     },ms);
     (this.timer as any)?.unref?.();
   }
-  private startSweep(){if(!this.timers||this.sweep)return;this.sweep=setInterval(()=>{if(this.state&&!this.stopped)void this.run();},SWEEP_MS);(this.sweep as any).unref?.();}
+  private startSweep(){
+    clearTimeout(this.sweep);this.sweep=undefined;
+    if(!this.timers||this.paused||!this.state?.base||this.stopped)return;
+    this.sweep=setTimeout(()=>{this.sweep=undefined;if(this.firstChange&&this.timer){this.startSweep();return;}void this.run(false);},this.nextCheckDelay());
+    (this.sweep as any).unref?.();
+  }
 
   // One pass at a time; a change during a pass runs another one after it.
-  run():Promise<void>{
+  run(fullScan=true):Promise<void>{
+    this.forceScan||=fullScan;
     if(this.running){this.again=true;return this.running;}
+    clearTimeout(this.sweep);this.sweep=undefined;
     this.running=(async()=>{
-      do{this.again=false;this.firstChange=0;await this.pass();}while(this.again&&this.state&&!this.stopped);
-    })().finally(()=>{this.running=undefined;});
+      do{this.again=false;this.firstChange=0;const full=this.forceScan;this.forceScan=false;await this.pass(full);}while(this.again&&this.state&&!this.stopped&&!this.paused);
+    })().finally(()=>{this.running=undefined;this.startSweep();});
     return this.running;
   }
-  private async pass(){
+  private async pass(fullScan:boolean){
     const state=this.state;if(!state?.base||this.stopped)return;
     this.phase='syncing';this.message=undefined;this.notice=undefined;
     try{
-      await this.cleanup(state);
-      // What is in Zo. Without the folder there yet, everything here is saved to it fresh.
-      const remote=await this.remoteFiles(state);if(this.state!==state)return;
       let local=this.worthSaving(state,await this.localFiles());
+      const head=await this.checkIndex(state);if(this.state!==state)return;
+      this.lastCheck=this.now();
+      const localPaths=new Set(local.map(f=>f.rel));
+      const localWork=local.some(f=>!state.files[f.rel]||state.files[f.rel].size!==f.size||state.files[f.rel].mtime!==f.mtime)||Object.keys(state.files).some(rel=>parseRel(rel)&&!localPaths.has(rel));
+      const audit=!state.lastInventoryAt||this.now()-state.lastInventoryAt>=AUDIT_MS;
+      const changed=!head||!state.indexHead||head.id!==state.indexHead.id||head.revision!==state.indexHead.revision;
+      const inventory=fullScan||audit||changed||localWork||Object.keys(state.pendingIndex??{}).length>0;
+      if(fullScan||audit||changed)this.folderCache.clear();
+      await this.cleanup(state);
+      // Index entries are hints, never authority to delete writing. Actual changes still
+      // use complete folder inventories and the existing revision/merge checks.
+      const remote=inventory?await this.remoteFiles(state):null;if(this.state!==state)return;
       if(remote&&await this.reconcile(state,local,remote))local=this.worthSaving(state,await this.localFiles());
       if(this.state!==state)return;
       await this.push(state,local);
+      if(this.state!==state)return;
+      if(!head||Object.keys(state.pendingIndex??{}).length){
+        const published=await this.publishIndex(state,head);
+        state.indexHead=published.caughtUp?published.head:head??undefined;
+        if(!published.caughtUp)this.again=true;
+      }else state.indexHead=head;
+      if(inventory)state.lastInventoryAt=this.now();
       // What both sides now agree on, to tell later which side added or removed a version.
       const versions:Record<string,string[]>={};
       for(const file of local.filter(f=>f.rel.endsWith('/draft.json'))){try{const record=await readJSON<{id:string;versions:{id:string}[]}>(file.path);versions[record.id]=record.versions.map(v=>v.id);}catch{}}
@@ -180,6 +218,7 @@ export class ZoSync{
       this.phase=this.firstChange?'waiting':'synced';
     }catch(error){
       if(this.state!==state)return;
+      this.forceScan=true;
       if(error instanceof NeedsCredentials||error instanceof SignInNeeded){this.phase='needs-credentials';this.message=state.auth==='oauth'?'Your Zo sign-in ended. Connect to Zo again.':'Zo no longer accepts this service account. Connect again with a new credential.';return;}
       this.phase='error';
       const code=error instanceof ZoError?error.code:'';
@@ -190,7 +229,7 @@ export class ZoSync{
         :code==='conflict'?'A draft changed in Zo while syncing. Draft will merge it on the next check. Your writing is safe on this Mac.'
         :'Draft couldn’t reach Zo. It will try again soon. Your drafts are safe on this Mac.';
       // Missing access needs a person; anything else is tried again in a minute.
-      if(this.timers&&code!=='permission_denied'&&code!=='resource_not_found'){clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=undefined;void this.run();},60_000);(this.timer as any).unref?.();}
+      if(this.timers&&code!=='permission_denied'&&code!=='resource_not_found'){clearTimeout(this.timer);this.timer=setTimeout(()=>{this.timer=undefined;void this.run(false);},60_000);(this.timer as any).unref?.();}
     }finally{this.pending=0;}
   }
 
@@ -376,6 +415,7 @@ export class ZoSync{
   }
   // Deleted on this Mac: into Zo's trash, then cleared, with its folders removed once Zo lets them go.
   private async deleteRemote(state:State,id:string,rels:string[],remote:Map<string,RemoteEntry>){
+    await this.markIndex(state,id,'deleted');
     for(const rel of rels){
       const fileId=remote.get(rel)?.id??state.files[rel]?.id;
       if(fileId){
@@ -398,6 +438,7 @@ export class ZoSync{
   }
   // Archived or restored here: the draft's folder in Zo moves to match, keeping each file's history.
   private async moveRemote(state:State,id:string,from:Place,to:Place,remote:Map<string,RemoteEntry>){
+    await this.markIndex(state,id,to);
     const destination=await this.folderId(to==='archived'?`${state.base}/Archive`:state.base!,true);
     try{await this.invoke('zo.folder.update',{path:`${state.base}/${from==='archived'?'Archive/':''}${id}.draft`,destination_folder_id:destination});}
     catch(error){if(!(error instanceof ZoError&&['conflict','resource_not_found'].includes(error.code)))throw error;}
@@ -436,15 +477,62 @@ export class ZoSync{
     this.pending=changed.length+removed.length;
     for(const item of changed){
       if(this.state!==state)return;
+      const draft=parseRel(item.file.rel);if(draft)await this.markIndex(state,draft.id,draft.place);
       const remote=await this.upload(state,item.file.rel,item.bytes,item.sha);
       state.files[item.file.rel]={...remote,sha:item.sha,md5:createHash('md5').update(item.bytes).digest('hex'),size:item.file.size,mtime:item.file.mtime};
       this.pending--;await this.save();
     }
     for(const rel of removed){
       if(this.state!==state)return;
+      const draft=parseRel(rel)!;await this.markIndex(state,draft.id,draft.place);
       try{await this.invoke('zo.file.delete',{file_id:state.files[rel].id});}catch(error){if(!(error instanceof ZoError&&error.code==='resource_not_found'))throw error;}
       delete state.files[rel];this.pending--;await this.save();
     }
+  }
+  private async markIndex(state:State,id:string,place:IndexChange['place']){
+    state.pendingIndex??={};
+    state.pendingIndex[id]={change:crypto.randomUUID(),place};
+    // Persist before touching cloud files. A crash or failed index write is announced
+    // on the next successful pass, even when the file upload already completed.
+    await this.save();
+  }
+  private async checkIndex(state:State):Promise<IndexHead|null>{
+    try{
+      const response=await this.request<IndexHead>('zo.file.get_metadata',{path:`${state.base}/${SYNC_INDEX}`},1,undefined,{etag:this.indexResponse?.etag});
+      if(response.notModified){if(!this.indexResponse)throw Error('Missing cached sync index.');return this.indexResponse;}
+      const head=response.result!;
+      if(typeof head.id!=='string'||!Number.isSafeInteger(head.revision)||head.revision<1)throw Error('MyCloud returned an invalid sync index revision.');
+      this.indexResponse={id:head.id,revision:head.revision,etag:response.etag};return this.indexResponse;
+    }catch(error){if(error instanceof ZoError&&error.code==='resource_not_found'){this.indexResponse=undefined;return null;}throw error;}
+  }
+  private async publishIndex(state:State,observed:IndexHead|null){
+    const pending={...state.pendingIndex};
+    let existing=observed!==null;
+    for(let attempt=0;attempt<5;attempt++){
+      let file:IndexHead|undefined,changes:SyncIndex['changes']={};
+      if(existing){
+        try{
+          const read=await this.invoke<{file:IndexHead;content:{format:string;text?:string}}>('zo.file.read',{path:`${state.base}/${SYNC_INDEX}`,format:'text'});
+          if(read.content.format!=='text'||!read.content.text||read.content.text.length>100_000)throw Error('Draft’s cloud sync index is invalid. Your writing is safe on this Mac.');
+          const index=JSON.parse(read.content.text) as SyncIndex;
+          if(index.schemaVersion!==1||typeof index.generation!=='string'||!index.changes||Array.isArray(index.changes)||typeof index.changes!=='object')throw Error('Draft’s cloud sync index could not be read. Your writing is safe on this Mac.');
+          for(const [id,change] of Object.entries(index.changes))if(/^[A-Za-z0-9][A-Za-z0-9._-]{0,150}$/.test(id)&&change&&typeof change.change==='string'&&['live','archived','deleted'].includes(change.place))changes[id]=change;
+          file=read.file;
+        }catch(error){if(error instanceof ZoError&&error.code==='resource_not_found')existing=false;else throw error;}
+      }
+      // Bounded recent changes plus a new generation invalidate every older checkpoint.
+      // Full inventories, not retained tombstones, recover clients offline for longer.
+      for(const id of Object.keys(pending))delete changes[id];
+      const index:SyncIndex={schemaVersion:1,generation:crypto.randomUUID(),changes:Object.fromEntries(Object.entries({...changes,...pending}).slice(-128))};
+      const content=JSON.stringify(index),key=`draft-index-${sha256(`${state.workspaceId}:${state.base}:${content}:${file?.revision??0}`)}`;
+      try{
+        const head=file?await this.invoke<IndexHead>('zo.file.update',{file_id:file.id,content,expected_revision:file.revision,idempotency_key:key}):await this.invoke<IndexHead>('zo.file.create',{parent_path:state.base,create_parent_folders:true,name:SYNC_INDEX,content,idempotency_key:key});
+        for(const [id,change] of Object.entries(pending))if(state.pendingIndex?.[id]?.change===change.change)delete state.pendingIndex[id];
+        const caughtUp=file?file.id===observed?.id&&file.revision===observed.revision:observed===null;
+        return {head,caughtUp};
+      }catch(error){if(!(error instanceof ZoError&&error.code==='conflict'))throw error;existing=true;}
+    }
+    throw new ZoError('conflict','Another Mac is updating Draft’s sync index. Draft will check again.');
   }
   // A readable list at the top of the folder, so a person or agent in Zo can find a draft by title.
   private async index(files:LocalFile[]){
@@ -469,7 +557,12 @@ export class ZoSync{
     };
     if(known){
       try{return await replace(known);}
-      catch(error){if(!(error instanceof ZoError&&error.code==='resource_not_found'))throw error;}
+      catch(error){
+        // This readable summary is derived from the reconciled library, not writing.
+        // Another Mac can regenerate it too; refresh its revision before replacing it.
+        if(rel==='Drafts.md'&&error instanceof ZoError&&error.code==='conflict')return replace(await this.invoke<RemoteFile>('zo.file.get_metadata',{path}));
+        if(!(error instanceof ZoError&&error.code==='resource_not_found'))throw error;
+      }
     }
     for(let attempt=0;;attempt++){
       try{return await this.create(dirname(path),basename(path),bytes,text,key('create'));}
@@ -514,14 +607,19 @@ export class ZoSync{
   // System API call as the service account. Transient failures retry with the same idempotency
   // key, so a write that may already have happened is never done twice.
   async invoke<T>(action:string,input:Record<string,unknown>,version=1,query?:Record<string,unknown>):Promise<T>{
+    return (await this.request<T>(action,input,version,query)).result!;
+  }
+  private async request<T>(action:string,input:Record<string,unknown>,version:number,query?:Record<string,unknown>,read?:{etag?:string}):Promise<{result?:T;etag?:string;notModified?:boolean}>{
     let renewed=false;
     for(let attempt=0;;attempt++){
       const token=await this.token();
       let response:Response|undefined;
-      try{response=await this.fetch(`${this.config.apiOrigin}/zo-system-api/v1/invoke`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(this.state?.auth==='oauth'?{'Zo-Workspace-Id':this.state.workspaceId}:{})},body:JSON.stringify({action,input,options:query?{version,query}:{version}}),signal:AbortSignal.timeout(90_000)});}catch{}
+      const url=read?`${this.config.apiOrigin}/zo-system-api/v1/invoke/${encodeURIComponent(this.state!.workspaceId)}/v${version}/${action}?${new URLSearchParams({input:JSON.stringify(input)})}`:`${this.config.apiOrigin}/zo-system-api/v1/invoke`;
+      try{response=await this.fetch(url,{method:read?'GET':'POST',headers:{Authorization:`Bearer ${token}`,...(read?(read.etag?{'If-None-Match':read.etag}:{}):{'Content-Type':'application/json',...(this.state?.auth==='oauth'?{'Zo-Workspace-Id':this.state.workspaceId}:{})})},...(read?{}:{body:JSON.stringify({action,input,options:query?{version,query}:{version}})}),signal:AbortSignal.timeout(90_000)});}catch{}
       if(response?.status===401&&!renewed){renewed=true;this.access=undefined;this.auth.invalidate();attempt--;continue;}
+      if(read&&response?.status===304)return {notModified:true};
       const body=response?await response.json().catch(()=>null) as any:null;
-      if(response?.ok&&body&&'result' in body)return body.result as T;
+      if(response?.ok&&body&&'result' in body)return {result:body.result as T,etag:response.headers.get('etag')??undefined};
       const code=String(body?.error?.code??(response?`http_${response.status}`:'network')),transient=!response||response.status>=500||response.status===429||TRANSIENT.has(code);
       if(response?.status===401)throw new NeedsCredentials();
       if(!transient||attempt>=4)throw new ZoError(code,String(body?.error?.message??'Zo didn’t accept the request.'),transient);
@@ -566,9 +664,10 @@ export class ZoSync{
     this.phase='choose-folder';this.message=undefined;await this.save();return this.status();
   }
   private async pause(){
-    clearTimeout(this.timer);this.timer=undefined;clearInterval(this.sweep);this.sweep=undefined;
+    this.paused=true;
+    clearTimeout(this.timer);this.timer=undefined;clearTimeout(this.sweep);this.sweep=undefined;
     this.again=false;await this.running;
-    clearTimeout(this.timer);this.timer=undefined;
+    clearTimeout(this.timer);this.timer=undefined;clearTimeout(this.sweep);this.sweep=undefined;this.indexResponse=undefined;
   }
   private async exchange(clientId:string,clientSecret:string):Promise<{token:string;expires:number}|'rejected'>{
     for(let attempt=0;;attempt++){
@@ -597,14 +696,14 @@ export class ZoSync{
     const previous=this.state?.workspaceId===workspaceId?this.state:null,base=chosen??previous?.base;
     clearTimeout(this.timer);this.timer=undefined;
     const same=previous&&previous.base===base?previous:null;
-    this.state={schemaVersion:3,clientId,workspaceId,workspaceName:parsed.workspaceName??previous?.workspaceName,base,files:same?.files??{},baseVersions:same?.baseVersions,deleted:same?.deleted,cleanup:same?.cleanup,lastSyncedAt:same?.lastSyncedAt,connectedAt:new Date().toISOString()};
+    this.state={schemaVersion:3,clientId,workspaceId,workspaceName:parsed.workspaceName??previous?.workspaceName,base,files:same?.files??{},baseVersions:same?.baseVersions,deleted:same?.deleted,cleanup:same?.cleanup,lastSyncedAt:same?.lastSyncedAt,indexHead:same?.indexHead,pendingIndex:same?.pendingIndex,lastInventoryAt:same?.lastInventoryAt,connectedAt:new Date().toISOString()};
     this.access=access;this.message=undefined;
     try{const workspace=await this.invoke<{display_name?:string}>('zo.workspace.get',{workspace_id:workspaceId});if(workspace.display_name)this.state.workspaceName=workspace.display_name;}catch{}
     await this.save();
     if(base)this.start();else this.phase='choose-folder';
     return this.status();
   }
-  private start(){this.phase='waiting';this.startSweep();this.firstChange=Date.now();this.schedule(0);}
+  private start(){this.paused=false;this.phase='waiting';this.startSweep();this.firstChange=this.now();this.schedule(0);}
 
   // The folders this service account can see, for choosing where drafts go. With no path, its top-level folders.
   async folders(path?:unknown):Promise<FolderList>{
@@ -650,7 +749,7 @@ export class ZoSync{
     const base=normalizeFolder(path);
     await this.pause();
     this.folderCache.clear();
-    if(base!==state.base){state.base=base;state.files={};state.baseVersions=undefined;state.deleted=undefined;state.lastSyncedAt=undefined;await this.save();}
+    if(base!==state.base){state.base=base;state.files={};state.baseVersions=undefined;state.deleted=undefined;state.lastSyncedAt=undefined;state.indexHead=undefined;state.pendingIndex=undefined;state.lastInventoryAt=undefined;await this.save();}
     if(!this.stopped){this.message=undefined;this.start();}
     return this.status();
   }
