@@ -136,6 +136,14 @@ export default function App(){
     unsaved.current.add(next.id);setDrafts(list);setSaveState('Saving…');
   }
   useEffect(()=>{const timer=setTimeout(()=>void persistAll(),450);return()=>clearTimeout(timer);},[drafts]);
+  useEffect(()=>{
+    const activity=(reason:'foreground'|'background'|'online')=>{void api('/api/sync/activity',{reason}).catch(()=>{});};
+    const focus=()=>activity('foreground'),blur=()=>activity('background'),online=()=>activity('online');
+    const visibility=()=>activity(document.hidden?'background':'foreground');
+    window.addEventListener('focus',focus);window.addEventListener('blur',blur);window.addEventListener('online',online);document.addEventListener('visibilitychange',visibility);
+    activity(document.hidden||!document.hasFocus()?'background':'foreground');
+    return()=>{window.removeEventListener('focus',focus);window.removeEventListener('blur',blur);window.removeEventListener('online',online);document.removeEventListener('visibilitychange',visibility);};
+  },[]);
 
   async function open(d:Draft){
     if(d.id===draftRef.current.id){ed()?.focus();return;}

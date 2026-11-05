@@ -85,6 +85,10 @@ const server=Bun.serve({hostname:'127.0.0.1',port:dev?Number(process.env.DRAFT_D
         if(url.pathname==='/api/sync/folders/create'&&request.method==='POST')return json(await sync.createFolder(input.parent,input.name));
         if(url.pathname==='/api/sync/folder'&&request.method==='POST')return json(await sync.chooseFolder(input.path));
         if(url.pathname==='/api/sync/now'&&request.method==='POST')return json(sync.syncNow());
+        if(url.pathname==='/api/sync/activity'&&request.method==='POST'){
+          if(!['foreground','background','online'].includes(input.reason))throw Error('Unknown sync activity.');
+          return json(sync.activity(input.reason));
+        }
         if(url.pathname==='/api/sync/disconnect'&&request.method==='POST')return json(await sync.disconnect());
         if(url.pathname==='/api/drafts/history/load'&&request.method==='POST')return json({history:await documents.history(String(input.id??''),String(input.versionId??''))});
         if(url.pathname==='/api/drafts/history'&&request.method==='POST'){await documents.saveHistory(String(input.id??''),String(input.versionId??''),input.history);return json({saved:true});}

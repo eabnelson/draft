@@ -1,5 +1,5 @@
 [
-  "Connect to Zo through your browser, then choose a workspace and folder. Existing service-account credentials still work.",
-  "Sync checks Knowledge folders directly, uses file hashes and incremental polls, and regularly checks for deletions and moves.",
-  "Edits made in Zo while Draft is uploading are merged on the next check, keeping both versions of your writing."
+  "Cloud sync checks a small shared index when Draft opens, returns to the foreground, or reconnects to the network.",
+  "Background checks slow down while idle, and unchanged checks skip cloud folder scans. Sync now still checks everything.",
+  "Concurrent Macs and interrupted uploads retain their changes, with periodic full checks for older apps and edits made directly in Zo."
 ]
