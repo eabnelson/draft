@@ -3,9 +3,14 @@ import {join,resolve} from 'node:path';
 import {DraftStore} from '../../desktop/documents';
 import {fresh,addVersion,editVersion,rename,inboxOrder,type Draft} from '../../src/model';
 import {draftAction,saveSnapshot,type DraftAction} from './actions';
+import {ZoSync} from '../../desktop/zo-sync';
 
 export async function startPrototypeHost(root:string,token:string){
   const store=new DraftStore(join(resolve(root),'Drafts'));
+  // The sync engine keys credentials by data root. The prototype never borrows
+  // the installed app's account or connects until the person chooses to.
+  const sync=new ZoSync(resolve(root),store);
+  await sync.initialize();
   const library=await store.load();
   if(library.drafts.length===1&&library.drafts[0].versions.every(v=>!v.text)){
     let d=rename(library.drafts[0],'A little room to think');
@@ -20,25 +25,38 @@ export async function startPrototypeHost(root:string,token:string){
     const url=new URL(request.url);
     try{
       if(request.method==='GET'&&url.pathname==='/library'){const library=await store.load();return Response.json({...library,drafts:inboxOrder(library.drafts)});}
+      if(request.method==='GET'&&url.pathname==='/sync')return Response.json(sync.status());
+      if(request.method==='GET'&&url.pathname==='/sync/workspaces')return Response.json(await sync.workspaces());
+      if(request.method==='POST'&&url.pathname.startsWith('/sync/')){
+        const input=await request.json() as {id?:string;path?:string};
+        switch(url.pathname){
+          case '/sync/sign-in':return Response.json(await sync.signIn());
+          case '/sync/workspace':return Response.json(await sync.chooseWorkspace(input.id));
+          case '/sync/folder':return Response.json(await sync.chooseFolder(input.path));
+          case '/sync/now':return Response.json(sync.syncNow());
+          case '/sync/disconnect':return Response.json(await sync.disconnect());
+        }
+      }
       if(request.method==='POST'&&url.pathname==='/save'){
         const {draft}=await request.json() as {draft:Draft};
-        await saveSnapshot(store,draft);return Response.json({saved:true});
+        await saveSnapshot(store,draft);sync.changed();return Response.json({saved:true});
       }
       if(request.method==='POST'&&url.pathname==='/action'){
         const {draft,action}=await request.json() as {draft:Draft;action:DraftAction};
-        return Response.json(await draftAction(store,draft,action));
+        const result=await draftAction(store,draft,action);sync.changed();return Response.json(result);
       }
       if(request.method==='POST'&&url.pathname==='/restore'){
         const draft=await store.restoreLast();if(draft)await store.setActive(draft.id);
+        sync.changed();
         return Response.json(await store.load());
       }
       if(request.method==='POST'&&url.pathname==='/new'){
-        const draft=addVersion(rename(fresh(),'Untitled draft')).draft;await store.save(draft);await store.setActive(draft.id);return Response.json(await store.load());
+        const draft=addVersion(rename(fresh(),'Untitled draft')).draft;await store.save(draft);await store.setActive(draft.id);sync.changed();return Response.json(await store.load());
       }
       const media=url.pathname.match(/^\/media\/([a-zA-Z0-9._-]+)$/);
       if(request.method==='POST'&&media){return Response.json(await store.saveMedia(media[1],new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')??''));}
       return new Response('Not found',{status:404});
     }catch(error){return Response.json({error:error instanceof Error?error.message:String(error)},{status:400});}
   }});
-  return {server,store};
+  return {server,store,close:async()=>{await sync.close();server.stop(true);}};
 }

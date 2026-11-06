@@ -12,6 +12,8 @@ ureq = { version = "3", default-features = false, features = ["json"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # Rune disables Parley's default features. Opt into dictionary segmentation for CJK/Thai.
 parley = { version = "0.12", default-features = false, features = ["std", "complex-scripts"] }
+wgpu = { version = "30", default-features = false, features = ["wgsl"] }
+bytemuck = { version = "1", features = ["derive"] }
 
 [profile.dev]
 debug = 0

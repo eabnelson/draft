@@ -174,6 +174,19 @@ test('connecting checks the service account with Zo and keeps its secret only in
   await again.initialize();expect(again.status()).toMatchObject({state:'waiting',workspace:'MyCloud',folder:BASE});
 }));
 
+test('closing an embedding host retains its sync connection and credentials',()=>fixture(async f=>{
+  await link(f);await f.sync.run();
+  const before=await readFile(join(f.root,'zo-sync.json'),'utf8');
+  const secrets=[...f.secrets.values];
+  await f.sync.close();
+  expect(await readFile(join(f.root,'zo-sync.json'),'utf8')).toBe(before);
+  expect([...f.secrets.values]).toEqual(secrets);
+  const again=new ZoSync(f.root,f.store,{secrets:f.secrets,config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false});
+  await again.initialize();
+  expect(again.status()).toMatchObject({state:'waiting',workspace:'MyCloud',folder:BASE});
+  await again.close();
+}));
+
 test('every draft, version and image is saved to the folder, and only changes are sent again',()=>fixture(async f=>{
   let d=fresh();d=editVersion(d,d.versions[0].id,'First thoughts.');
   const second=addVersion(d);d={...editVersion(second.draft,second.version.id,'Punchier.'),title:'Tiny software',titleSource:'manual'};

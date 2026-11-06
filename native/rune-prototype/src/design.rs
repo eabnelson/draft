@@ -44,16 +44,16 @@ impl Palette {
             }
         }
     }
-    pub fn stage(self, dark: bool, stage: &str) -> (Color, Color) {
+    pub fn stage(self, dark: bool, stage: &str) -> Color {
         match (dark, stage) {
-            (true, "Drafting") => (rgb(30, 42, 61), rgb(157, 187, 234)),
-            (false, "Drafting") => (rgb(238, 243, 251), rgb(59, 95, 153)),
-            (true, "Ready") => (rgb(29, 48, 39), rgb(149, 204, 171)),
-            (false, "Ready") => (rgb(235, 246, 239), rgb(62, 119, 83)),
-            (true, "Live") => (rgb(48, 35, 60), rgb(194, 169, 225)),
-            (false, "Live") => (rgb(245, 239, 251), rgb(127, 88, 163)),
-            (true, _) => (rgb(42, 42, 42), rgb(168, 168, 168)),
-            _ => (rgb(243, 243, 243), rgb(119, 119, 119)),
+            (true, "Drafting") => rgb(157, 187, 234),
+            (false, "Drafting") => rgb(59, 95, 153),
+            (true, "Ready") => rgb(149, 204, 171),
+            (false, "Ready") => rgb(62, 119, 83),
+            (true, "Live") => rgb(194, 169, 225),
+            (false, "Live") => rgb(127, 88, 163),
+            (true, _) => rgb(168, 168, 168),
+            _ => rgb(119, 119, 119),
         }
     }
 }
@@ -285,23 +285,6 @@ pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
             ),
         )
         .dim(if active { 1.0 } else { 0.6 })
-}
-
-pub fn tab_frost(p: Palette) -> El {
-    // One blur per visible column covers the joined tabs and their necks.
-    // Keep static glass cards unblurred so Rune's four-blur budget leaves
-    // room for a menu even while three columns are partially visible.
-    el().key("tab-frost")
-        .w_full()
-        .h(46.0)
-        .absolute(0.0, 0.0)
-        .clip_fade(0.0, 0.0, 0.0, 12.0)
-        .child(
-            el().w_full()
-                .h_full()
-                .backdrop_blur(14.0)
-                .fill(p.background.alpha(0.88)),
-        )
 }
 
 pub fn fonts() -> &'static [&'static [u8]] {

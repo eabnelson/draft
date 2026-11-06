@@ -30,25 +30,33 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 - Paste an image. It becomes a Markdown reference plus an image preview below
   the editor. Image insertion is one undo step. If typing continues while the
   image saves, it inserts at the current caret in the original version.
-- Choose **Settings → Reload files** to read the saved `.draft` packages. Equal text retains
+- Choose **Settings → Files → Reload files** to read the saved `.draft` packages. Equal text retains
   the live editor's selection and undo history.
-- Settings offers system/light/dark appearance and **Show Markdown**. The initial
+- The gear opens the Settings page, with Appearance, Editor, Files, Sync, and
+  Shortcuts sections. Cmd/Ctrl-comma opens it too; Escape or Back to drafts returns
+  to the editor. Appearance offers system/light/dark, and Editor offers **Show Markdown**. The initial
   dark appearance matches the original app reference, with Markdown punctuation
   concealed in the prose.
 
 The sidebar and editor are Rune, without a webview. The layout follows the
 existing Draft design: a single frosted surface, joined floating version tabs,
-compact draft previews and status chips, and bottom-corner settings and save
-controls. The selected draft, joined tabs, and floating menus share a glass
-treatment, including the joined Settings/save controls. Tab lighting follows
-the full outline through its necks, above a fading frosted strip that keeps
-scrolling writing from interfering with the labels. Settings
-anchors just above the gear; context menus flip near window edges.
+compact draft previews with colored status text, and a bottom-corner settings
+button. The selected draft, joined tabs, and floating menus share a glass
+treatment. A cropped, separable Gaussian blur follows only the tab silhouette,
+including its scooped necks; the rest of the header has no glass strip. The cloud
+button appears only for a sync error and opens Settings directly to Sync.
+Context menus flip near window edges.
 macOS loads its system font from the OS; Linux retains Rune's font
 fallback. Formatting and concealed punctuation use display spans over the same
 Markdown source. Ordinary saves and image
 imports run on a worker. The Bun host reuses `desktop/documents.ts` and Draft's
 model rather than introducing another document format.
+
+Sync settings reuse `desktop/zo-sync.ts`, with status and commands on a separate
+worker from document saves. Sync is off initially; the prototype's data-root-specific
+credential is separate from the installed app. Sign-in uses the existing macOS
+Keychain backend. New sync downloads can be loaded through Files → Reload files;
+automatic reconciliation into live native editor buffers is not implemented yet.
 
 ## Disposable data and checks
 
@@ -66,7 +74,8 @@ Checks create and remove their own temporary library. They exercise real Rune
 input routing and Draft storage: Unicode round trips, IME preedit/commit,
 formatting, joined-emoji deletion, independent undo, delayed saves, image paste,
 accessible editor names, sidebar menu targeting, metadata persistence, version
-actions, export, archive/restore, Recovery, and the final write barrier. Snapshots and tree dumps
+actions, export, archive/restore, Recovery, Settings navigation, sync-error visibility
+and recovery, and the final write barrier. Snapshots and tree dumps
 go to `native/rune-prototype/artifacts/`.
 
 Linux compilation was checked in the official `rust:1.96.1-bookworm` container,
@@ -85,7 +94,7 @@ This remains a prototype. The native rendering is an approximation of Draft's
 glass, not a pixel-identical port. Concealed punctuation needs further checks
 for cursor movement and selection around invisible source positions. It keeps
 undo only for the current process, and does not implement Draft's spelling, full inline-image
-editing, sync, personal-feature builds, native updater, or distribution. Manual
+editing, automatic refresh after sync, personal-feature builds, native updater, or distribution. Manual
 screen-reader and real input-method checks are still needed. No comparative
 performance claim has been established. Keep this experiment on its prototype
 branch rather than releasing it as Draft.

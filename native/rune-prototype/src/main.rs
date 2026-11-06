@@ -38,8 +38,11 @@ impl Host {
         }
     }
     fn library(&self) -> Result<Library, String> {
+        self.get("/library")
+    }
+    fn get<R: for<'a> Deserialize<'a>>(&self, path: &str) -> Result<R, String> {
         self.agent
-            .get(format!("{}/library", self.url))
+            .get(format!("{}{path}", self.url))
             .header("Authorization", format!("Bearer {}", self.token))
             .call()
             .map_err(|e| e.to_string())?
@@ -168,6 +171,7 @@ enum Job {
     Barrier(mpsc::Sender<()>),
 }
 enum Reply {
+    Sync(settings::Update),
     Saved(String, u64, Result<(), String>),
     Library(u64, Result<Library, String>),
     PrepareAction(String, Value),
@@ -192,6 +196,7 @@ struct State {
     expanded: bool,
     archived: usize,
     preferences: bool,
+    settings: settings::Preferences,
     context: Option<[f32; 2]>,
     item_menu: Option<items::Context>,
     generation: u64,
@@ -252,6 +257,7 @@ impl State {
             expanded: false,
             archived: 0,
             preferences: false,
+            settings: settings::Preferences::default(),
             context: None,
             item_menu: None,
             generation: 0,
@@ -501,7 +507,9 @@ impl State {
 }
 
 mod design;
+mod glass;
 mod items;
+mod settings;
 mod ui;
 mod verify;
 
@@ -512,6 +520,7 @@ fn main() {
     }
     rune::set_app_id("com.studiofour.draft.rune-prototype");
     App::new(ui::spec())
+        .compositor(glass::Glass::default())
         .chrome(rune::Chrome {
             full_size_content: true,
             traffic_lights: Some((16.0, 13.0)),

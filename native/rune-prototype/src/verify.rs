@@ -225,6 +225,7 @@ fn sidebar_context() {
     until(&mut rt, |s| s.docs.iter().all(|d| d.id() != target_id));
     assert_eq!(rt.state.archived, 1);
     click(&mut rt, "settings");
+    click(&mut rt, "settings-section-2");
     menu_click(&mut rt, "restore");
     until(&mut rt, |s| s.docs.iter().any(|d| d.id() == target_id));
     assert_eq!(rt.state.archived, 0);
@@ -375,13 +376,11 @@ fn popover_placement() {
         rt.frame(0.0);
         click(&mut rt, "settings");
         assert!(rt.state.preferences);
-        let button = rect(&rt, "settings");
-        let popup = rect(&rt, "editor-menu");
-        assert!((popup[0] - button[0]).abs() < 1.0);
-        assert!(
-            (button[1] - popup[3] - 6.0).abs() < 1.0,
-            "Settings sits six points above its actual button: {button:?}, {popup:?}"
-        );
+        assert!(rt.find("settings-page").is_some());
+        assert!(rt.find("editor-menu").is_none(), "Settings is a page");
+        click(&mut rt, "settings-section-3");
+        assert_eq!(rt.state.settings.section, 3);
+        assert!(rt.find("sync-sign-in").is_some());
         key(&mut rt, Key::Escape);
         assert!(!rt.state.preferences);
         rt.update(|s, _| s.context = Some([width - 2.0, height - 2.0]));
@@ -401,19 +400,63 @@ fn popover_placement() {
             s.preferences = true;
         });
         rt.frame(0.016);
-        let popup = rect(&rt, "editor-menu");
-        assert!((popup[0] - 12.0).abs() < 1.0);
         assert!(
-            (popup[3] - (height - 18.0)).abs() < 1.0,
-            "Keyboard Settings keeps a visible anchor when the sidebar is hidden: {popup:?}"
+            rt.find("settings-page").is_some(),
+            "Settings works with the drafts sidebar hidden"
         );
-        rt.pointer_down(width - 24.0, 24.0);
-        rt.pointer_up(width - 24.0, 24.0);
+        click(&mut rt, "settings-back");
+        assert!(!rt.state.preferences);
+        rt.update(|s, _| {
+            s.sidebar = true;
+            // Control incoming status here without a real remote account or network failure.
+            s.replies = None;
+            s.settings.issue = None;
+        });
+        for state in [
+            "off",
+            "waiting",
+            "syncing",
+            "synced",
+            "signing-in",
+            "choose-folder",
+            "choose-workspace",
+        ] {
+            rt.update(|s, _| {
+                s.settings.status = serde_json::from_value(json!({"state":state})).unwrap()
+            });
+            rt.frame(0.016);
+            assert!(
+                rt.find("sync-error").is_none(),
+                "{state} keeps the cloud hidden"
+            );
+        }
+        for state in ["error", "needs-credentials"] {
+            rt.update(|s, _| {
+                s.settings.status = serde_json::from_value(
+                    json!({"state":state,"message":"Reconnect to resume sync"}),
+                )
+                .unwrap()
+            });
+            rt.frame(0.016);
+            click(&mut rt, "sync-error");
+            assert!(rt.state.preferences);
+            assert_eq!(
+                rt.state.settings.section, 3,
+                "The error button goes directly to Sync"
+            );
+            click(&mut rt, "settings-back");
+        }
+        rt.update(|s, _| {
+            s.settings.status = serde_json::from_value(json!({"state":"synced"})).unwrap()
+        });
         rt.frame(0.016);
-        assert!(!rt.state.preferences, "clicking outside dismisses Settings");
+        assert!(
+            rt.find("sync-error").is_none(),
+            "The cloud disappears after recovery"
+        );
     }
     println!(
-        "PASS Settings anchoring, context-menu edge flipping, hidden sidebar, and dismissal at two window sizes"
+        "PASS Settings page, direct Sync routing, error-only cloud/recovery, context-menu edge flipping, and hidden sidebar at two window sizes"
     );
 }
 

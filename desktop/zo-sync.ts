@@ -669,6 +669,8 @@ export class ZoSync{
     this.again=false;await this.running;
     clearTimeout(this.timer);this.timer=undefined;clearTimeout(this.sweep);this.sweep=undefined;this.indexResponse=undefined;
   }
+  // Stop background work when an embedding host closes, retaining its connection.
+  async close(){await this.pause();this.auth.cancel();}
   private async exchange(clientId:string,clientSecret:string):Promise<{token:string;expires:number}|'rejected'>{
     for(let attempt=0;;attempt++){
       let response:Response|undefined;

@@ -8,6 +8,7 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
     let host = s.host.clone();
     s.jobs = Some(jobs);
     s.replies = Some(replies);
+    settings::setup(s, send.clone(), waker.clone());
     std::thread::spawn(move || {
         while let Ok(job) = receive.recv() {
             let reply = match job {
@@ -63,6 +64,7 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     }
     for reply in replies {
         match reply {
+            Reply::Sync(update) => settings::receive(s, update),
             Reply::Saved(id, revision, result) => {
                 if let Some(d) = s.docs.iter_mut().find(|d| d.id() == id) {
                     if d.queued == Some(revision) {
@@ -154,6 +156,10 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
 }
 fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
     if key.key == Key::Tab && key.mods.ctrl && !key.mods.logo && !key.mods.alt {
+        if s.preferences {
+            s.settings.cycle(key.mods.shift);
+            return true;
+        }
         let open = s.docs[s.selected].open_versions();
         let count = open.len();
         if count > 1 {
@@ -175,6 +181,7 @@ fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if key.is_command('n') {
+        s.preferences = false;
         s.reload(true);
         return true;
     }
@@ -254,68 +261,7 @@ fn menu(s: &State, dark: bool, p: design::Palette) -> El {
         .padding(6.0)
         .radius(16.0)
         .continuous_corners();
-    if s.preferences {
-        menu = menu
-            .child(
-                text("Appearance")
-                    .font(TextStyle::new(11.0, 500.0))
-                    .color(p.muted)
-                    .px(10.0)
-                    .py(6.0),
-            )
-            .child(menu_item("theme-system", "System", p, |s, _| {
-                s.follow_theme = true;
-                s.preferences = false;
-            }))
-            .child(menu_item("theme-light", "Light", p, |s, _| {
-                s.dark = false;
-                s.follow_theme = false;
-                s.preferences = false;
-            }))
-            .child(menu_item("theme-dark", "Dark", p, |s, _| {
-                s.dark = true;
-                s.follow_theme = false;
-                s.preferences = false;
-            }))
-            .child(el().w_full().h(1.0).fill(p.line))
-            .child(menu_item("new-draft", "New draft", p, |s, _| {
-                s.preferences = false;
-                s.reload(true);
-            }))
-            .child(menu_item(
-                "source",
-                if s.source {
-                    "Hide Markdown"
-                } else {
-                    "Show Markdown"
-                },
-                p,
-                |s, _| {
-                    s.source = !s.source;
-                    s.preferences = false;
-                },
-            ))
-            .child(menu_item("reload", "Reload files", p, |s, _| {
-                s.preferences = false;
-                s.reload(false);
-            }));
-        if s.archived > 0 {
-            menu = menu.child(menu_item(
-                "restore",
-                "Restore last archived draft",
-                p,
-                |s, _| {
-                    s.preferences = false;
-                    s.reload(false);
-                    if !s.docs.iter().any(|d| d.pending_action)
-                        && let Some(jobs) = &s.jobs
-                    {
-                        let _ = jobs.send(Job::Restore(s.generation));
-                    }
-                },
-            ));
-        }
-    } else if s.item_menu.is_some() {
+    if s.item_menu.is_some() {
         menu = items::menu(s, menu, p);
     } else {
         menu = menu
@@ -388,6 +334,7 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                 .absolute(inset, 6.0)
                 .h(28.0)
                 .gap(5.25)
+                .child(glass::frost(&widths, dark))
                 .child(
                     design::glass_pill(&widths, dark, vi == s.active_version()).absolute(0.0, 0.0),
                 )
@@ -510,7 +457,6 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
                         .child(el().h(500.0)),
                 ),
         )
-        .child(design::tab_frost(p))
         .child(tab(s, vi, width, dark, p))
 }
 fn date_label(value: &Value) -> String {
@@ -550,7 +496,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                 }
             });
         let status = items::stage(d);
-        let (chip, chip_text) = p.stage(dark, status);
+        let status_color = p.stage(dark, status);
         let selected = i == s.selected;
         let expanded = selected && s.expanded;
         let mut entry = col()
@@ -609,17 +555,11 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     .w_full()
                     .center_y()
                     .child(
-                        row()
-                            .h(18.0)
-                            .px(7.0)
-                            .center_y()
-                            .radius(9.0)
-                            .fill(chip)
-                            .child(
-                                text(status)
-                                    .font(TextStyle::new(10.5, 400.0))
-                                    .color(chip_text),
-                            ),
+                        row().h(18.0).center_y().child(
+                            text(status)
+                                .font(TextStyle::new(10.5, 400.0))
+                                .color(status_color),
+                        ),
                     )
                     .child(el().grow(1.0))
                     .child(
@@ -701,41 +641,51 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
         }
         list = list.child(group);
     }
-    let footer = row().w_full().h(52.0).px(12.0).center_y().child(
-        row()
-            .h(28.0)
-            .gap(5.25)
-            .child(
-                design::glass_pill(&[32.0, 32.0], dark, true)
-                    .key("footer-glass")
-                    .absolute(0.0, 0.0),
-            )
-            .child(
-                row()
-                    .key("settings")
-                    .size(32.0, 28.0)
-                    .center()
-                    .role("button")
-                    .label("Settings")
-                    .focusable(true)
-                    .child(rune::icon(&design::SETTINGS, 14.0).color(p.text.alpha(0.85)))
-                    .on_press(|s: &mut State| {
-                        s.preferences = !s.preferences;
-                        s.context = None;
-                        s.item_menu = None;
-                    }),
-            )
-            .child(
-                row()
-                    .key("save-status")
-                    .size(32.0, 28.0)
-                    .center()
-                    .role("status")
-                    .label(&s.notice)
-                    .help(&s.notice)
-                    .child(rune::icon(&design::CLOUD, 14.0).color(p.text.alpha(0.85))),
-            ),
-    );
+    let sync_error = s.settings.needs_attention();
+    let mut controls = row()
+        .h(28.0)
+        .gap(5.25)
+        .child(
+            design::glass_pill(if sync_error { &[32.0, 32.0] } else { &[32.0] }, dark, true)
+                .key("footer-glass")
+                .absolute(0.0, 0.0),
+        )
+        .child(
+            row()
+                .key("settings")
+                .size(32.0, 28.0)
+                .center()
+                .role("button")
+                .label("Settings")
+                .focusable(true)
+                .child(rune::icon(&design::SETTINGS, 14.0).color(p.text.alpha(0.85)))
+                .on_press(|s: &mut State| {
+                    s.preferences = !s.preferences;
+                    s.context = None;
+                    s.item_menu = None;
+                }),
+        );
+    if sync_error {
+        controls = controls.child(
+            row()
+                .key("sync-error")
+                .size(32.0, 28.0)
+                .center()
+                .role("button")
+                .label("Sync needs attention. Open Sync settings")
+                .help(
+                    s.settings
+                        .issue
+                        .as_deref()
+                        .or(s.settings.status.message.as_deref())
+                        .unwrap_or("Open Sync settings"),
+                )
+                .focusable(true)
+                .child(rune::icon(&design::CLOUD, 14.0).color(p.stage(dark, "Drafting")))
+                .on_press(settings::open_sync),
+        );
+    }
+    let footer = row().w_full().h(52.0).px(12.0).center_y().child(controls);
     col()
         .key("sidebar")
         .w(width)
@@ -791,6 +741,9 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             .scroll_x()
             .child(columns),
     );
+    if s.preferences {
+        content = settings::page(s, dark, side, p);
+    }
     let mut root = el()
         .key("draft-root")
         // Ancestor handlers run before control traversal; AppSpec::on_key runs after it.
@@ -806,7 +759,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .fill(p.background.alpha(if dark { 0.78 } else { 0.8 })),
         )
         .child(content);
-    if s.context.is_some() || s.preferences || s.item_menu.is_some() {
+    if s.context.is_some() || s.item_menu.is_some() {
         root = root.child(
             el().w_full()
                 .h_full()
@@ -832,19 +785,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 }),
         );
         let popup = menu(s, dark, p);
-        let popup = if s.preferences {
-            let anchor = if s.sidebar {
-                "settings"
-            } else {
-                root = root.child(
-                    el().key("settings-anchor")
-                        .size(0.0, 0.0)
-                        .absolute(12.0, height - 12.0),
-                );
-                "settings-anchor"
-            };
-            popup.anchored_fit(anchor, rune::Side::Top, rune::Align::Start, 6.0)
-        } else {
+        let popup = {
             let a = s
                 .item_menu
                 .as_ref()
