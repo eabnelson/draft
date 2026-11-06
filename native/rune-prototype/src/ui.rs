@@ -751,7 +751,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             .child(columns),
     );
     if s.preferences {
-        content = settings::page(s, dark, side, p);
+        content = settings::page(s, dark, side, p, cx);
     }
     let mut root = el()
         .key("draft-page")

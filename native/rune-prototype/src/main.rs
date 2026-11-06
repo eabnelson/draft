@@ -552,6 +552,7 @@ mod glass;
 mod items;
 mod keyboard;
 mod settings;
+mod shortcut_help;
 mod ui;
 mod verify;
 
