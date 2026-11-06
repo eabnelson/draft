@@ -117,12 +117,12 @@ pub fn sidebar_surface(surface: El, dark: bool, selected: bool) -> El {
     }
 }
 
-pub fn tab_surface(widths: &[f32], dark: bool, active: bool) -> El {
+pub fn tab_surface(widths: &[f32], dark: bool) -> El {
     let width = widths.iter().sum::<f32>() + 5.25 * widths.len().saturating_sub(1) as f32;
     el().size(width, 28.0)
         .absolute(0.0, 0.0)
         .child(glass::frost(widths, dark))
-        .child(glass_pill(widths, dark, active).absolute(0.0, 0.0))
+        .child(glass_pill(widths, dark).absolute(0.0, 0.0))
 }
 
 pub fn prose(source: &str) -> String {
@@ -286,7 +286,7 @@ fn pill_paths(widths: &[f32]) -> (f32, Path, Path) {
     (width, p, top)
 }
 
-pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
+pub fn glass_pill(widths: &[f32], dark: bool) -> El {
     let (width, outline, top) = pill_paths(widths);
     let c = GlassColors::new(dark);
     let layer = |color| {
@@ -319,7 +319,6 @@ pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
                     .stroke_path(&top, 0.65, rune::LineCap::Butt, c.rim),
             ),
         )
-        .dim(if active { 1.0 } else { 0.6 })
 }
 
 pub fn fonts() -> &'static [&'static [u8]] {

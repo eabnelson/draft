@@ -29,7 +29,7 @@ pub struct Preferences {
     pub issue: Option<String>,
     pub busy: bool,
     workspaces: Vec<Value>,
-    folder: TextEdit,
+    pub(super) folder: TextEdit,
     jobs: Option<mpsc::Sender<Request>>,
 }
 impl Default for Preferences {
@@ -255,6 +255,8 @@ fn sync(s: &State, p: design::Palette) -> El {
             body = body
                 .child(text_input(&s.settings.folder, TextStyle::new(14.0, 400.0))
                     .key("sync-folder").role("textbox").label("Zo folder path").w_full().h(38.0).padding(8.0).radius(8.0).fill(p.glass).color(p.text)
+                    .caret(s.caret.color(p.text), p.text.alpha(0.2))
+                    .on_selection_change(|s: &mut State, _, _| s.caret.restart())
                     .on_edit(|s: &mut State| &mut s.settings.folder))
                 .child(copy("Drafts already in this folder will be downloaded. Drafts on this computer will be uploaded.", p))
                 .child(button("sync-choose-folder", "Use this folder", p, |s, _| s.settings.request("/sync/folder", json!({"path":s.settings.folder.text}))));
@@ -292,7 +294,7 @@ fn header(section: usize, dark: bool, p: design::Palette) -> El {
                 .absolute(8.0, 6.0)
                 .h(28.0)
                 .gap(5.25)
-                .child(design::tab_surface(&widths, dark, true))
+                .child(design::tab_surface(&widths, dark))
                 .child(
                     row()
                         .w(widths[0])

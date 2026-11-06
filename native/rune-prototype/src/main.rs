@@ -191,6 +191,7 @@ enum Reply {
 }
 struct State {
     keyboard: keyboard::Controls,
+    caret: caret::Blink,
     host: Host,
     docs: Vec<Document>,
     selected: usize,
@@ -253,6 +254,7 @@ impl State {
         let library = host.library().expect("Load disposable Draft library");
         let mut s = Self {
             keyboard: keyboard::Controls::default(),
+            caret: caret::Blink::default(),
             host,
             docs: vec![],
             selected: 0,
@@ -369,6 +371,7 @@ impl State {
         }
     }
     fn edited(&mut self, doc: usize, version: usize, tx: &mut Tx) {
+        self.caret.restart();
         let id = self.docs[doc].id().to_owned();
         let viewed = self.docs[doc].versions[version].id.clone();
         if doc == self.selected && self.keyboard.viewing.get(&id).is_some_and(|v| v != &viewed) {
@@ -547,6 +550,7 @@ impl State {
     }
 }
 
+mod caret;
 mod design;
 mod glass;
 mod items;

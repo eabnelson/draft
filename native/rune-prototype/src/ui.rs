@@ -59,7 +59,7 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
         }
     });
 }
-pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
+pub(super) fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     let replies: Vec<_> = s
         .replies
         .as_ref()
@@ -186,12 +186,13 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     {
         s.save();
     }
-    changed
+    caret::poll(s, now, tx) || changed
 }
 fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
     keyboard::key(s, key, tx)
 }
 fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -> bool {
+    s.caret.restart();
     if s.docs[di].pending_removal {
         return true;
     }
@@ -335,11 +336,18 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                 .absolute(inset, 6.0)
                 .h(28.0)
                 .gap(5.25)
-                .child(design::tab_surface(&widths, dark, vi == s.active_version()))
+                .child(design::tab_surface(&widths, dark))
                 .child(
                     row().w(title_width).h(28.0).px(13.0).center_y().child(
                         text(title)
-                            .font(TextStyle::new(12.5, 550.0))
+                            .font(TextStyle::new(
+                                12.5,
+                                if vi == s.active_version() {
+                                    550.0
+                                } else {
+                                    450.0
+                                },
+                            ))
                             .color(p.text)
                             .truncate(),
                     ),
@@ -387,8 +395,10 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
         .w_full()
         .min_h(560.0)
         .color(p.text)
+        .caret(s.caret.color(p.text), p.text.alpha(0.2))
         .spans(spans)
         .on_edit(move |s: &mut State| &mut s.docs[di].versions[vi].edit)
+        .on_selection_change(|s: &mut State, _, _| s.caret.restart())
         .on_input_change(move |s: &mut State, tx| s.edited(di, vi, tx))
         .on_input_key(move |s, key, tx| input_key(s, di, vi, key, tx))
         .on_secondary_press(move |s: &mut State, point, _| {
@@ -708,7 +718,7 @@ pub(super) fn footer(s: &State, dark: bool, p: design::Palette) -> El {
         .h(28.0)
         .gap(5.25)
         .child(
-            design::glass_pill(&widths, dark, true)
+            design::glass_pill(&widths, dark)
                 .key("footer-glass")
                 .absolute(0.0, 0.0),
         )

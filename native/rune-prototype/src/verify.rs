@@ -34,9 +34,58 @@ pub fn run() {
     interactions();
     tab_shortcuts();
     tab_layout_stability();
+    caret_blink();
     popover_placement();
     sidebar_context();
     shortcut_parity();
+}
+
+fn caret_blink() {
+    let mut rt = keyboard::app().headless_runtime((1200.0, 820.0), rune::Env::new(false, 1.0));
+    rt.window_focus(true);
+    rt.update(|s, _| s.focus(0));
+    rt.frame(0.0);
+    let text = design::Palette::new(false).text;
+    assert_eq!(rt.state.caret.color(text), text, "caret matches light text");
+    rt.frame(0.51);
+    assert_eq!(rt.state.caret.color(text).a, 0.0, "idle caret blinks off");
+    rt.frame(0.5);
+    assert_eq!(rt.state.caret.color(text), text, "idle caret blinks on");
+    rt.frame(0.5);
+    key(&mut rt, Key::Text("x".into()));
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "typing restarts the visible phase"
+    );
+    rt.frame(0.51);
+    key(&mut rt, Key::Left);
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "moving the caret restarts blinking"
+    );
+    rt.update(|s, _| {
+        let vi = s.active_version();
+        s.docs[s.selected].versions[vi].edit.preedit = Some(("あ".into(), None));
+    });
+    rt.frame(0.51);
+    rt.frame(0.51);
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "composition keeps the caret visible"
+    );
+    rt.window_focus(false);
+    rt.frame(0.016);
+    assert_eq!(
+        rt.state.caret.color(text).a,
+        0.0,
+        "unfocused windows hide the caret"
+    );
+    println!(
+        "PASS text-colored caret, idle blinking, typing/navigation reset, composition, and window focus"
+    );
 }
 
 fn tab_layout_stability() {

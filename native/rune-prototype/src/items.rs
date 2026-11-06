@@ -12,6 +12,14 @@ enum Mode {
     Rename(Box<TextEdit>),
     Delete,
 }
+impl Context {
+    pub(super) fn rename_edit(&self) -> Option<&TextEdit> {
+        match &self.mode {
+            Mode::Rename(edit) => Some(edit),
+            _ => None,
+        }
+    }
+}
 
 pub(super) fn stage(d: &Document) -> &'static str {
     match d.raw["manualStage"].as_str() {
@@ -220,6 +228,8 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
                         .radius(9.0)
                         .fill(p.glass)
                         .color(p.text)
+                        .caret(s.caret.color(p.text), p.text.alpha(0.2))
+                        .on_selection_change(|s: &mut State, _, _| s.caret.restart())
                         .on_edit(|s: &mut State| {
                             let Mode::Rename(edit) = &mut s.item_menu.as_mut().unwrap().mode else {
                                 unreachable!()

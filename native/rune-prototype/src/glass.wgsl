@@ -78,6 +78,10 @@ fn srgb(c: vec3f) -> vec3f {
     var tint = g.tint.rgb;
     if g.flags.x > 0.5 { tint = srgb(tint); }
     // Replace the sharp source within the contour, including on a translucent window.
-    let color = mix(blurred.rgb / max(blurred.a,0.001),tint,g.tint.a);
+    // A draft's enter/exit fade may isolate its contents in a transparent layer.
+    // Complete that layer over the paper color; unpremultiplying an empty backdrop
+    // turns it black and makes the glass darken until the transition ends.
+    let paper = blurred.rgb + tint * (1.0 - blurred.a);
+    let color = mix(paper,tint,g.tint.a);
     return vec4f(color * coverage,coverage);
 }

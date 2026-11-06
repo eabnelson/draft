@@ -54,6 +54,8 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 - Settings → Shortcuts shows individual beveled keycaps, with Mac modifier symbols
   and Linux Ctrl/Alt labels. Its card grid fits one, two, or three columns as the
   window changes width, and alternate combinations wrap together within a card.
+- Text fields use the text color for their blinking caret. Typing and caret movement
+  restart its visible phase; composition keeps it visible, and unfocused windows hide it.
 
 The sidebar and editor are Rune, without a webview. The layout follows the
 existing Draft design: a single frosted surface, joined floating version tabs,
@@ -87,6 +89,10 @@ bun native/rune-prototype/run.ts --check-shortcuts
 bun run rune:snap
 cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D warnings
 ```
+
+The optional GPU glass regression (`python3 native/rune-prototype/checks/glass-tabs.py`,
+with Pillow installed) compares tab colors while switching drafts and active versions
+in light and dark mode. It uses temporary libraries and saves snapshots in `artifacts/glass-tabs`.
 
 Checks create and remove their own temporary library. They exercise real Rune
 input routing and Draft storage: Unicode round trips, IME preedit/commit,
