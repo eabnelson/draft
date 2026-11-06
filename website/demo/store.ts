@@ -66,7 +66,7 @@ export class DemoStore{
     switch(path){
       case '/api/library':return clone(this.library);
       // The demo has no sync, so nothing ever changes underneath it.
-      case '/api/library/changes?since=0':return {seq:0,changes:[],archived:this.library.archived};
+      case '/api/library/changes':return {seq:0,changes:[],archived:this.library.archived};
       case '/api/health':return {version:this.version,preferences:{}};
       case '/api/drafts/save':this.save(input.draft);return {saved:true};
       case '/api/drafts/active':this.library.active=String(input.id);return {saved:true};

@@ -127,7 +127,7 @@ export class Tour{
   }
   // Names a version from its tab's right-click menu.
   private async rename(index:number,name:string,signal:AbortSignal){
-    const tab=document.querySelectorAll('.version-tab-pill')[index];
+    const tab=document.querySelectorAll('.version-column:not(.settings-column) .version-tab-pill')[index];
     await this.press(tab,signal,()=>{const at=this.center(tab);tab.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:at.x,clientY:at.y}));});
     await this.click(await this.until(()=>this.menuItem('Rename'),signal),signal);
     const field=await this.until(()=>document.querySelector<HTMLInputElement>('.version-rename'),signal);
@@ -139,7 +139,7 @@ export class Tour{
   }
   // Switches to a version by pressing its tab, then adds to the end of it.
   private async refine(index:number,text:string,signal:AbortSignal){
-    const tab=document.querySelectorAll('.version-tab-pill')[index];
+    const tab=document.querySelectorAll('.version-column:not(.settings-column) .version-tab-pill')[index];
     await this.press(tab,signal,()=>tab.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0})));
     await this.until(()=>tab.getAttribute('aria-selected')==='true',signal);
     await this.type(this.editor(index),text,signal);
@@ -178,9 +178,24 @@ export class Tour{
       await this.click(await this.until(()=>this.menuItem('Ready'),signal),signal);
       await this.wait(1400,signal);
 
+      await this.step('Appearance','Make yourself at home.',signal);
+      await this.click(await this.until(()=>document.querySelector('button[aria-label="Settings"]'),signal),signal);
+      await this.click(await this.until(()=>document.querySelector('.settings-sidebar [data-section="appearance"]'),signal),signal);
+      await this.click(await this.until(()=>document.querySelector('[role="radio"][aria-label="Dark"]'),signal),signal);
+      await this.wait(1600,signal);
+      await this.click(await this.until(()=>document.querySelector('[role="radio"][aria-label="Light"]'),signal),signal);
+      await this.wait(1000,signal);
+
+      await this.step('Shortcuts','Keep your hands on the keys.',signal);
+      await this.click(await this.until(()=>document.querySelector('.settings-sidebar [data-section="shortcuts"]'),signal),signal);
+      await this.until(()=>document.querySelector('.shortcut-card kbd'),signal);
+      await this.wait(2200,signal);
+      await this.click(await this.until(()=>document.querySelector('button[aria-label="Back to drafts"]'),signal),signal);
+
       // Customizing: asking Draft for a feature in Settings, building it, and restarting into it.
       await this.step('Customize','Add whatever you need.',signal);
-      await this.click(await this.until(()=>document.querySelector('.settings-bubble'),signal),signal);
+      await this.click(await this.until(()=>document.querySelector('button[aria-label="Settings"]'),signal),signal);
+      await this.click(await this.until(()=>document.querySelector('.settings-sidebar [data-section="customize"]'),signal),signal);
       const field=await this.until(()=>document.querySelector<HTMLTextAreaElement>('.feature-request textarea'),signal);
       await this.press(field,signal,()=>{});
       await this.fill(field,TOUR.request,signal);await this.wait(300,signal);
@@ -191,7 +206,7 @@ export class Tour{
       await this.until(()=>document.querySelector('.demo-goal'),signal);
       await this.step('Customized','Ask for anything. Draft builds it.',signal);
       // Back on the brain dump, the new bubble counts its words toward the goal.
-      const first=document.querySelectorAll('.version-tab-pill')[0];
+      const first=document.querySelector('.version-column:not(.settings-column) .version-tab-pill')!;
       await this.press(first,signal,()=>first.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button:0})));
       const goal=await this.until(()=>first.querySelector('.demo-goal'),signal),at=this.center(goal);
       await this.move({x:at.x,y:at.y+30},signal,700);await this.wait(2400,signal);

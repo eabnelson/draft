@@ -5,6 +5,7 @@ import './studio-theme.css';
 import './style.css';
 import './writing.css';
 import './appearance.css';
+import './chrome.css';
 import {applySavedAppearance} from './theme';
 import {api} from './client';
 (window as any).__draftUpdateUI=true;

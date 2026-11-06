@@ -11,6 +11,7 @@ test('the walkthrough starts from a believable library with one draft open in tw
   expect(library.drafts).toHaveLength(4);
   const open=library.drafts.find(d=>d.id===library.active)!;
   expect(inboxOrder(library.drafts)[0].id).toBe(open.id);
+  expect(await store.api('/api/library/changes')).toEqual({seq:0,changes:[],archived:0});
   expect(openVersions(open)).toHaveLength(2);
   expect(library.drafts.map(stage).sort()).toEqual(['drafting','idea','live','ready']);
   // The seeded drafts already have their summaries, so the stand-in AI only writes one for the tour's draft.

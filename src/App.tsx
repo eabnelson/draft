@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
-import {Plus,ArrowUpRight,Undo2,FolderOpen,X,ArrowDownToLine,LoaderCircle,ArrowRight,Settings,Pin,PinOff,Trash2,Pencil,FileText,CopyPlus,Columns2} from 'lucide-react';
+import {Plus,ArrowUpRight,Undo2,FolderOpen,X,ArrowDownToLine,LoaderCircle,ArrowRight,ChevronLeft,PanelLeft,Settings,Pin,PinOff,Trash2,Pencil,FileText,CopyPlus,Columns2} from 'lucide-react';
 import { Editor, type EditorHandle } from './Editor';
 import {parseWritingResult} from './writing-assistance';
 import { Button } from './components/ui/button';
 import { Features, type SectionId } from './Features';
-import { SyncButton } from './ZoSync';
+import { SyncButton, syncNeedsAttention } from './ZoSync';
 import type { SyncStatus } from '../desktop/zo-sync';
 import { Inbox, Marquee, NameField, sortedVersions, versionPreview } from './Inbox';
 import { startGlass } from './glass';
@@ -24,7 +24,7 @@ function VersionTab({version,selection,renaming,onRename}:{version:Version;selec
     {renaming?<span className="version-tab-bubble version-tab-title is-renaming"><NameField className="version-rename" label={`Name version ${version.number}`} initial={title} onDone={onRename}/></span>:
     <Marquee className={`version-tab-bubble version-tab-title ${title?'':'is-untitled'}`} text={title||'Untitled'}/>}
     {/* A narrow glass neck joins each bubble to the next. */}
-    {time&&<><Neck/><span className={meta}>{time}</span></>}
+    <Neck/><span className={`${meta} version-tab-time`}>{time||'0s'}</span>
     <Neck/><span className={meta}>{count} char</span>
   </>;
 }
@@ -294,12 +294,12 @@ export default function App(){
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='b'){e.preventDefault();setInboxOpen(open=>!open);}
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='t'){e.preventDefault();if(!featuresOpenRef.current)newVersion();}
       if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&!e.altKey&&/^[1-9]$/.test(e.key)){e.preventDefault();const d=byShortcut(listedRef.current,Number(e.key));if(d)void open(d);}
-      if(e.key==='Escape'){setMessage('');setContextMenu(null);setConfirm(null);}
+      if(e.key==='Escape'){setMessage('');setContextMenu(null);setConfirm(null);setFeaturesOpen(false);}
     };
     const fromShortcut=()=>newDraft();
     // In Settings there is one page, so ⌘W goes back to writing.
     const closeTab=()=>{if(featuresOpenRef.current){setFeaturesOpen(false);return;}const d=draftRef.current;closeVersion(viewed(d).id);};
-    const openSettings=()=>setFeaturesOpen(true);
+    const openSettings=()=>{setSettingsTarget(undefined);setFeaturesOpen(true);};
     // Draft has no visible title bar: dragging the empty top row moves the window and double-clicking zooms it.
     const region=(e:MouseEvent)=>{const target=e.target as HTMLElement;return e.button===0&&!!target.closest('[data-drag-region]')&&!target.closest('button,input,a,[role=button],[role=radio]');};
     const drag=(e:MouseEvent)=>{if(region(e)&&e.detail<2)void fetch('draft-native://localhost/window/drag').catch(()=>{});};
@@ -361,15 +361,14 @@ export default function App(){
   function resetImage(){try{const current=imageFocus?findImage(viewed(draftRef.current).text,imageFocus):undefined;if(!current?.crop)return;rewriteImage(imageMarkdown(current.crop.original,current.alt));notice('Back to the original image.');}catch(e){notice(e instanceof Error?e.message:'That action could not be completed.');}}
   function copyImageToClipboard(source:string|Promise<Blob>){void copyImage(draftRef.current.id,source).then(()=>notice('Image copied.')).catch(e=>notice(e instanceof Error?e.message:'This image could not be copied.'));}
 
-  // Settings: a glass button in the sidebar's lower left corner, in writing and in Settings.
-  const settingsButton=<button type="button" className={`version-tab-bubble settings-bubble ${featuresOpen?'is-open':''}`} aria-pressed={featuresOpen} aria-label={updateLabel==='Preferences'?'Settings':updateLabel} title={updateLabel==='Preferences'?'Settings · ⌘,':updateLabel} onClick={()=>setFeaturesOpen(open=>!open)}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>;
-  // Sync: an icon beside Settings while sync is on, showing done, in progress or needs you.
-  const syncButton=sync&&sync.state!=='off'?<SyncButton status={sync} onClick={()=>{setSettingsTarget({id:'sync',at:Date.now()});setFeaturesOpen(true);}}/>:null;
-  // Together they're one glass pill, joined by a neck like a tab's pieces.
-  const footer=<div className="version-tab-pill footer-pill">{settingsButton}{syncButton&&<><Neck/>{syncButton}</>}</div>;
+  const settingsButton=<button type="button" className="version-tab-bubble settings-bubble" aria-label="Settings" title={updateLabel==='Preferences'?'Settings · ⌘,':`Settings · ${updateLabel}`} onClick={()=>{setSettingsTarget(undefined);setFeaturesOpen(true);}}><Settings size={15}/>{updateLabel!=='Preferences'&&<span className="update-badge" aria-hidden="true"/>}</button>;
+  const syncButton=sync&&syncNeedsAttention(sync)?<SyncButton status={sync} onClick={()=>{setSettingsTarget({id:'sync',at:Date.now()});setFeaturesOpen(true);}}/>:null;
+  const footer=featuresOpen?<button type="button" className="version-tab-pill footer-pill footer-action" aria-label="Back to drafts" onClick={()=>{setSettingsTarget(undefined);setFeaturesOpen(false);}}><span className="version-tab-bubble settings-bubble"><ChevronLeft size={16}/></span><Neck/><span className="version-tab-bubble footer-back">Back</span></button>:
+    <div className="version-tab-pill footer-pill">{settingsButton}{syncButton&&<><Neck/>{syncButton}</>}</div>;
   return <><div className="glass-fill" ref={glassRef} aria-hidden="true"/><div className={`app ${inboxOpen?'with-panel':'without-panel'} ${focusedImage?'with-image':''}`} inert={updating}>
     <input ref={file} type="file" accept=".txt,.md,.markdown" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value='';}}/>
     {saveError&&<div className="save-error" role="alert">{saveError}<Button variant="ghost" onClick={()=>void exportDraft()}>Export a safe copy <ArrowUpRight size={14}/></Button></div>}
+    {!inboxOpen&&<div className="inbox-footer is-floating"><div className="version-tab-pill footer-pill"><button type="button" className="version-tab-bubble settings-bubble" aria-label="Show sidebar" onClick={()=>setInboxOpen(true)}><PanelLeft size={15}/></button></div>{footer}</div>}
     {featuresOpen&&<Features sidebar={inboxOpen} footer={footer} openTo={settingsTarget} onUpdating={setUpdating} onBeforeApply={persistAll}/>}
     <main className="workspace" style={featuresOpen?{display:'none'}:undefined}>
       {inboxOpen&&<Inbox drafts={listed} activeId={draft.id} activeVersionId={version.id} renamingId={renamingId} onOpen={d=>{

@@ -1,4 +1,4 @@
-import {useEffect,useRef,type ReactNode} from 'react';
+import {useEffect,useLayoutEffect,useRef,type ReactNode} from 'react';
 import {Check} from 'lucide-react';
 
 export type MenuItem={label:ReactNode;icon?:ReactNode;onSelect:()=>void;danger?:boolean;disabled?:boolean;checked?:boolean;title?:string;plain?:boolean}|'divider'|{heading:string};
@@ -7,10 +7,13 @@ type Props={x:number;y:number;label:string;items:MenuItem[];onClose:()=>void;cla
 // A right-click menu that stays on screen and closes on Escape or a click elsewhere.
 export function ContextMenu({x,y,label,items,onClose,className}:Props){
   const ref=useRef<HTMLDivElement>(null);
+  useLayoutEffect(()=>{
+    const menu=ref.current!;
+    const place=()=>{const {width,height}=menu.getBoundingClientRect();menu.style.left=`${Math.max(8,x+width>innerWidth-8?x-width:x)}px`;menu.style.top=`${Math.max(8,y+height>innerHeight-8?y-height:y)}px`;};
+    place();const observer=new ResizeObserver(place);observer.observe(menu);return()=>observer.disconnect();
+  },[x,y]);
   useEffect(()=>{
     const menu=ref.current!;menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({preventScroll:true});
-    const {width,height}=menu.getBoundingClientRect();
-    menu.style.left=`${Math.max(8,Math.min(x,innerWidth-width-8))}px`;menu.style.top=`${Math.max(8,Math.min(y,innerHeight-height-8))}px`;
     const pointer=(e:PointerEvent)=>{if(!menu.contains(e.target as Node))onClose();};
     const key=(e:KeyboardEvent)=>{
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();return;}

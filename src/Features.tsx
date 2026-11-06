@@ -29,11 +29,11 @@ function status(u:Update){
 }
 // The parts of Settings, in sidebar order. The one you choose fills the page, under its own tab.
 export type SectionId='customize'|'changes'|'official'|'updates'|'appearance'|'mac'|'shortcuts'|'ai'|'files'|'sync';
-export const SECTIONS:SectionId[]=['customize','changes','official','updates','appearance','mac','shortcuts','ai','files','sync'];
+export const SECTIONS:SectionId[]=['appearance','mac','files','sync','shortcuts','ai','customize','changes','official','updates'];
 const SETTINGS_KEY='draft:settings';
 function savedSection():SectionId{
   try{const value=JSON.parse(localStorage.getItem(SETTINGS_KEY)??'null');if(SECTIONS.includes(value?.active))return value.active;}catch{}
-  return 'customize';
+  return 'appearance';
 }
 export function Features({onBeforeApply,onUpdating,sidebar=true,footer,openTo}:{onBeforeApply:()=>Promise<boolean>;onUpdating:(value:boolean)=>void;sidebar?:boolean;footer?:React.ReactNode;openTo?:{id:SectionId;at:number}}){
   const [data,setData]=useState<FeaturesState>(),[request,setRequest]=useState(''),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[settings,setSettings]=useState(false),[submitting,setSubmitting]=useState(false),[applying,setApplying]=useState(false);
@@ -42,6 +42,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer,openTo}:{
   const [sync,setSync]=useSyncStatus(!!data&&!data.demo);
   const mounted=useRef(true),handoffTrigger=useRef<HTMLElement|null>(null),scrollRef=useRef<HTMLDivElement>(null);
   const [active,setActive]=useState(()=>openTo?.id??savedSection());
+  const [appearance,setAppearanceChoice]=useState(savedAppearance);
   useEffect(()=>{localStorage.setItem(SETTINGS_KEY,JSON.stringify({active}));},[active]);
   // Choosing a section shows it in place of the one before, from the top.
   function openSection(id:SectionId){setActive(id);requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:0}));}
@@ -117,7 +118,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer,openTo}:{
     changes:{title:'Your changes',detail:changes.length?'What your Draft does differently from official Draft.':'You’re using official Draft.',meta:`${changes.length}`},
     official:{title:'Official features',detail:'Everything Draft does out of the box.',meta:`${data?.official.features.length??0}`},
     updates:{title:'Updates',detail:systemUpdate||data?.latestOfficial?'A new version of Draft is available.':'New versions of Draft and your update history.',meta:data?`Draft ${data.appVersion}`:undefined},
-    appearance:{title:'Appearance',detail:'Light, dark, or system.',meta:{light:'Light',dark:'Dark',system:'System'}[savedAppearance()]},
+    appearance:{title:'Appearance',detail:'Light, dark, or system.',meta:{light:'Light',dark:'Dark',system:'System'}[appearance]},
     mac:{title:'Mac',detail:'Open at login and the menu bar icon.'},
     shortcuts:{title:'Shortcuts',detail:'Every keyboard shortcut in Draft.'},
     ai:{title:'AI',detail:'The model that writes titles, summaries and your features.'},
@@ -170,7 +171,7 @@ export function Features({onBeforeApply,onUpdating,sidebar=true,footer,openTo}:{
         </div>)}
       </section>}
     </>;
-    case 'appearance':return <AppearanceSetting/>;
+    case 'appearance':return <AppearanceSetting onChange={setAppearanceChoice}/>;
     case 'mac':return <MacPreferences/>;
     case 'shortcuts':return <ShortcutList/>;
     case 'ai':return <section className="settings-section"><h2>Your connected AI</h2><p className="settings-detail">Draft uses the AI you connect for titles, summaries and the features you ask for.</p><div className="settings-actions"><Button variant="outline" size="sm" disabled={!!reconnecting} onClick={()=>setSettings(true)}>Model settings</Button></div></section>;

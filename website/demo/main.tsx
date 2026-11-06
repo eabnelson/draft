@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal,flushSync} from 'react-dom';
+import {EditorView} from '@codemirror/view';
 import {DemoStore,TOUR} from './store';
 import {proseWords} from '../../src/model';
 import {Tour} from './tour';
@@ -8,6 +9,8 @@ import '../../src/studio-theme.css';
 import '../../src/style.css';
 import '../../src/writing.css';
 import '../../src/appearance.css';
+import '../../src/chrome.css';
+import {setAppearance} from '../../src/theme';
 import './style.css';
 
 // The real app talks to Draft's local server with fetch; here every request is answered in memory.
@@ -26,12 +29,11 @@ const demoFetch=async(resource:RequestInfo|URL,init?:RequestInit):Promise<Respon
 };
 window.fetch=demoFetch as typeof fetch;
 // The walkthrough is always the light window it shows on the page, whatever the visitor's Mac uses.
-document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light';localStorage.setItem('draft:appearance','light');
+document.documentElement.dataset.platform='mac';setAppearance('light');
 
-// A desktop behind the window and the Mac's window buttons, which are not part of the web app.
-const wallpaper=document.createElement('div');wallpaper.className='demo-wallpaper';
+// The Mac's window buttons are supplied by the desktop shell in the native app.
 const buttons=document.createElement('div');buttons.className='demo-window-buttons';buttons.append(...[0,1,2].map(()=>document.createElement('span')));
-document.body.prepend(wallpaper);document.body.append(buttons);
+document.body.append(buttons);
 
 const {default:App}=await import('../../src/App');
 const root=createRoot(document.getElementById('root')!);let key=0;
@@ -42,8 +44,9 @@ function WordGoal(){
   const [target,setTarget]=useState<{pill:Element;words:number}|null>(null);
   useEffect(()=>{
     const timer=setInterval(()=>{
-      const column=document.querySelector('.version-column.is-active:not(.settings-column)'),pill=column?.querySelector('.version-tab-pill');
-      setTarget(pill?{pill,words:proseWords(column!.querySelector('.cm-content')?.textContent??'')}:null);
+      const column=document.querySelector('.version-column.is-active:not(.settings-column)'),pill=column?.querySelector('.version-tab-pill'),editor=column?.querySelector<HTMLElement>('.cm-editor');
+      const view=editor&&EditorView.findFromDOM(editor);
+      setTarget(pill?{pill,words:proseWords(view?.state.doc.toString()??'')}:null);
     },250);
     return()=>clearInterval(timer);
   },[]);
@@ -56,6 +59,7 @@ function render(fresh=true){
   // Unmount the last run first: its pending effects would otherwise save its own sidebar state over this reset.
   flushSync(()=>root.render(null));
   if(fresh){
+    setAppearance('light');
     for(const name of ['draft:viewing','draft:expanded','draft:columns','draft:inbox','draft:settings'])localStorage.removeItem(name);
     localStorage.setItem('draft:expanded',JSON.stringify([store.library.active]));
   }

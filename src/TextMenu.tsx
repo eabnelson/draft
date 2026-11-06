@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Bold,Italic,Underline,Strikethrough,Link,ChevronDown,Check} from 'lucide-react';
 import type {TextFormat} from './markdown';
 import {Button} from './components/ui/button';
@@ -10,7 +10,12 @@ export function TextMenu({x,y,spelling,onSpellingFix,onFormat,onClose}:Props){
   const ref=useRef<HTMLDivElement>(null),[blocks,setBlocks]=useState(false),[link,setLink]=useState(false),[url,setUrl]=useState(''),[error,setError]=useState('');
   const [suggestions,setSuggestions]=useState<string[]|null>(null);
   useEffect(()=>{if(!spelling)return;const controller=new AbortController();setSuggestions(null);void api('/api/spelling/suggestions',{word:spelling.word},controller.signal).then(result=>{if(!controller.signal.aborted)setSuggestions(result.suggestions);}).catch(()=>{if(!controller.signal.aborted)setSuggestions([]);});return()=>controller.abort();},[spelling?.word]);
-  const [position,setPosition]=useState({left:Math.max(8,Math.min(x,window.innerWidth-286)),top:Math.max(8,Math.min(y,window.innerHeight-350))});
+  const [position,setPosition]=useState({left:x,top:y});
+  useLayoutEffect(()=>{
+    const menu=ref.current!;
+    const place=()=>{const {width,height}=menu.getBoundingClientRect();const left=Math.max(8,x+width>innerWidth-8?x-width:x),top=Math.max(8,y+height>innerHeight-8?y-height:y);setPosition(current=>current.left===left&&current.top===top?current:{left,top});};
+    place();const observer=new ResizeObserver(place);observer.observe(menu);return()=>observer.disconnect();
+  },[x,y]);
   useEffect(()=>{
     ref.current?.querySelector<HTMLButtonElement>('button')?.focus({preventScroll:true});
     const pointer=(e:PointerEvent)=>{if(!ref.current?.contains(e.target as Node))onClose();};
@@ -18,7 +23,6 @@ export function TextMenu({x,y,spelling,onSpellingFix,onFormat,onClose}:Props){
     document.addEventListener('pointerdown',pointer);document.addEventListener('keydown',key,true);
     return()=>{document.removeEventListener('pointerdown',pointer);document.removeEventListener('keydown',key,true);};
   },[]);
-  useEffect(()=>{const r=ref.current?.getBoundingClientRect();if(r)setPosition(p=>({left:Math.min(p.left,Math.max(8,innerWidth-r.width-8)),top:Math.min(p.top,Math.max(8,innerHeight-r.height-8))}));},[blocks,link,suggestions]);
   function format(value:TextFormat,address?:string){try{onFormat(value,address);onClose();}catch(e){setError(e instanceof Error?e.message:'This format could not be applied.');}}
   return <div className="text-menu" style={position} ref={ref} role="menu" aria-label="Text options" onKeyDown={e=>{
     if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!(e.target instanceof HTMLInputElement)){

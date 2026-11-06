@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {Cloud,CloudAlert,CloudUpload,LoaderCircle,RefreshCw,Unplug,Check,CircleAlert,ArrowUpRight,FileUp,Folder,FolderPlus,ChevronRight,Copy} from 'lucide-react';
+import {Cloud,CloudAlert,LoaderCircle,RefreshCw,Unplug,Check,CircleAlert,ArrowUpRight,FileUp,Folder,FolderPlus,ChevronRight,Copy} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {api,openLink} from './client';
 import type {SyncStatus,FolderList} from '../desktop/zo-sync';
@@ -20,13 +20,12 @@ export function syncLabel(status?:SyncStatus){
   if(['needs-credentials','error','choose-folder','choose-workspace','signing-in'].includes(status.state))return 'Needs you';
   return status.workspace??'On';
 }
-// The icon beside Settings while sync is on: a cloud when everything is in Zo, a cloud with an
-// arrow while changes are on their way, and a cloud with a warning when sync needs you.
+export function syncNeedsAttention(status?:SyncStatus){return !!status&&(['error','needs-credentials'].includes(status.state)||(status.state==='synced'&&!!status.message));}
+// Healthy sync stays quiet. The cloud takes you directly to the problem in Settings.
 export function SyncButton({status,onClick}:{status:SyncStatus;onClick:()=>void}){
-  const place=status.workspace??'Zo',problem=needsYou(status),moving=status.state==='syncing'||status.state==='waiting';
-  const label=problem?'Sync needs you':moving?`Syncing with ${place}`:`Synced with ${place}`;
-  return <button type="button" className={`version-tab-bubble settings-bubble sync-bubble ${problem?'is-warning':''} ${status.state==='syncing'?'is-syncing':''}`} aria-label={label} title={label} onClick={onClick}>
-    {problem?<CloudAlert size={15}/>:moving?<CloudUpload size={15}/>:<Cloud size={15}/>}
+  if(!syncNeedsAttention(status))return null;
+  return <button type="button" className="version-tab-bubble settings-bubble sync-bubble is-warning" aria-label="Sync needs you" title="Open Sync settings" onClick={onClick}>
+    <CloudAlert size={15}/>
   </button>;
 }
 function needsYou(status:SyncStatus){return ['error','needs-credentials','choose-folder','choose-workspace','signing-in'].includes(status.state)||(status.state==='synced'&&!!status.message);}

@@ -31,8 +31,8 @@ function maskFor(width:number,height:number):string{
 // corner runs straight into the scoop, so the outline curves in one smooth line down to the neck
 // (Studio Four: 32px rows, 8px corners, a 6px bridge and a 10px neck; Draft's 28px tabs are the
 // same shape at 7/8 the size). Drawn as one path, the glass has no seams where pieces meet.
-const RADIUS=7;
-function pillShape(pill:Element):string|null{
+const RADIUS=8;
+function pillShape(pill:Element):{fill:string;edge:string}|null{
   const box=pill.getBoundingClientRect();if(!box.width||!box.height)return null;
   const bubbles=[...pill.querySelectorAll(':scope > .version-tab-bubble')].map(b=>b.getBoundingClientRect()).filter(r=>r.width>0).map(r=>({left:r.left-box.left,right:r.right-box.left,top:r.top-box.top,bottom:r.bottom-box.top}));
   if(!bubbles.length)return null;
@@ -46,8 +46,9 @@ function pillShape(pill:Element):string|null{
   d+=`L${n(right-r)} ${n(top)}${arc(r,1,right,top+r)}L${n(right)} ${n(bottom-r)}${arc(r,1,right-r,bottom)}`;
   for(const [a,b] of [...bridges].reverse()){const q=(b-a)/2;d+=`L${n(b+r)} ${n(bottom)}${arc(r,1,b,bottom-r)}${arc(q,0,a,bottom-r)}${arc(r,1,a-r,bottom)}`;}
   d+=`L${n(left+r)} ${n(bottom)}${arc(r,1,left,bottom-r)}L${n(left)} ${n(top+r)}${arc(r,1,left+r,top)}Z`;
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${n(box.width)}" height="${n(box.height)}" viewBox="0 0 ${n(box.width)} ${n(box.height)}"><path fill="#000" d="${d}"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  const svg=(edge:boolean)=>`<svg xmlns="http://www.w3.org/2000/svg" width="${n(box.width)}" height="${n(box.height)}" viewBox="0 0 ${n(box.width)} ${n(box.height)}"><path fill="${edge?'none':'#000'}" ${edge?'stroke="#000" stroke-width="1.25"':''} d="${d}"/></svg>`;
+  const url=(edge:boolean)=>`url("data:image/svg+xml,${encodeURIComponent(svg(edge))}")`;
+  return {fill:url(false),edge:url(true)};
 }
 
 export function startGlass(fill:HTMLElement):()=>void{
@@ -55,7 +56,7 @@ export function startGlass(fill:HTMLElement):()=>void{
   const draw=()=>{frame=0;
     for(const pill of document.querySelectorAll<HTMLElement>('.version-tab-pill')){
       resize.observe(pill);const shape=pillShape(pill);
-      if(shape&&pill.style.getPropertyValue('--pill-shape')!==shape)pill.style.setProperty('--pill-shape',shape);
+      if(shape&&pill.style.getPropertyValue('--pill-shape')!==shape.fill){pill.style.setProperty('--pill-shape',shape.fill);pill.style.setProperty('--pill-edge',shape.edge);}
     }
     const svg=maskFor(innerWidth,innerHeight);if(svg===last)return;last=svg;
     const url=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
