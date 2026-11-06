@@ -44,11 +44,15 @@ impl Palette {
             }
         }
     }
-    pub fn stage(self, dark: bool, drafting: bool) -> (Color, Color) {
-        match (dark, drafting) {
-            (true, true) => (rgb(30, 42, 61), rgb(157, 187, 234)),
-            (false, true) => (rgb(238, 243, 251), rgb(59, 95, 153)),
-            (true, false) => (rgb(42, 42, 42), rgb(168, 168, 168)),
+    pub fn stage(self, dark: bool, stage: &str) -> (Color, Color) {
+        match (dark, stage) {
+            (true, "Drafting") => (rgb(30, 42, 61), rgb(157, 187, 234)),
+            (false, "Drafting") => (rgb(238, 243, 251), rgb(59, 95, 153)),
+            (true, "Ready") => (rgb(29, 48, 39), rgb(149, 204, 171)),
+            (false, "Ready") => (rgb(235, 246, 239), rgb(62, 119, 83)),
+            (true, "Live") => (rgb(48, 35, 60), rgb(194, 169, 225)),
+            (false, "Live") => (rgb(245, 239, 251), rgb(127, 88, 163)),
+            (true, _) => (rgb(42, 42, 42), rgb(168, 168, 168)),
             _ => (rgb(243, 243, 243), rgb(119, 119, 119)),
         }
     }

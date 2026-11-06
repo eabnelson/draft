@@ -1,7 +1,8 @@
 // Disposable native-editor experiment. Reuse Draft's real file format and store.
 import {join,resolve} from 'node:path';
 import {DraftStore} from '../../desktop/documents';
-import {fresh,addVersion,editVersion,rename,type Draft} from '../../src/model';
+import {fresh,addVersion,editVersion,rename,inboxOrder,type Draft} from '../../src/model';
+import {draftAction,saveSnapshot,type DraftAction} from './actions';
 
 export async function startPrototypeHost(root:string,token:string){
   const store=new DraftStore(join(resolve(root),'Drafts'));
@@ -18,16 +19,18 @@ export async function startPrototypeHost(root:string,token:string){
     if(request.headers.get('authorization')!==`Bearer ${token}`)return new Response('Unauthorized',{status:401});
     const url=new URL(request.url);
     try{
-      if(request.method==='GET'&&url.pathname==='/library')return Response.json(await store.load());
+      if(request.method==='GET'&&url.pathname==='/library'){const library=await store.load();return Response.json({...library,drafts:inboxOrder(library.drafts)});}
       if(request.method==='POST'&&url.pathname==='/save'){
         const {draft}=await request.json() as {draft:Draft};
-        const previous=await store.read(store.package(draft.id));
-        let next={...draft,updatedAt:previous.updatedAt,versions:draft.versions.map(v=>{
-          const before=previous.versions.find(p=>p.id===v.id);
-          return {...v,text:before?.text??v.text,updatedAt:before?.updatedAt??v.updatedAt};
-        })};
-        for(const v of draft.versions)next=editVersion(next,v.id,v.text);
-        await store.save(next);return Response.json({saved:true});
+        await saveSnapshot(store,draft);return Response.json({saved:true});
+      }
+      if(request.method==='POST'&&url.pathname==='/action'){
+        const {draft,action}=await request.json() as {draft:Draft;action:DraftAction};
+        return Response.json(await draftAction(store,draft,action));
+      }
+      if(request.method==='POST'&&url.pathname==='/restore'){
+        const draft=await store.restoreLast();if(draft)await store.setActive(draft.id);
+        return Response.json(await store.load());
       }
       if(request.method==='POST'&&url.pathname==='/new'){
         const draft=addVersion(rename(fresh(),'Untitled draft')).draft;await store.save(draft);await store.setActive(draft.id);return Response.json(await store.load());

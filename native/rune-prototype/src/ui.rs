@@ -14,6 +14,13 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
                 Job::Save(id, revision, value) => Reply::Saved(id, revision, host.save(&value)),
                 Job::Reload(g) => Reply::Library(g, host.library()),
                 Job::New(g) => Reply::Library(g, host.post("/new", &json!({}))),
+                Job::Restore(g) => Reply::Library(g, host.post("/restore", &json!({}))),
+                Job::PrepareAction(id, action) => Reply::PrepareAction(id, action),
+                Job::Action(id, revision, draft, action) => Reply::Action(
+                    id,
+                    revision,
+                    host.post("/action", &json!({"draft":draft,"action":action})),
+                ),
                 Job::Image {
                     draft,
                     version,
@@ -69,7 +76,10 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
                         }
                     }
                 }
-                if s.docs.iter().all(|d| d.saved == d.revision) {
+                if s.docs
+                    .iter()
+                    .all(|d| d.saved == d.revision && !d.pending_action)
+                {
                     s.notice = "All changes saved".into();
                 }
             }
@@ -91,6 +101,8 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
                 Ok(_) => s.notice = "Kept your latest typing; reload again when ready".into(),
                 Err(e) => s.notice = format!("Could not reload: {e}"),
             },
+            Reply::Action(id, revision, result) => items::finish(s, &id, revision, result, tx),
+            Reply::PrepareAction(id, action) => items::prepared(s, &id, action),
             Reply::Image {
                 draft,
                 version,
@@ -140,14 +152,21 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     }
     changed
 }
-fn global_key(s: &mut State, key: &KeyEvent, _: &mut Tx) -> bool {
+fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
     if key.key == Key::Tab && key.mods.ctrl && !key.mods.logo && !key.mods.alt {
-        // Cycle only the versions this prototype renders, before Rune traverses controls.
-        let count = s.docs[s.selected].versions.len().min(2);
+        let open = s.docs[s.selected].open_versions();
+        let count = open.len();
         if count > 1 {
-            let current = s.active_version();
+            let current = open
+                .iter()
+                .position(|&vi| vi == s.active_version())
+                .unwrap_or(0);
             let step = if key.mods.shift { count - 1 } else { 1 };
-            s.focus((current + step) % count);
+            s.focus(open[(current + step) % count]);
+            tx.scroll_into_view(format!(
+                "version-{}",
+                s.docs[s.selected].versions[s.active].id
+            ));
         }
         return true;
     }
@@ -162,16 +181,21 @@ fn global_key(s: &mut State, key: &KeyEvent, _: &mut Tx) -> bool {
     if key.is_command(',') {
         s.preferences = !s.preferences;
         s.context = None;
+        s.item_menu = None;
         return true;
     }
-    if key.key == Key::Escape && (s.preferences || s.context.is_some()) {
+    if key.key == Key::Escape && (s.preferences || s.context.is_some() || s.item_menu.is_some()) {
         s.preferences = false;
         s.context = None;
+        s.item_menu = None;
         return true;
     }
     false
 }
 fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if s.docs[di].pending_removal {
+        return true;
+    }
     s.active = vi;
     if s.docs[di].versions[vi].edit.preedit.is_some() {
         return false;
@@ -194,7 +218,7 @@ fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -
     }
     false
 }
-fn menu_item(
+pub(super) fn menu_item(
     key: &str,
     label: &str,
     p: design::Palette,
@@ -207,12 +231,20 @@ fn menu_item(
         .focusable(true)
         .w_full()
         .h(32.0)
+        .min_h(32.0)
         .px(10.0)
         .radius(9.0)
         .continuous_corners()
         .center_y()
         .hover(p.selected)
-        .child(text(label).font(TextStyle::new(13.0, 400.0)).color(p.text))
+        .child(
+            text(label)
+                .min_w(0.0)
+                .grow(1.0)
+                .truncate()
+                .font(TextStyle::new(13.0, 400.0))
+                .color(p.text),
+        )
         .on_press_tx(f)
 }
 fn menu(s: &State, dark: bool, p: design::Palette) -> El {
@@ -267,6 +299,24 @@ fn menu(s: &State, dark: bool, p: design::Palette) -> El {
                 s.preferences = false;
                 s.reload(false);
             }));
+        if s.archived > 0 {
+            menu = menu.child(menu_item(
+                "restore",
+                "Restore last archived draft",
+                p,
+                |s, _| {
+                    s.preferences = false;
+                    s.reload(false);
+                    if !s.docs.iter().any(|d| d.pending_action)
+                        && let Some(jobs) = &s.jobs
+                    {
+                        let _ = jobs.send(Job::Restore(s.generation));
+                    }
+                },
+            ));
+        }
+    } else if s.item_menu.is_some() {
+        menu = items::menu(s, menu, p);
     } else {
         menu = menu
             .child(menu_item("bold", "Bold", p, |s, tx| {
@@ -309,10 +359,7 @@ fn menu(s: &State, dark: bool, p: design::Palette) -> El {
 fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
     let d = &s.docs[s.selected];
     let v = &d.versions[vi];
-    let title = d.raw["versions"][vi]["name"]
-        .as_str()
-        .map(str::to_owned)
-        .unwrap_or_else(|| design::title(&v.edit.text));
+    let title = d.version_title(vi);
     let source = if v.edit.selected().is_empty() {
         v.edit.text.as_str()
     } else {
@@ -370,6 +417,9 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                 ),
         )
         .on_press(move |s: &mut State| s.focus(vi))
+        .on_secondary_press(move |s: &mut State, point, _| {
+            items::open(s, s.selected, Some(vi), [point.x, point.y]);
+        })
 }
 fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
     let di = s.selected;
@@ -381,7 +431,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
     if !s.source {
         spans.extend(v.hidden.iter().cloned());
     }
-    let editor = text_input(&v.edit, BODY)
+    let mut editor = text_input(&v.edit, BODY)
         .key(format!("editor-{}", v.id))
         .role("textbox")
         .label(format!("Version {} Markdown editor", v.number))
@@ -395,9 +445,13 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
         .on_secondary_press(move |s: &mut State, point, _| {
             s.focus(vi);
             s.preferences = false;
+            s.item_menu = None;
             s.context = Some([point.x, point.y]);
         })
         .on_input_paste(move |s: &mut State, data, tx| {
+            if s.docs[di].pending_removal {
+                return true;
+            }
             if let Some(image) = data.image() {
                 s.paste_image(di, vi, image.png().to_vec(), tx);
                 true
@@ -405,6 +459,9 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
                 false
             }
         });
+    if d.pending_removal {
+        editor = editor.inert();
+    }
     let mut paper = col()
         .w_full()
         .max_w(790.0)
@@ -430,8 +487,8 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
     }
     col()
         .key(format!("version-{}", v.id))
-        .grow(1.0)
-        .min_w(0.0)
+        .w(width)
+        .min_w(width)
         .h_full()
         .min_h(0.0)
         .child(
@@ -491,8 +548,8 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     format!("{first} {rest}")
                 }
             });
-        let drafting = d.versions.len() > 1 || prose.split_whitespace().count() >= 50;
-        let (chip, chip_text) = p.stage(dark, drafting);
+        let status = items::stage(d);
+        let (chip, chip_text) = p.stage(dark, status);
         let selected = i == s.selected;
         let expanded = selected && s.expanded;
         let mut entry = col()
@@ -558,7 +615,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                             .radius(9.0)
                             .fill(chip)
                             .child(
-                                text(if drafting { "Drafting" } else { "Idea" })
+                                text(status)
                                     .font(TextStyle::new(10.5, 400.0))
                                     .color(chip_text),
                             ),
@@ -581,23 +638,27 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
             .on_press(move |s: &mut State| {
                 s.context = None;
                 s.preferences = false;
+                s.item_menu = None;
                 if s.selected == i {
                     s.expanded = !s.expanded;
                 } else {
                     s.selected = i;
                     s.expanded = true;
-                    s.focus(0);
+                    s.focus(s.docs[i].open_versions()[0]);
                 }
+            })
+            .on_secondary_press(move |s: &mut State, point, _| {
+                items::open(s, i, None, [point.x, point.y]);
             });
         let mut group = col()
-            .key(format!("draft-group-{i}"))
+            .key(format!("draft-group-{}", d.id()))
             .w_full()
             .radius(16.0)
             .continuous_corners()
             .child(entry);
         if expanded {
             let mut versions = col()
-                .key(format!("draft-versions-{i}"))
+                .key(format!("draft-versions-{}", d.id()))
                 .w_full()
                 .padding(6.0)
                 .gap(2.0)
@@ -621,12 +682,15 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                         .label(format!("Version {}", v.number))
                         .focusable(true)
                         .child(
-                            text(design::title(&v.edit.text))
+                            text(d.version_title(vi))
                                 .truncate()
                                 .font(TextStyle::new(12.0, if active { 550.0 } else { 400.0 }))
                                 .color(if active { p.text } else { p.muted }),
                         )
-                        .on_press(move |s: &mut State| s.focus(vi)),
+                        .on_press_tx(move |s: &mut State, tx| items::activate(s, i, vi, tx))
+                        .on_secondary_press(move |s: &mut State, point, _| {
+                            items::open(s, i, Some(vi), [point.x, point.y]);
+                        }),
                 );
             }
             group = group.child(versions);
@@ -653,6 +717,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     .on_press(|s: &mut State| {
                         s.preferences = !s.preferences;
                         s.context = None;
+                        s.item_menu = None;
                     }),
             )
             .child(
@@ -694,22 +759,33 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
     let [width, height] = cx.layout_size("draft-root").unwrap_or([1200.0, 820.0]);
     let side = if width <= 1100.0 { 235.0 } else { 260.0 };
     let side = if s.sidebar { side } else { 0.0 };
-    let count = s.docs[s.selected].versions.len().min(2);
-    let column_width = (width - side) / count.max(1) as f32;
-    let mut columns = row().w_full().h_full().min_h(0.0);
-    for vi in 0..count {
-        if vi > 0 {
+    let open = s.docs[s.selected].open_versions();
+    let count = open.len();
+    let column_width = (width - side) / count.clamp(1, 2) as f32;
+    let mut columns = row()
+        .w(column_width * count as f32 + count.saturating_sub(1) as f32)
+        .h_full()
+        .min_h(0.0);
+    for (n, vi) in open.into_iter().enumerate() {
+        if n > 0 {
             columns = columns.child(el().w(1.0).h_full().fill(p.line));
         }
         columns = columns.child(column(s, vi, column_width, dark, p));
     }
-    let mut content = row().w_full().h_full().min_h(0.0);
+    let mut content = row().key("draft-content").w_full().h_full().min_h(0.0);
     if s.sidebar {
         content = content
             .child(sidebar(s, dark, side, p))
             .child(el().w(1.0).h_full().fill(p.line));
     }
-    content = content.child(col().grow(1.0).min_w(0.0).h_full().child(columns));
+    content = content.child(
+        col()
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .scroll_x()
+            .child(columns),
+    );
     let mut root = el()
         .key("draft-root")
         // Ancestor handlers run before control traversal; AppSpec::on_key runs after it.
@@ -725,7 +801,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .fill(p.background.alpha(if dark { 0.78 } else { 0.8 })),
         )
         .child(content);
-    if s.context.is_some() || s.preferences {
+    if s.context.is_some() || s.preferences || s.item_menu.is_some() {
         root = root.child(
             el().w_full()
                 .h_full()
@@ -733,6 +809,21 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .on_press(|s: &mut State| {
                     s.context = None;
                     s.preferences = false;
+                    s.item_menu = None;
+                })
+                .on_secondary_press(|s: &mut State, point, tx| {
+                    s.context = None;
+                    s.preferences = false;
+                    s.item_menu = None;
+                    let at = [point.x, point.y];
+                    tx.element_at_in(
+                        "draft-content",
+                        at[0],
+                        at[1],
+                        move |s: &mut State, picked, _| {
+                            items::retarget(s, picked, at);
+                        },
+                    );
                 }),
         );
         let popup = menu(s, dark, p);
@@ -747,15 +838,20 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 );
                 "settings-anchor"
             };
-            popup.anchored(anchor, rune::Side::Top, rune::Align::Start, 6.0)
+            popup.anchored_fit(anchor, rune::Side::Top, rune::Align::Start, 6.0)
         } else {
-            let a = s.context.unwrap();
+            let a = s
+                .item_menu
+                .as_ref()
+                .map(|menu| menu.at)
+                .or(s.context)
+                .unwrap();
             root = root.child(
                 el().key("context-anchor")
                     .size(0.0, 0.0)
                     .absolute(a[0].clamp(8.0, width - 8.0), a[1].clamp(8.0, height - 8.0)),
             );
-            popup.anchored(
+            popup.anchored_fit(
                 "context-anchor",
                 rune::Side::Bottom,
                 rune::Align::Start,

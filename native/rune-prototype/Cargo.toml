@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "7ead7d63fcf6f9dd9669385a8b90e2ae80015d7b", default-features = false, features = ["accessibility", "dbus", "embedded-fonts", "metal-backend"] }
+rune = { git = "https://github.com/anomalyco/rune", rev = "7ead7d63fcf6f9dd9669385a8b90e2ae80015d7b", default-features = false, features = ["accessibility", "dbus", "embedded-fonts", "metal-backend", "native-file-dialog"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "3", default-features = false, features = ["json"] }

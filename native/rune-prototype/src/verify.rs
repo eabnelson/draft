@@ -34,6 +34,329 @@ pub fn run() {
     interactions();
     tab_shortcuts();
     popover_placement();
+    sidebar_context();
+}
+
+fn sidebar_context() {
+    let mut rt = App::new(ui::spec()).headless_runtime((1280.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let selected = rt.state.selected;
+    let selected_id = rt.state.docs[selected].id().to_owned();
+    let target = (selected + 1) % rt.state.docs.len();
+    let target_id = rt.state.docs[target].id().to_owned();
+    let target_text = rt.state.docs[target].snapshot()["versions"].clone();
+    let updated = rt.state.docs[target].raw["updatedAt"].clone();
+    rt.update(|s, _| s.context = Some([700.0, 300.0]));
+    rt.frame(0.016);
+    let (x, y) = rt.find(&format!("draft-{target}")).unwrap();
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    rt.frame(0.016);
+    assert!(
+        rt.find("draft-open").is_some() && rt.find("item-rename").is_some(),
+        "right-clicking a sidebar draft opens its draft menu"
+    );
+    assert_eq!(
+        rt.state.selected, selected,
+        "right-click keeps the current draft"
+    );
+    menu_click(&mut rt, "draft-pin");
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert!(
+        rt.state
+            .docs
+            .iter()
+            .find(|d| d.id() == target_id)
+            .unwrap()
+            .raw["pinned"]
+            == true
+    );
+    assert_eq!(rt.state.docs[rt.state.selected].id(), selected_id);
+    let di = rt
+        .state
+        .docs
+        .iter()
+        .position(|d| d.id() == target_id)
+        .unwrap();
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "item-rename");
+    key(&mut rt, Key::Text("Renamed from the sidebar".into()));
+    key(&mut rt, Key::Enter);
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    let d = rt.state.docs.iter().find(|d| d.id() == target_id).unwrap();
+    assert_eq!(d.raw["title"], "Renamed from the sidebar");
+    assert_eq!(
+        d.snapshot()["versions"],
+        target_text,
+        "renaming never changes writing"
+    );
+    assert_eq!(
+        d.raw["updatedAt"], updated,
+        "metadata keeps the last-edited time"
+    );
+    let di = rt
+        .state
+        .docs
+        .iter()
+        .position(|d| d.id() == target_id)
+        .unwrap();
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "stage-ready");
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(
+        items::stage(rt.state.docs.iter().find(|d| d.id() == target_id).unwrap()),
+        "Ready"
+    );
+    let disk = rt
+        .state
+        .host
+        .library()
+        .unwrap()
+        .drafts
+        .into_iter()
+        .find(|d| d["id"] == target_id)
+        .unwrap();
+    assert_eq!(disk["title"], "Renamed from the sidebar");
+    assert_eq!(disk["manualStage"], "ready");
+    assert_eq!(disk["pinned"], true);
+
+    let di = rt
+        .state
+        .docs
+        .iter()
+        .position(|d| d.id() == target_id)
+        .unwrap();
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "draft-open");
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "item-new-version");
+    rt.update(|s, tx| {
+        let di = s.selected;
+        s.docs[di].versions[0]
+            .edit
+            .insert(" + typed while creating a version");
+        s.edited(di, 0, tx);
+    });
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    let di = rt.state.selected;
+    assert_eq!(rt.state.docs[di].versions.len(), 3);
+    assert!(
+        rt.state.docs[di].versions[0]
+            .edit
+            .text
+            .contains("typed while creating a version")
+    );
+    assert!(
+        rt.state.docs[di].versions[2]
+            .edit
+            .text
+            .starts_with(target_text[0]["text"].as_str().unwrap()),
+        "a new version copies the source writing while its live buffer keeps newer typing"
+    );
+    let version = rt.state.docs[di].versions[2].id.clone();
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| e.key.as_deref() == Some(&format!("editor-{version}"))),
+        "new versions get real editor columns"
+    );
+    secondary(&mut rt, &format!("sidebar-version-{version}"));
+    assert!(
+        rt.find("version-close").is_some(),
+        "version menu: target {:?}, entries {:?}",
+        rt.state.item_menu.as_ref().map(|c| (&c.draft, &c.version)),
+        rt.elements()
+            .iter()
+            .filter(|e| e.role == "button")
+            .map(|e| (&e.key, e.rect))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        rt.find("draft-pin").is_none(),
+        "a version gets its version menu"
+    );
+    menu_click(&mut rt, "item-rename");
+    key(&mut rt, Key::Text("A named version".into()));
+    key(&mut rt, Key::Enter);
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(rt.state.docs[di].version_title(2), "A named version");
+    secondary(&mut rt, &format!("sidebar-version-{version}"));
+    menu_click(&mut rt, "version-close");
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(rt.state.docs[di].open_versions().len(), 2);
+    click(&mut rt, &format!("sidebar-version-{version}"));
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(rt.state.docs[di].open_versions().len(), 3);
+    secondary(&mut rt, &format!("sidebar-version-{version}"));
+    menu_click(&mut rt, "item-delete");
+    assert_eq!(
+        rt.state.docs[di].versions.len(),
+        3,
+        "delete requires confirmation"
+    );
+    menu_click(&mut rt, "item-cancel");
+    secondary(&mut rt, &format!("sidebar-version-{version}"));
+    menu_click(&mut rt, "item-delete");
+    menu_click(&mut rt, "item-delete-confirm");
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(rt.state.docs[di].versions.len(), 2);
+
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "draft-export");
+    assert!(rt.file_dialog().is_some());
+    let exports = PathBuf::from(std::env::var_os("DRAFT_RUNE_DATA_ROOT").unwrap()).join("Exports");
+    std::fs::create_dir_all(&exports).unwrap();
+    rt.resolve_file_dialog(Some(exports.clone())).unwrap();
+    rt.frame(0.016);
+    until(&mut rt, |s| s.notice.starts_with("Exported to "));
+    let exported = std::fs::read_dir(exports)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert!(
+        exported.join("draft.json").is_file()
+            && exported.join("v1.md").is_file()
+            && exported.join("v2.txt").is_file()
+    );
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "draft-archive");
+    until(&mut rt, |s| s.docs.iter().all(|d| d.id() != target_id));
+    assert_eq!(rt.state.archived, 1);
+    click(&mut rt, "settings");
+    menu_click(&mut rt, "restore");
+    until(&mut rt, |s| s.docs.iter().any(|d| d.id() == target_id));
+    assert_eq!(rt.state.archived, 0);
+    let di = rt
+        .state
+        .docs
+        .iter()
+        .position(|d| d.id() == target_id)
+        .unwrap();
+    secondary(&mut rt, &format!("draft-{di}"));
+    menu_click(&mut rt, "item-delete");
+    menu_click(&mut rt, "item-delete-confirm");
+    until(&mut rt, |s| s.docs.iter().all(|d| d.id() != target_id));
+    rt.update(|s, tx| s.flush(tx).unwrap());
+    assert!(
+        rt.state
+            .host
+            .library()
+            .unwrap()
+            .drafts
+            .iter()
+            .all(|d| d["id"] != target_id),
+        "a pending save must not resurrect a removed draft"
+    );
+    let recovery = PathBuf::from(std::env::var_os("DRAFT_RUNE_DATA_ROOT").unwrap())
+        .join("Drafts/Recovery/Deleted");
+    assert!(std::fs::read_dir(recovery).unwrap().any(|e| {
+        e.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(&target_id)
+    }));
+    let mut narrow =
+        App::new(ui::spec()).headless_runtime((780.0, 560.0), rune::Env::new(false, 1.0));
+    narrow.frame(0.0);
+    secondary(&mut narrow, "draft-0");
+    let menu = narrow
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("editor-menu"))
+        .unwrap()
+        .rect;
+    assert!(
+        menu[1] >= 8.0 && menu[1] + menu[3] <= 552.0,
+        "a long draft menu fits the small window: {menu:?}"
+    );
+    menu_click(&mut narrow, "draft-export");
+    assert!(
+        narrow.file_dialog().is_some(),
+        "scrolling exposes actions below the fold"
+    );
+    narrow.resolve_file_dialog(None).unwrap();
+    narrow.frame(0.016);
+    let last_id = rt.state.docs[rt.state.selected].id().to_owned();
+    let number = rt.state.docs[rt.state.selected].versions[0].number;
+    rt.update(|s, tx| {
+        s.paste_image(
+            s.selected,
+            0,
+            include_bytes!("../../../src-tauri/icons/icon.png").to_vec(),
+            tx,
+        );
+        items::request_for(s, &last_id, json!({"kind":"archive"}));
+        assert!(s.docs[s.selected].pending_removal);
+        s.flush(tx).unwrap();
+    });
+    let archived = PathBuf::from(std::env::var_os("DRAFT_RUNE_DATA_ROOT").unwrap())
+        .join("Drafts/Archive")
+        .join(format!("{last_id}.draft"));
+    let writing = std::fs::read_to_string(archived.join(format!("versions/v{number}.md"))).unwrap();
+    assert!(
+        writing.contains("![Pasted image]("),
+        "archive includes an image paste that was still pending"
+    );
+    assert!(
+        media_paths(&writing)
+            .iter()
+            .all(|src| archived.join(src).is_file())
+    );
+    assert!(
+        !rt.state.docs.is_empty(),
+        "archiving the last draft opens a fresh draft"
+    );
+    let d = &rt.state.docs[rt.state.selected];
+    let protected: Result<ActionResult, _> = rt.state.host.post(
+        "/action",
+        &json!({
+            "draft":d.snapshot(),"action":{"kind":"delete-version","version":d.versions[0].id}
+        }),
+    );
+    assert!(protected.is_err(), "the host protects the final version");
+    let fresh_id = d.id().to_owned();
+    rt.update(|s, tx| {
+        items::request_for(s, &fresh_id, json!({"kind":"new-version"}));
+        s.flush(tx).unwrap();
+    });
+    assert_eq!(rt.state.docs[rt.state.selected].versions.len(), 2);
+    assert_eq!(
+        rt.state
+            .host
+            .library()
+            .unwrap()
+            .drafts
+            .iter()
+            .find(|d| d["id"] == fresh_id)
+            .unwrap()["versions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2,
+        "closing while an action is pending must not overwrite its new version"
+    );
+    println!(
+        "PASS targeted sidebar/version menus, rename, pin, status, version create/close/reopen/delete, export, archive/restore, Recovery, and typing during replies"
+    );
+}
+
+fn secondary(rt: &mut rune::Runtime<State>, key: &str) {
+    for _ in 0..12 {
+        rt.frame(0.05);
+    }
+    let (x, y) = rt.find(key).unwrap_or_else(|| panic!("Missing {key}"));
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    rt.frame(0.016);
+}
+fn menu_click(rt: &mut rune::Runtime<State>, key: &str) {
+    rt.update(|_, tx| tx.scroll_into_view(key));
+    for _ in 0..12 {
+        rt.frame(0.05);
+    }
+    click(rt, key);
 }
 
 fn popover_placement() {

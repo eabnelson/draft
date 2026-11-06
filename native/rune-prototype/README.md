@@ -16,7 +16,12 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 
 ## What to try
 
-- Edit the two version columns, switch drafts, and return to your writing.
+- Edit the version columns, switch drafts, and return to your writing. Extra
+  open versions scroll horizontally.
+- Right-click a sidebar draft for Open, Rename, Pin, New version, versions,
+  status, Export, Archive, or Delete. Version rows and tabs have their own menu
+  for renaming, copying, closing, or deleting that version. Delete asks first
+  and keeps writing in Recovery; Settings can restore the last archived draft.
 - Control+Tab and Control+Shift+Tab cycle forward and backward through the open
   versions, including when the highlighted draft in the sidebar has focus.
 - Right-click selected text for Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-I
@@ -58,7 +63,8 @@ cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D war
 Checks create and remove their own temporary library. They exercise real Rune
 input routing and Draft storage: Unicode round trips, IME preedit/commit,
 formatting, joined-emoji deletion, independent undo, delayed saves, image paste,
-accessible editor names, and the final write barrier. Snapshots and tree dumps
+accessible editor names, sidebar menu targeting, metadata persistence, version
+actions, export, archive/restore, Recovery, and the final write barrier. Snapshots and tree dumps
 go to `native/rune-prototype/artifacts/`.
 
 Linux compilation was checked in the official `rust:1.96.1-bookworm` container,
@@ -75,9 +81,8 @@ Japanese-text scenario emitted missing-segmentation-model warnings.
 
 This remains a prototype. The native rendering is an approximation of Draft's
 glass, not a pixel-identical port. Concealed punctuation needs further checks
-for cursor movement and selection around invisible source positions. It shows
-at most two versions, keeps undo only for the
-current process, and does not implement Draft's spelling, full inline-image
+for cursor movement and selection around invisible source positions. It keeps
+undo only for the current process, and does not implement Draft's spelling, full inline-image
 editing, sync, personal-feature builds, native updater, or distribution. Manual
 screen-reader and real input-method checks are still needed. No comparative
 performance claim has been established. Keep this experiment on its prototype

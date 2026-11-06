@@ -87,6 +87,13 @@ impl Host {
 struct Library {
     active: String,
     drafts: Vec<Value>,
+    archived: usize,
+}
+#[derive(Deserialize)]
+struct ActionResult {
+    library: Library,
+    focus: Option<String>,
+    message: String,
 }
 struct Version {
     id: String,
@@ -102,6 +109,8 @@ struct Document {
     revision: u64,
     saved: u64,
     queued: Option<u64>,
+    pending_action: bool,
+    pending_removal: bool,
 }
 impl Document {
     fn id(&self) -> &str {
@@ -119,11 +128,36 @@ impl Document {
         }
         raw
     }
+    fn open_versions(&self) -> Vec<usize> {
+        let hidden = self.raw["hiddenVersions"].as_array();
+        let mut open: Vec<_> = self
+            .versions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                (!hidden.is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(&v.id))))
+                    .then_some(i)
+            })
+            .collect();
+        if open.is_empty() {
+            open.push(self.versions.len() - 1);
+        }
+        open
+    }
+    fn version_title(&self, vi: usize) -> String {
+        self.raw["versions"][vi]["name"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| design::title(&self.versions[vi].edit.text))
+    }
 }
 enum Job {
     Save(String, u64, Value),
     Reload(u64),
     New(u64),
+    Restore(u64),
+    PrepareAction(String, Value),
+    Action(String, u64, Value, Value),
     Image {
         draft: String,
         version: String,
@@ -136,6 +170,8 @@ enum Job {
 enum Reply {
     Saved(String, u64, Result<(), String>),
     Library(u64, Result<Library, String>),
+    PrepareAction(String, Value),
+    Action(String, u64, Result<ActionResult, String>),
     Image {
         draft: String,
         version: String,
@@ -154,8 +190,10 @@ struct State {
     follow_theme: bool,
     sidebar: bool,
     expanded: bool,
+    archived: usize,
     preferences: bool,
     context: Option<[f32; 2]>,
+    item_menu: Option<items::Context>,
     generation: u64,
     due: Option<Instant>,
     notice: String,
@@ -212,8 +250,10 @@ impl State {
             follow_theme: false,
             sidebar: true,
             expanded: false,
+            archived: 0,
             preferences: false,
             context: None,
+            item_menu: None,
             generation: 0,
             due: None,
             notice: "All changes saved".into(),
@@ -226,6 +266,7 @@ impl State {
         s
     }
     fn install(&mut self, library: Library) {
+        self.archived = library.archived;
         // Equal save echoes retain each buffer's selection, composition and undo history.
         let selected_id = self
             .docs
@@ -268,8 +309,20 @@ impl State {
                 revision,
                 saved: revision,
                 queued: None,
+                pending_action: false,
+                pending_removal: false,
             });
         }
+        self.docs.sort_by(|a, b| {
+            b.raw["pinned"]
+                .as_bool()
+                .cmp(&a.raw["pinned"].as_bool())
+                .then_with(|| {
+                    b.raw["updatedAt"]
+                        .as_str()
+                        .cmp(&a.raw["updatedAt"].as_str())
+                })
+        });
         self.selected = self
             .docs
             .iter()
@@ -368,6 +421,7 @@ impl State {
         for d in &mut self.docs {
             if d.revision != d.saved
                 && d.queued.is_none()
+                && !d.pending_action
                 && let Some(jobs) = &self.jobs
             {
                 if jobs
@@ -382,6 +436,10 @@ impl State {
         }
     }
     fn reload(&mut self, new: bool) {
+        if self.docs.iter().any(|d| d.pending_action) {
+            self.notice = "Finishing the draft change…".into();
+            return;
+        }
         // Place snapshots after older saves and before the reload on one worker queue.
         if let Some(jobs) = &self.jobs {
             for d in &self.docs {
@@ -422,6 +480,10 @@ impl State {
     fn flush(&mut self, tx: &mut Tx) -> Result<(), String> {
         self.barrier()?;
         ui::poll(self, 0.0, tx); // Finish pending media insertions before the final save.
+        while self.docs.iter().any(|d| d.pending_action) {
+            self.barrier()?;
+            ui::poll(self, 0.0, tx);
+        }
         for d in &self.docs {
             self.jobs
                 .as_ref()
@@ -439,6 +501,7 @@ impl State {
 }
 
 mod design;
+mod items;
 mod ui;
 mod verify;
 
