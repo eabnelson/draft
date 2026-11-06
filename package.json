@@ -3,6 +3,9 @@
   "version": "0.3.0-alpha.67",
   "type": "module",
   "scripts": {
+    "rune:dev": "bun native/rune-prototype/run.ts",
+    "rune:snap": "bun native/rune-prototype/run.ts --snap native/rune-prototype/artifacts/editor.png --tree native/rune-prototype/artifacts/editor.json",
+    "rune:check": "bun native/rune-prototype/run.ts --check",
     "dev": "bun desktop/server.ts --dev",
     "build": "tsc -b && vite build",
     "test": "bun test ./tests",

@@ -1,0 +1,20 @@
+[package]
+name = "draft-rune-prototype"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "7ead7d63fcf6f9dd9669385a8b90e2ae80015d7b", default-features = false, features = ["accessibility", "dbus", "embedded-fonts", "metal-backend"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", default-features = false, features = ["json"] }
+pulldown-cmark = { version = "0.13", default-features = false }
+# Rune disables Parley's default features. Opt into dictionary segmentation for CJK/Thai.
+parley = { version = "0.12", default-features = false, features = ["std", "complex-scripts"] }
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+debug = 0
