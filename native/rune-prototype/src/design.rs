@@ -108,6 +108,23 @@ pub fn glass_surface(surface: El, dark: bool) -> El {
         )
 }
 
+pub fn sidebar_surface(surface: El, dark: bool, selected: bool) -> El {
+    let surface = surface.w_full().radius(16.0).continuous_corners();
+    if selected {
+        glass_surface(surface, dark)
+    } else {
+        surface
+    }
+}
+
+pub fn tab_surface(widths: &[f32], dark: bool, active: bool) -> El {
+    let width = widths.iter().sum::<f32>() + 5.25 * widths.len().saturating_sub(1) as f32;
+    el().size(width, 28.0)
+        .absolute(0.0, 0.0)
+        .child(glass::frost(widths, dark))
+        .child(glass_pill(widths, dark, active).absolute(0.0, 0.0))
+}
+
 pub fn prose(source: &str) -> String {
     let mut out = String::new();
     for event in Parser::new(source) {
@@ -332,6 +349,11 @@ pub fn fonts() -> &'static [&'static [u8]] {
 }
 
 // Lucide paths from the existing app. License: ../third-party/LUCIDE-LICENSE.
+pub static CHEVRON_LEFT: rune::Icon = rune::Icon {
+    name: "chevron-left",
+    view: 24.0,
+    body: r#"<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/>"#,
+};
 pub static SETTINGS: rune::Icon = rune::Icon {
     name: "settings",
     view: 24.0,

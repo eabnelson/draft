@@ -46,7 +46,8 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 - Choose **Settings → Files → Reload files** to read the saved `.draft` packages. Equal text retains
   the live editor's selection and undo history.
 - The gear opens the Settings page, with Appearance, Editor, Files, Sync, and
-  Shortcuts sections. Cmd/Ctrl-comma opens it too; Escape or Back to drafts returns
+  Shortcuts sections, using the writing view's sidebar cards and floating glass headers.
+  Cmd/Ctrl-comma opens it too; Escape or the bottom chevron-and-Back tab returns
   to the editor. Appearance offers system/light/dark, and Editor offers **Show Markdown**. The initial
   dark appearance matches the original app reference, with Markdown punctuation
   concealed in the prose.

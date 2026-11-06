@@ -2,6 +2,13 @@
 use super::*;
 
 const SECTIONS: [&str; 5] = ["Appearance", "Editor", "Files", "Sync", "Shortcuts"];
+const DETAILS: [&str; 5] = [
+    "Light, dark, or your system appearance.",
+    "Markdown marks and the way you write.",
+    "Autosaving, local files, and archived drafts.",
+    "Your workspace, connection, and sync status.",
+    "A key-by-key guide to getting around Draft.",
+];
 
 #[derive(Clone, Default, Deserialize)]
 pub struct SyncStatus {
@@ -269,27 +276,111 @@ fn sync(s: &State, p: design::Palette) -> El {
     }
     body
 }
+fn header(section: usize, dark: bool, p: design::Palette) -> El {
+    let title = SECTIONS[section];
+    let widths = [title.chars().count() as f32 * 6.3 + 26.0, 66.4];
+    row()
+        .key("settings-header")
+        .role("heading")
+        .label(format!("{title} settings"))
+        .w_full()
+        .h(40.0)
+        .absolute(0.0, 0.0)
+        .window_drag()
+        .child(
+            row()
+                .absolute(8.0, 6.0)
+                .h(28.0)
+                .gap(5.25)
+                .child(design::tab_surface(&widths, dark, true))
+                .child(
+                    row()
+                        .w(widths[0])
+                        .h(28.0)
+                        .px(13.0)
+                        .center_y()
+                        .child(text(title).font(TextStyle::new(12.5, 550.0)).color(p.text)),
+                )
+                .child(
+                    row().w(widths[1]).h(28.0).px(10.0).center_y().child(
+                        text("Settings")
+                            .font(TextStyle::new(11.5, 400.0))
+                            .color(p.muted),
+                    ),
+                ),
+        )
+}
+fn page_title(label: &str, p: design::Palette) -> El {
+    text(label)
+        .w_full()
+        .wrap()
+        .font(TextStyle {
+            line_height: 32.3,
+            ..TextStyle::new(25.5, 700.0)
+        })
+        .color(p.text)
+}
 pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>) -> El {
     let section = s.settings.section;
-    let mut nav = col()
+    let mut list = col().w_full().px(8.0).gap(4.0);
+    for (i, label) in SECTIONS.iter().enumerate() {
+        let selected = section == i;
+        let item = col()
+            .key(format!("settings-section-{i}"))
+            .role("button")
+            .label(*label)
+            .focusable(true)
+            .padding(10.0)
+            .gap(4.0)
+            .hover(if selected {
+                Color::TRANSPARENT
+            } else {
+                p.glass
+            })
+            .child(
+                text(*label)
+                    .w_full()
+                    .truncate()
+                    .font(TextStyle::new(13.0, 550.0))
+                    .color(p.text),
+            )
+            .child(
+                text(DETAILS[i])
+                    .w_full()
+                    .wrap()
+                    .max_lines(2)
+                    .font(TextStyle {
+                        line_height: 16.8,
+                        ..TextStyle::new(12.0, 400.0)
+                    })
+                    .color(p.muted),
+            )
+            .on_press(move |s: &mut State| s.settings.section = i);
+        list = list.child(design::sidebar_surface(item, dark, selected));
+    }
+    let nav = col()
+        .key("settings-sidebar")
         .w(side.max(210.0))
         .h_full()
         .min_h(0.0)
         .child(el().h(40.0).w_full().window_drag())
-        .child(button("settings-back", "‹  Back to drafts", p, |s, _| {
-            s.preferences = false
-        }));
-    for (i, label) in SECTIONS.iter().enumerate() {
-        let item = button(&format!("settings-section-{i}"), label, p, move |s, _| {
-            s.settings.section = i
-        });
-        nav = nav.child(if section == i {
-            design::glass_surface(item.radius(12.0), dark)
-        } else {
-            item
-        });
-    }
-    let mut body = col().w_full().max_w(680.0).padding(32.0).gap(14.0);
+        .child(
+            col()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(list),
+        )
+        .child(ui::footer(s, dark, p));
+    let mut body = col()
+        .w_full()
+        .max_w(680.0)
+        .padding(32.0)
+        .gap(14.0)
+        .child(page_title(SECTIONS[section], p));
     match section {
         0 => {
             body = body.child(copy("Choose how Draft looks.", p));
@@ -324,7 +415,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
             let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
             body = col().w_full().max_w(1180.0).padding(padding).gap(24.0)
                 .child(col().w_full().gap(6.0)
-                    .child(text("Keyboard shortcuts").w_full().wrap().font(TextStyle::new(24.0, 600.0)).color(p.text))
+                    .child(page_title("Keyboard shortcuts", p))
                     .child(copy("Press the keys together. “or” separates alternatives.", p).wrap()))
                 .child(shortcut_help::grid(cx, (main_width.min(1180.0) - padding * 2.0).max(1.0), dark, p));
             if let Some(error) = &s.keyboard.shortcut_error { body = body.child(copy(error, p)); }
@@ -335,7 +426,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
         .w_full()
         .h_full()
         .min_h(0.0)
-        .child(nav.px(8.0).gap(4.0))
+        .child(nav)
         .child(el().w(1.0).h_full().fill(p.line))
         .child(
             col()
@@ -344,28 +435,23 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 .h_full()
                 .min_h(0.0)
                 .child(
-                    row()
-                        .w_full()
-                        .h(40.0)
-                        .px(12.0)
-                        .center_y()
-                        .window_drag()
-                        .child(
-                            text(format!("Settings · {}", SECTIONS[section]))
-                                .font(TextStyle::new(13.0, 550.0))
-                                .color(p.text),
-                        ),
-                )
-                .child(
                     col()
+                        .key(format!("settings-scroll-{section}"))
                         .w_full()
-                        .grow(1.0)
+                        .h_full()
                         .min_h(0.0)
                         .scroll(ScrollSpec {
                             stick_bottom: false,
                         })
-                        .items_center()
-                        .child(body),
-                ),
+                        .clip_fade(0.0, 22.0, 0.0, 0.0)
+                        .child(
+                            col()
+                                .w_full()
+                                .items_center()
+                                .child(el().h(40.0))
+                                .child(body),
+                        ),
+                )
+                .child(header(section, dark, p)),
         )
 }

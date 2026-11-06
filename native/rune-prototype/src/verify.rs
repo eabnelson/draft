@@ -746,8 +746,25 @@ fn popover_placement() {
         let mut rt =
             App::new(ui::spec()).headless_runtime((width, height), rune::Env::new(false, 1.0));
         rt.frame(0.0);
+        let gear = rect(&rt, "settings");
+        let version = rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
+            .id
+            .clone();
+        let writing_header = rect(&rt, &format!("tab-{version}"));
         click(&mut rt, "settings");
         assert!(rt.state.preferences);
+        let back = rect(&rt, "settings-back");
+        assert_eq!(
+            [back[0], back[1], back[3]],
+            [gear[0], gear[1], gear[3]],
+            "Back replaces the gear at the bottom of the sidebar"
+        );
+        let header = rect(&rt, "settings-header");
+        assert_eq!(
+            [header[0], header[1], header[3]],
+            [writing_header[0], writing_header[1], writing_header[3]],
+            "Settings uses the writing tab's header position and height"
+        );
         assert!(rt.find("settings-page").is_some());
         assert!(rt.find("editor-menu").is_none(), "Settings is a page");
         click(&mut rt, "settings-section-3");
@@ -922,9 +939,11 @@ fn key(rt: &mut rune::Runtime<State>, key: Key) {
     rt.frame(0.016);
 }
 fn click(rt: &mut rune::Runtime<State>, name: &str) {
-    let (x, y) = rt.find(name).unwrap();
+    let (x, y) = rt.find(name).unwrap_or_else(|| panic!("Missing {name}"));
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
+    rt.frame(0.016);
+    // Newly mounted scroll containers resolve their hit regions on the following frame.
     rt.frame(0.016);
 }
 fn until(rt: &mut rune::Runtime<State>, condition: impl Fn(&State) -> bool) {

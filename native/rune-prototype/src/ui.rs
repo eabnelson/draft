@@ -335,10 +335,7 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                 .absolute(inset, 6.0)
                 .h(28.0)
                 .gap(5.25)
-                .child(glass::frost(&widths, dark))
-                .child(
-                    design::glass_pill(&widths, dark, vi == s.active_version()).absolute(0.0, 0.0),
-                )
+                .child(design::tab_surface(&widths, dark, vi == s.active_version()))
                 .child(
                     row().w(title_width).h(28.0).px(13.0).center_y().child(
                         text(title)
@@ -640,35 +637,82 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
             }
             group = group.child(versions);
         }
-        if selected {
-            group = design::glass_surface(group, dark);
-        }
-        list = list.child(group);
+        list = list.child(design::sidebar_surface(group, dark, selected));
     }
+    col()
+        .key("sidebar")
+        .w(width)
+        .h_full()
+        .min_h(0.0)
+        .child(el().h(40.0).w_full().window_drag())
+        .child(
+            col()
+                .grow(1.0)
+                .min_h(0.0)
+                .w_full()
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(list),
+        )
+        .child(footer(s, dark, p))
+}
+pub(super) fn footer(s: &State, dark: bool, p: design::Palette) -> El {
+    let back = s.preferences;
     let sync_error = s.settings.needs_attention();
+    let mut widths = vec![32.0];
+    if back {
+        widths.push(46.0);
+    }
+    if sync_error {
+        widths.push(32.0);
+    }
+    let mut toggle = row()
+        .key(if back { "settings-back" } else { "settings" })
+        .size(if back { 83.25 } else { 32.0 }, 28.0)
+        .gap(5.25)
+        .center_y()
+        .role("button")
+        .label(if back { "Back" } else { "Settings" })
+        .focusable(true)
+        .child(
+            row().size(32.0, 28.0).center().child(
+                rune::icon(
+                    if back {
+                        &design::CHEVRON_LEFT
+                    } else {
+                        &design::SETTINGS
+                    },
+                    14.0,
+                )
+                .color(p.text.alpha(0.85)),
+            ),
+        )
+        .on_press(|s: &mut State| {
+            s.preferences = !s.preferences;
+            s.context = None;
+            s.item_menu = None;
+            if !s.preferences {
+                s.focus(s.active_version());
+            }
+        });
+    if back {
+        toggle = toggle.child(
+            row()
+                .size(46.0, 28.0)
+                .center()
+                .child(text("Back").font(TextStyle::new(12.5, 550.0)).color(p.text)),
+        );
+    }
     let mut controls = row()
         .h(28.0)
         .gap(5.25)
         .child(
-            design::glass_pill(if sync_error { &[32.0, 32.0] } else { &[32.0] }, dark, true)
+            design::glass_pill(&widths, dark, true)
                 .key("footer-glass")
                 .absolute(0.0, 0.0),
         )
-        .child(
-            row()
-                .key("settings")
-                .size(32.0, 28.0)
-                .center()
-                .role("button")
-                .label("Settings")
-                .focusable(true)
-                .child(rune::icon(&design::SETTINGS, 14.0).color(p.text.alpha(0.85)))
-                .on_press(|s: &mut State| {
-                    s.preferences = !s.preferences;
-                    s.context = None;
-                    s.item_menu = None;
-                }),
-        );
+        .child(toggle);
     if sync_error {
         controls = controls.child(
             row()
@@ -689,24 +733,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                 .on_press(settings::open_sync),
         );
     }
-    let footer = row().w_full().h(52.0).px(12.0).center_y().child(controls);
-    col()
-        .key("sidebar")
-        .w(width)
-        .h_full()
-        .min_h(0.0)
-        .child(el().h(40.0).w_full().window_drag())
-        .child(
-            col()
-                .grow(1.0)
-                .min_h(0.0)
-                .w_full()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(list),
-        )
-        .child(footer)
+    row().w_full().h(52.0).px(12.0).center_y().child(controls)
 }
 fn view(s: &State, cx: &mut Cx<State>) -> El {
     let dark = if s.follow_theme {
