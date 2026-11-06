@@ -721,7 +721,11 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
     let side = if s.sidebar { side } else { 0.0 };
     let open = s.docs[s.selected].open_versions();
     let count = open.len();
-    let column_width = (width - side) / count.clamp(1, 2) as f32;
+    let visible = count.clamp(1, 2);
+    // Reserve the sidebar edge and the separators before sizing the columns.
+    // Otherwise selecting an already-visible tab reveals a 1–2pt overflow.
+    let dividers = if s.sidebar { 1.0 } else { 0.0 } + (visible - 1) as f32;
+    let column_width = (width - side - dividers) / visible as f32;
     let mut columns = row()
         .w(column_width * count as f32 + count.saturating_sub(1) as f32)
         .h_full()

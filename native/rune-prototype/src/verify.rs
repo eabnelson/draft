@@ -33,9 +33,75 @@ pub fn run() {
     );
     interactions();
     tab_shortcuts();
+    tab_layout_stability();
     popover_placement();
     sidebar_context();
     shortcut_parity();
+}
+
+fn tab_layout_stability() {
+    for width in [1280.0, 1200.0, 780.0] {
+        for sidebar in [true, false] {
+            for zoom in [1.0, 1.25] {
+                let mut rt = App::new(ui::spec())
+                    .headless_runtime((width, 820.0), rune::Env::new(false, 1.0));
+                rt.update(|s, _| {
+                    s.sidebar = sidebar;
+                    s.keyboard.zoom = zoom;
+                    s.focus(0);
+                });
+                for _ in 0..20 {
+                    rt.frame(0.05);
+                }
+                let keys = rt.state.docs[rt.state.selected]
+                    .open_versions()
+                    .into_iter()
+                    .map(|vi| format!("tab-{}", rt.state.docs[rt.state.selected].versions[vi].id))
+                    .collect::<Vec<_>>();
+                let rectangles = |rt: &rune::Runtime<State>| {
+                    keys.iter()
+                        .map(|key| {
+                            rt.elements()
+                                .into_iter()
+                                .find(|e| e.key.as_deref() == Some(key))
+                                .unwrap()
+                                .rect
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let before = rectangles(&rt);
+                rt.key(KeyEvent {
+                    key: Key::Tab,
+                    mods: rune::Mods {
+                        ctrl: true,
+                        cmd: !cfg!(target_os = "macos"),
+                        ..Default::default()
+                    },
+                });
+                for frame in 0..20 {
+                    rt.frame(0.05);
+                    for (index, (before, after)) in before.iter().zip(rectangles(&rt)).enumerate() {
+                        assert!(
+                            before.iter().zip(after).all(|(a, b)| (a - b).abs() < 0.01),
+                            "switching between fully visible tabs must not move them: width={width}, sidebar={sidebar}, zoom={zoom}, tab={index}, frame={frame}, before={before:?}, after={after:?}"
+                        );
+                    }
+                }
+                click(&mut rt, &keys[0]);
+                for _ in 0..20 {
+                    rt.frame(0.05);
+                }
+                assert_eq!(
+                    rectangles(&rt),
+                    before,
+                    "clicking back must keep the tab strip fixed"
+                );
+            }
+        }
+    }
+    println!(
+        "PASS visible tab positions remain fixed while switching at three window widths, with/without the sidebar, and at two zoom levels"
+    );
 }
 
 fn shortcut_parity() {
@@ -68,6 +134,20 @@ fn shortcut_parity() {
             && !s.docs[s.selected].pending_action
     });
     assert_eq!(rt.state.active_version(), count + 3);
+    let selected_tab = format!(
+        "tab-{}",
+        rt.state.docs[rt.state.selected].versions[rt.state.active_version()].id
+    );
+    let [x, _, w, _] = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(&selected_tab))
+        .unwrap()
+        .rect;
+    assert!(
+        x >= 261.0 && x + w <= 1280.01,
+        "an offscreen new tab still scrolls fully into view: {x}, {w}"
+    );
     let di = rt.state.selected;
     let open = rt.state.docs[di].open_versions();
     let closing = rt.state.docs[di].versions[open[1]].id.clone();
