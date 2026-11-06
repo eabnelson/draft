@@ -507,12 +507,11 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                 [16.0; 4]
             })
             .continuous_corners()
-            .fill(if selected {
-                p.glass
-            } else {
+            .hover(if selected {
                 Color::TRANSPARENT
+            } else {
+                p.glass
             })
-            .hover(p.glass)
             .child(
                 row()
                     .w_full()
@@ -588,26 +587,21 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     s.focus(0);
                 }
             });
-        // The shared fill keeps expanded versions selected; the header's second
-        // layer makes the parent a little stronger than its children.
         let mut group = col()
             .key(format!("draft-group-{i}"))
             .w_full()
             .radius(16.0)
             .continuous_corners()
-            .clip_rounded(16.0)
-            .fill(if selected {
-                p.glass
-            } else {
-                Color::TRANSPARENT
-            })
             .child(entry);
         if expanded {
             let mut versions = col()
                 .key(format!("draft-versions-{i}"))
                 .w_full()
                 .padding(6.0)
-                .gap(2.0);
+                .gap(2.0)
+                .corners([0.0, 0.0, 16.0, 16.0])
+                .continuous_corners()
+                .fill(Color::BLACK.alpha(if dark { 0.10 } else { 0.025 }));
             for (vi, v) in d.versions.iter().enumerate() {
                 let active = vi == s.active_version();
                 versions = versions.child(
@@ -634,6 +628,9 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                 );
             }
             group = group.child(versions);
+        }
+        if selected {
+            group = design::selection_glass(group, dark);
         }
         list = list.child(group);
     }

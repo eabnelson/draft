@@ -54,6 +54,43 @@ impl Palette {
     }
 }
 
+pub fn selection_glass(surface: El, dark: bool) -> El {
+    let (tint, top, bottom, sheen, rim, edge) = if dark {
+        (
+            rgb(174, 194, 219).alpha(0.055),
+            Color::WHITE.alpha(0.055),
+            Color::WHITE.alpha(0.012),
+            Color::WHITE.alpha(0.065),
+            Color::WHITE.alpha(0.28),
+            Color::WHITE.alpha(0.045),
+        )
+    } else {
+        (
+            rgb(203, 213, 226).alpha(0.5),
+            Color::WHITE.alpha(0.32),
+            Color::WHITE.alpha(0.06),
+            Color::WHITE.alpha(0.5),
+            Color::WHITE.alpha(0.95),
+            Color::BLACK.alpha(0.10),
+        )
+    };
+    surface
+        .backdrop_blur(14.0)
+        .fill(tint)
+        .gradient(top, bottom)
+        .radial_gradient(
+            [0.08, 0.0],
+            [220.0, 140.0],
+            [(0.0, sheen), (1.0, Color::TRANSPARENT)],
+        )
+        .border_gradient(0.75, rim, edge)
+        .shadow(
+            3.0,
+            10.0,
+            Color::BLACK.alpha(if dark { 0.18 } else { 0.09 }),
+        )
+}
+
 pub fn prose(source: &str) -> String {
     let mut out = String::new();
     for event in Parser::new(source) {
