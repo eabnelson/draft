@@ -157,7 +157,9 @@ impl Document {
 enum Job {
     Save(String, u64, Value),
     Reload(u64),
-    New(u64),
+    New,
+    Active(String),
+    Zoom(f32),
     Restore(u64),
     PrepareAction(String, Value),
     Action(String, u64, Value, Value),
@@ -171,6 +173,9 @@ enum Job {
     Barrier(mpsc::Sender<()>),
 }
 enum Reply {
+    New(Result<Library, String>),
+    Active(Result<Value, String>),
+    Zoom(Result<(), String>),
     Sync(settings::Update),
     Saved(String, u64, Result<(), String>),
     Library(u64, Result<Library, String>),
@@ -185,6 +190,7 @@ enum Reply {
     },
 }
 struct State {
+    keyboard: keyboard::Controls,
     host: Host,
     docs: Vec<Document>,
     selected: usize,
@@ -246,6 +252,7 @@ impl State {
         let host = Host::from_env();
         let library = host.library().expect("Load disposable Draft library");
         let mut s = Self {
+            keyboard: keyboard::Controls::default(),
             host,
             docs: vec![],
             selected: 0,
@@ -362,6 +369,12 @@ impl State {
         }
     }
     fn edited(&mut self, doc: usize, version: usize, tx: &mut Tx) {
+        let id = self.docs[doc].id().to_owned();
+        let viewed = self.docs[doc].versions[version].id.clone();
+        if doc == self.selected && self.keyboard.viewing.get(&id).is_some_and(|v| v != &viewed) {
+            self.keyboard.navigation += 1;
+        }
+        self.keyboard.viewing.insert(id, viewed);
         self.active = version;
         self.generation += 1;
         let d = &mut self.docs[doc];
@@ -379,9 +392,31 @@ impl State {
             .versions
             .iter()
             .position(|v| v.edit.focused)
-            .unwrap_or(self.active)
+            .or_else(|| {
+                self.keyboard
+                    .viewing
+                    .get(self.docs[self.selected].id())
+                    .and_then(|id| {
+                        self.docs[self.selected]
+                            .versions
+                            .iter()
+                            .position(|v| &v.id == id)
+                    })
+            })
+            .filter(|vi| self.docs[self.selected].open_versions().contains(vi))
+            .unwrap_or_else(|| {
+                self.docs[self.selected]
+                    .open_versions()
+                    .into_iter()
+                    .find(|&vi| vi == self.active)
+                    .unwrap_or(self.docs[self.selected].open_versions()[0])
+            })
     }
     fn focus(&mut self, version: usize) {
+        self.keyboard.viewing.insert(
+            self.docs[self.selected].id().into(),
+            self.docs[self.selected].versions[version].id.clone(),
+        );
         for doc in &mut self.docs {
             for v in &mut doc.versions {
                 v.edit.focused = false;
@@ -391,6 +426,9 @@ impl State {
         self.docs[self.selected].versions[version].edit.focused = true;
     }
     fn format(&mut self, marker: &str, tx: &mut Tx) {
+        self.format_pair(marker, marker, tx);
+    }
+    fn format_pair(&mut self, opening: &str, closing: &str, tx: &mut Tx) {
         let version = self.active_version();
         let edit = &mut self.docs[self.selected].versions[version].edit;
         if edit.preedit.is_some() {
@@ -398,24 +436,27 @@ impl State {
         }
         let (from, to) = edit.range();
         let selected = edit.selected().to_owned();
-        let n = marker.len();
+        let n = opening.len();
+        let m = closing.len();
         edit.undo_group(|e| {
-            if selected.starts_with(marker) && selected.ends_with(marker) && selected.len() >= n * 2
+            if selected.starts_with(opening)
+                && selected.ends_with(closing)
+                && selected.len() >= n + m
             {
-                e.insert(&selected[n..selected.len() - n]);
+                e.insert(&selected[n..selected.len() - m]);
                 e.anchor = from;
-                e.focus = to - n * 2;
+                e.focus = to - n - m;
             } else if from >= n
-                && e.text[..from].ends_with(marker)
-                && e.text[to..].starts_with(marker)
+                && e.text[..from].ends_with(opening)
+                && e.text[to..].starts_with(closing)
             {
                 e.anchor = from - n;
-                e.focus = to + n;
+                e.focus = to + m;
                 e.insert(&selected);
                 e.anchor = from - n;
                 e.focus = to - n;
             } else {
-                e.insert(&format!("{marker}{selected}{marker}"));
+                e.insert(&format!("{opening}{selected}{closing}"));
                 e.anchor = from + n;
                 e.focus = to + n;
             }
@@ -452,7 +493,7 @@ impl State {
                 let _ = jobs.send(Job::Save(d.id().into(), d.revision, d.snapshot()));
             }
             let _ = jobs.send(if new {
-                Job::New(self.generation)
+                Job::New
             } else {
                 Job::Reload(self.generation)
             });
@@ -486,7 +527,7 @@ impl State {
     fn flush(&mut self, tx: &mut Tx) -> Result<(), String> {
         self.barrier()?;
         ui::poll(self, 0.0, tx); // Finish pending media insertions before the final save.
-        while self.docs.iter().any(|d| d.pending_action) {
+        while !self.keyboard.idle() || self.docs.iter().any(|d| d.pending_action) {
             self.barrier()?;
             ui::poll(self, 0.0, tx);
         }
@@ -509,6 +550,7 @@ impl State {
 mod design;
 mod glass;
 mod items;
+mod keyboard;
 mod settings;
 mod ui;
 mod verify;
@@ -519,7 +561,7 @@ fn main() {
         return;
     }
     rune::set_app_id("com.studiofour.draft.rune-prototype");
-    App::new(ui::spec())
+    keyboard::app()
         .compositor(glass::Glass::default())
         .chrome(rune::Chrome {
             full_size_content: true,

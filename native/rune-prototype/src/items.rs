@@ -80,6 +80,7 @@ pub(super) fn retarget(s: &mut State, picked: Option<rune::Picked>, at: [f32; 2]
 }
 
 pub(super) fn activate(s: &mut State, di: usize, vi: usize, tx: &mut Tx) {
+    s.keyboard.navigation += 1;
     if !s.docs[di].open_versions().contains(&vi) {
         let id = s.docs[di].id().to_owned();
         let version = s.docs[di].versions[vi].id.clone();
@@ -423,13 +424,34 @@ pub(super) fn finish(
     };
     s.docs[di].pending_action = false;
     s.docs[di].pending_removal = false;
-    let result = match result {
+    let mut result = match result {
         Ok(result) => result,
         Err(e) => {
+            if s.keyboard
+                .action
+                .as_ref()
+                .is_some_and(|(draft, _)| draft == id)
+            {
+                s.keyboard.action = None;
+            }
             s.notice = format!("Could not change draft: {e}");
             return;
         }
     };
+    if let Some((draft, navigation)) = &s.keyboard.action
+        && draft == id
+    {
+        if *navigation != s.keyboard.navigation
+            || s.docs[s.selected].id() != id
+            || s.docs[s.selected]
+                .versions
+                .iter()
+                .any(|v| v.edit.focused && v.edit.preedit.is_some())
+        {
+            result.focus = None;
+        }
+        s.keyboard.action = None;
+    }
     let selected = s.docs[s.selected].id().to_owned();
     let active = s.docs[s.selected].versions[s.active_version()].id.clone();
     let mut doc = s.docs.remove(di);

@@ -149,6 +149,24 @@ pub fn characters(source: &str) -> usize {
         .count()
 }
 
+pub fn underlined(source: &str, color: Color) -> Vec<Span> {
+    let mut out = Vec::new();
+    let mut start = None;
+    for (event, range) in Parser::new(source).into_offset_iter() {
+        if let Event::InlineHtml(tag) = event {
+            match tag.as_ref() {
+                "<u>" => start = Some(range.end),
+                "</u>" => {
+                    if let Some(from) = start.take() {
+                        out.push(Span::new(from, range.start).underline(color));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
 pub fn concealed(source: &str) -> Vec<Span> {
     let mut out = Vec::new();
     let mut hide = |from: usize, to: usize| {

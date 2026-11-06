@@ -319,7 +319,28 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette) -> El {
         }
         3 => body = body.child(sync(s, p)),
         _ => {
-            for shortcut in ["Control + Tab    Next tab", "Control + Shift + Tab    Previous tab", "⌘ / Control + ,    Settings", "⌘ / Control + B    Toggle sidebar", "⌘ / Control + N    New draft", "⌘ / Control + S    Save", "⌘ / Control + I    Italic"] { body = body.child(copy(shortcut, p)); }
+            let command = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
+            for (keys, label, detail) in [
+                ("Alt + .", "New draft from anywhere", "Bring Draft forward with a blank draft, or hide it when it is already active."),
+                ("N", "New draft", "Reuse the most recent draft while it is empty."),
+                ("T", "New version", "Open a copy of the active version in a new tab."),
+                ("1–9", "Switch drafts", "1–8 select the sidebar item; 9 selects the last item."),
+                ("Control + Tab / Control + Shift + Tab", "Switch tabs", "Move forward or backward through open versions, or Settings sections."),
+                ("W", "Close tab", "Keep its writing. The last tab stays open. In Settings, return to drafts."),
+                ("Shift + W", "Close window", "Keep Draft running for the quick-draft shortcut."),
+                ("B", "Toggle sidebar", "Show or hide your drafts."),
+                ("+ / − / 0", "Zoom", "Increase, decrease, or reset the whole interface. The zoom level is saved."),
+                ("Z / Shift + Z / Y", "Undo and redo", "Each version keeps its own history."),
+                ("I / U", "Italic and underline", "Format the selected text."),
+                (",", "Settings", "Open this page."),
+                ("S", "Save", "Save now. Draft also saves as you type."),
+            ] {
+                let keys = if keys.starts_with("Alt") || keys.starts_with("Control") { keys.to_owned() } else { format!("{command} + {keys}") };
+                body = body.child(col().w_full().gap(3.0)
+                    .child(text(format!("{label}    {keys}")).font(TextStyle::new(14.0, 500.0)).color(p.text))
+                    .child(copy(detail, p)));
+            }
+            if let Some(error) = &s.keyboard.shortcut_error { body = body.child(copy(error, p)); }
         }
     }
     row()

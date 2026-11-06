@@ -1,7 +1,7 @@
 // Disposable native-editor experiment. Reuse Draft's real file format and store.
 import {join,resolve} from 'node:path';
 import {DraftStore} from '../../desktop/documents';
-import {fresh,addVersion,editVersion,rename,inboxOrder,type Draft} from '../../src/model';
+import {fresh,addVersion,editVersion,rename,inboxOrder,isEmpty,type Draft} from '../../src/model';
 import {draftAction,saveSnapshot,type DraftAction} from './actions';
 import {ZoSync} from '../../desktop/zo-sync';
 
@@ -25,6 +25,11 @@ export async function startPrototypeHost(root:string,token:string){
     const url=new URL(request.url);
     try{
       if(request.method==='GET'&&url.pathname==='/library'){const library=await store.load();return Response.json({...library,drafts:inboxOrder(library.drafts)});}
+      if(request.method==='POST'&&url.pathname==='/active'){
+        const {id}=await request.json() as {id:string};
+        const library=await store.load();if(!library.drafts.some(d=>d.id===id))throw Error('That draft is no longer available.');
+        await store.setActive(id);return Response.json({active:id});
+      }
       if(request.method==='GET'&&url.pathname==='/sync')return Response.json(sync.status());
       if(request.method==='GET'&&url.pathname==='/sync/workspaces')return Response.json(await sync.workspaces());
       if(request.method==='POST'&&url.pathname.startsWith('/sync/')){
@@ -51,7 +56,11 @@ export async function startPrototypeHost(root:string,token:string){
         return Response.json(await store.load());
       }
       if(request.method==='POST'&&url.pathname==='/new'){
-        const draft=addVersion(rename(fresh(),'Untitled draft')).draft;await store.save(draft);await store.setActive(draft.id);sync.changed();return Response.json(await store.load());
+        const library=await store.load();
+        const recent=[...library.drafts].sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0];
+        const draft=recent&&isEmpty(recent)?recent:fresh();
+        if(draft!==recent){await store.save(draft);sync.changed();}
+        await store.setActive(draft.id);return Response.json(await store.load());
       }
       const media=url.pathname.match(/^\/media\/([a-zA-Z0-9._-]+)$/);
       if(request.method==='POST'&&media){return Response.json(await store.saveMedia(media[1],new Uint8Array(await request.arrayBuffer()),request.headers.get('content-type')??''));}

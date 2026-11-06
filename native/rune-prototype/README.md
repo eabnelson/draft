@@ -24,8 +24,21 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
   and keeps writing in Recovery; Settings can restore the last archived draft.
 - Control+Tab and Control+Shift+Tab cycle forward and backward through the open
   versions, including when the highlighted draft in the sidebar has focus.
+- Cmd/Ctrl-T copies the active version into a new tab. Cmd/Ctrl-W closes that tab
+  without deleting its writing; the final tab stays open. In Settings it returns
+  to drafts. Cmd/Ctrl-1 through 8 select the corresponding sidebar draft, and 9
+  selects the last one. Returning to a draft restores its selected version.
+- Cmd/Ctrl-N opens a blank draft, reusing the most recently created draft while it
+  is empty. Alt-period brings Draft forward with a blank draft from another app,
+  or hides Draft when it is active. The process stays running after closing its
+  window (Cmd/Ctrl-Shift-W) so quick capture still works; Quit ends it.
+  `bun run rune:dev --release --hidden` starts it in the background.
+- Cmd/Ctrl-plus (or equals), minus, and zero zoom in, out, and reset the whole
+  interface. The zoom level is saved under the prototype's own data root.
 - Right-click selected text for Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-I
-  formats italic; Cmd/Ctrl-B toggles the sidebar, as in Draft. Cmd/Ctrl-S saves.
+  formats italic; Cmd/Ctrl-U toggles underline. Cmd/Ctrl-Z undoes, and
+  Cmd/Ctrl-Shift-Z or Cmd/Ctrl-Y redoes in the active version. Cmd/Ctrl-B toggles
+  the sidebar, as in Draft. Cmd/Ctrl-S saves, including from the sidebar.
   Plain Return always inserts a newline.
 - Paste an image. It becomes a Markdown reference plus an image preview below
   the editor. Image insertion is one undo step. If typing continues while the
@@ -66,6 +79,7 @@ The launcher uses a random loopback port and a per-launch authorization token.
 
 ```sh
 bun run rune:check
+bun native/rune-prototype/run.ts --check-shortcuts
 bun run rune:snap
 cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D warnings
 ```
@@ -82,6 +96,19 @@ Linux compilation was checked in the official `rust:1.96.1-bookworm` container,
 with `pkg-config`, `libxkbcommon-dev`, and `libwayland-dev` installed. Running a
 Linux window also requires a desktop session and graphics drivers. X11/Wayland
 interaction and Orca have not been verified.
+
+The shortcut checks cover repeated tab commands while storage replies are pending,
+all numbered sidebar positions, selection retention, empty-draft reuse, zoom
+persistence and menu placement, underline undo/redo, and IME ownership. macOS native
+menus use the same actions. Global quick capture uses Rune's Carbon backend on
+macOS, X11 grabs, or the Wayland GlobalShortcuts portal. An unavailable or already
+claimed shortcut is reported in Settings → Shortcuts; the existing installed app
+may already own Alt-period while both copies are running.
+The optional `--check-shortcuts` scenario needs a GPU. It dispatches registered
+global shortcuts and native menu actions through Rune's headless host, with a
+temporary document library. macOS app-targeted keypresses and menus were also
+checked in the live window; a real desktop-wide keypress and Linux desktop
+activation have not been verified by that test.
 
 ## What this establishes
 

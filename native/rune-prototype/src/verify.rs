@@ -35,6 +35,298 @@ pub fn run() {
     tab_shortcuts();
     popover_placement();
     sidebar_context();
+    shortcut_parity();
+}
+
+fn shortcut_parity() {
+    let mut rt = keyboard::app().headless_runtime((1280.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let count = rt.state.docs[rt.state.selected].versions.len();
+    let copied = rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
+        .edit
+        .text
+        .clone();
+    key(&mut rt, Key::Command('t'));
+    assert!(
+        rt.state.docs[rt.state.selected].pending_action,
+        "Cmd/Ctrl+T must create a version tab"
+    );
+    until(&mut rt, |s| s.docs[s.selected].versions.len() == count + 1);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
+            .edit
+            .text,
+        copied
+    );
+    // Fast repeated presses must not disappear while a preceding host action is pending.
+    for _ in 0..3 {
+        command(&mut rt, 't', false);
+    }
+    until(&mut rt, |s| {
+        s.docs[s.selected].versions.len() == count + 4
+            && s.keyboard.idle()
+            && !s.docs[s.selected].pending_action
+    });
+    assert_eq!(rt.state.active_version(), count + 3);
+    let di = rt.state.selected;
+    let open = rt.state.docs[di].open_versions();
+    let closing = rt.state.docs[di].versions[open[1]].id.clone();
+    let neighbor = rt.state.docs[di].versions[open[2]].id.clone();
+    rt.update(|s, _| s.focus(open[1]));
+    command(&mut rt, 'w', false);
+    until(&mut rt, |s| !s.docs[s.selected].pending_action);
+    assert_eq!(
+        rt.state.docs[di].versions[rt.state.active_version()].id,
+        neighbor,
+        "closing a middle tab selects the next tab"
+    );
+    assert!(
+        rt.state.docs[di].raw["hiddenVersions"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(closing))
+    );
+    let saved_texts = rt.state.docs[di]
+        .versions
+        .iter()
+        .map(|v| v.edit.text.clone())
+        .collect::<Vec<_>>();
+    for _ in 0..count + 6 {
+        command(&mut rt, 'w', false);
+    }
+    until(&mut rt, |s| {
+        s.keyboard.idle() && !s.docs[s.selected].pending_action
+    });
+    assert_eq!(
+        rt.state.docs[di].open_versions().len(),
+        1,
+        "the final tab stays open"
+    );
+    assert_eq!(
+        rt.state.docs[di]
+            .versions
+            .iter()
+            .map(|v| v.edit.text.clone())
+            .collect::<Vec<_>>(),
+        saved_texts,
+        "closing tabs never deletes their writing"
+    );
+    assert!(rt.find("draft-content").is_some());
+    // A pending creation may finish after the user chose another draft.
+    command(&mut rt, 't', false);
+    command(&mut rt, '9', false);
+    let chosen = rt.state.docs[rt.state.selected].id().to_owned();
+    until(&mut rt, |s| s.docs.iter().all(|d| !d.pending_action));
+    assert_eq!(
+        rt.state.docs[rt.state.selected].id(),
+        chosen,
+        "tab creation must not steal later navigation"
+    );
+    rt.update(|s, tx| s.flush(tx).unwrap());
+
+    // Populate enough actual stored drafts to check every numbered position and the last-item rule.
+    for n in 0..10 {
+        let library: Library = rt.state.host.post("/new", &json!({})).unwrap();
+        let mut raw = library
+            .drafts
+            .into_iter()
+            .find(|d| d["id"] == library.active)
+            .unwrap();
+        raw["versions"][0]["text"] = json!(format!("Keyboard item {n}"));
+        rt.state.host.save(&raw).unwrap();
+    }
+    let library = rt.state.host.library().unwrap();
+    rt.update(|s, _| s.install(library));
+    rt.frame(0.016);
+    let listed = rt
+        .state
+        .docs
+        .iter()
+        .map(|d| d.id().to_owned())
+        .collect::<Vec<_>>();
+    command(&mut rt, 'b', false);
+    assert!(!rt.state.sidebar);
+    for n in 1..=9 {
+        command(&mut rt, char::from(b'0' + n), false);
+        let at = if n == 9 {
+            listed.len() - 1
+        } else {
+            (n - 1) as usize
+        };
+        assert_eq!(rt.state.docs[rt.state.selected].id(), listed[at]);
+        assert!(
+            rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
+                .edit
+                .focused
+        );
+    }
+    command(&mut rt, '1', false);
+    let count = rt.state.docs[rt.state.selected].versions.len();
+    command(&mut rt, 't', false);
+    until(&mut rt, |s| s.docs[s.selected].versions.len() == count + 1);
+    let remembered = rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
+        .id
+        .clone();
+    command(&mut rt, '2', false);
+    command(&mut rt, '1', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[rt.state.active_version()].id,
+        remembered,
+        "draft switching retains the active version"
+    );
+    command(&mut rt, ',', false);
+    let count = rt.state.docs[rt.state.selected].versions.len();
+    command(&mut rt, 't', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions.len(),
+        count,
+        "New Version is inactive in Settings"
+    );
+    command(&mut rt, 'w', false);
+    assert!(!rt.state.preferences);
+    command(&mut rt, ',', false);
+    command(&mut rt, '3', false);
+    assert!(!rt.state.preferences, "numbered navigation leaves Settings");
+    command(&mut rt, 'b', false);
+    let selected = rt.state.selected;
+    rt.accessibility_action(
+        &format!("draft-{selected}"),
+        rune::accesskit::Action::Focus,
+        None,
+    );
+    rt.frame(0.016);
+    command(&mut rt, '=', false);
+    assert_eq!(rt.state.keyboard.zoom, 1.1, "zoom works with sidebar focus");
+    command(&mut rt, '+', true);
+    assert_eq!(rt.state.keyboard.zoom, 1.25);
+    secondary(&mut rt, &format!("draft-{selected}"));
+    let [x, y, w, h] = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("editor-menu"))
+        .unwrap()
+        .rect;
+    assert!(
+        x >= 7.0 && y >= 7.0 && x + w <= 1280.0 && y + h <= 820.0,
+        "zoomed context menu stays in the window"
+    );
+    key(&mut rt, Key::Escape);
+    command(&mut rt, '-', false);
+    assert_eq!(rt.state.keyboard.zoom, 1.1);
+    rt.update(|s, _| s.barrier().unwrap());
+    assert_eq!(State::load().keyboard.zoom, 1.1, "zoom survives relaunch");
+    command(&mut rt, '0', false);
+    assert_eq!(rt.state.keyboard.zoom, 1.0);
+    rt.update(|s, tx| s.flush(tx).unwrap());
+
+    let previous_id = rt.state.docs[rt.state.selected].id().to_owned();
+    let previous_count = rt.state.docs.len();
+    command(&mut rt, 'n', false);
+    rt.update(|s, tx| {
+        let di = s.docs.iter().position(|d| d.id() == previous_id).unwrap();
+        s.docs[di].versions[0].edit.insert(" typed while opening");
+        s.edited(di, 0, tx);
+    });
+    until(&mut rt, |s| s.keyboard.idle());
+    let blank = rt.state.docs[rt.state.selected].id().to_owned();
+    assert_ne!(blank, previous_id);
+    assert_eq!(rt.state.docs.len(), previous_count + 1);
+    assert_eq!(rt.state.docs[rt.state.selected].versions.len(), 1);
+    assert!(
+        rt.state.docs[rt.state.selected].versions[0]
+            .edit
+            .text
+            .is_empty()
+    );
+    assert!(
+        rt.state
+            .docs
+            .iter()
+            .find(|d| d.id() == previous_id)
+            .unwrap()
+            .versions[0]
+            .edit
+            .text
+            .ends_with(" typed while opening")
+    );
+    for _ in 0..3 {
+        command(&mut rt, 'n', false);
+    }
+    until(&mut rt, |s| s.keyboard.idle());
+    assert_eq!(
+        rt.state.docs.len(),
+        previous_count + 1,
+        "New Draft reuses the latest empty draft"
+    );
+    assert_eq!(rt.state.docs[rt.state.selected].id(), blank);
+
+    key(&mut rt, Key::Text("underline café 👩🏽‍💻".into()));
+    rt.update(|s, _| {
+        let e = &mut s.docs[s.selected].versions[0].edit;
+        e.anchor = "underline ".len();
+        e.focus = "underline café".len();
+    });
+    command(&mut rt, 'u', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[0].edit.text,
+        "underline <u>café</u> 👩🏽‍💻"
+    );
+    command(&mut rt, 'z', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[0].edit.text,
+        "underline café 👩🏽‍💻"
+    );
+    command(&mut rt, 'z', true);
+    assert!(
+        rt.state.docs[rt.state.selected].versions[0]
+            .edit
+            .text
+            .contains("<u>café</u>")
+    );
+    command(&mut rt, 'z', false);
+    command(&mut rt, 'y', false);
+    assert!(
+        rt.state.docs[rt.state.selected].versions[0]
+            .edit
+            .text
+            .contains("<u>café</u>")
+    );
+    command(&mut rt, 'u', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[0].edit.text, "underline café 👩🏽‍💻",
+        "underline toggles without leaving HTML wrappers"
+    );
+    rt.ime(rune::Ime::Preedit("にほん".into(), Some((0, 9))));
+    rt.frame(0.016);
+    let count = rt.state.docs[rt.state.selected].versions.len();
+    command(&mut rt, 't', false);
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions.len(),
+        count,
+        "IME composition owns its keys"
+    );
+    rt.ime(rune::Ime::Commit("日本".into()));
+    rt.frame(0.016);
+    command(&mut rt, 's', false);
+    until(&mut rt, |s| s.docs.iter().all(|d| d.revision == d.saved));
+    rt.update(|s, tx| s.flush(tx).unwrap());
+    println!(
+        "PASS shortcut parity: new/copy/close tabs, queued presses, numbered drafts and remembered tabs, Settings, persisted zoom, new/empty draft reuse, underline/undo/redo, save, and IME"
+    );
+}
+
+fn command(rt: &mut rune::Runtime<State>, key: char, shift: bool) {
+    rt.key(KeyEvent {
+        key: Key::Command(key),
+        mods: rune::Mods {
+            cmd: true,
+            logo: cfg!(target_os = "macos"),
+            ctrl: !cfg!(target_os = "macos"),
+            shift,
+            ..Default::default()
+        },
+    });
+    rt.frame(0.016);
 }
 
 fn sidebar_context() {

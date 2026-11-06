@@ -14,7 +14,16 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
             let reply = match job {
                 Job::Save(id, revision, value) => Reply::Saved(id, revision, host.save(&value)),
                 Job::Reload(g) => Reply::Library(g, host.library()),
-                Job::New(g) => Reply::Library(g, host.post("/new", &json!({}))),
+                Job::New => Reply::New(host.post("/new", &json!({}))),
+                Job::Active(id) => Reply::Active(host.post("/active", &json!({"id":id}))),
+                Job::Zoom(level) => Reply::Zoom(
+                    std::fs::write(
+                        PathBuf::from(std::env::var_os("DRAFT_RUNE_DATA_ROOT").unwrap())
+                            .join("window-zoom"),
+                        level.to_string(),
+                    )
+                    .map_err(|e| e.to_string()),
+                ),
                 Job::Restore(g) => Reply::Library(g, host.post("/restore", &json!({}))),
                 Job::PrepareAction(id, action) => Reply::PrepareAction(id, action),
                 Job::Action(id, revision, draft, action) => Reply::Action(
@@ -59,11 +68,27 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     let mut changed = !replies.is_empty();
     let active = s.active_version();
     if active != s.active {
+        s.keyboard.navigation += 1;
+        s.keyboard.viewing.insert(
+            s.docs[s.selected].id().into(),
+            s.docs[s.selected].versions[active].id.clone(),
+        );
         s.active = active;
         changed = true;
     }
     for reply in replies {
         match reply {
+            Reply::New(result) => keyboard::accept_new(s, result, tx),
+            Reply::Active(result) => {
+                if let Err(e) = result {
+                    s.notice = format!("Could not remember the selected draft: {e}");
+                }
+            }
+            Reply::Zoom(result) => {
+                if let Err(e) = result {
+                    s.notice = format!("Could not save zoom: {e}");
+                }
+            }
             Reply::Sync(update) => settings::receive(s, update),
             Reply::Saved(id, revision, result) => {
                 if let Some(d) = s.docs.iter_mut().find(|d| d.id() == id) {
@@ -136,6 +161,15 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
             }
         }
     }
+    keyboard::drain(s, tx);
+    if let Some(app) = &s.keyboard.app {
+        for error in app.take_shortcut_errors() {
+            s.keyboard.shortcut_error = Some(format!(
+                "Quick draft (Alt + .) could not be registered: {error}. Another app may be using it."
+            ));
+            changed = true;
+        }
+    }
     if let Some(due) = s.due {
         if due <= Instant::now() {
             s.save();
@@ -155,49 +189,7 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     changed
 }
 fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
-    if key.key == Key::Tab && key.mods.ctrl && !key.mods.logo && !key.mods.alt {
-        if s.preferences {
-            s.settings.cycle(key.mods.shift);
-            return true;
-        }
-        let open = s.docs[s.selected].open_versions();
-        let count = open.len();
-        if count > 1 {
-            let current = open
-                .iter()
-                .position(|&vi| vi == s.active_version())
-                .unwrap_or(0);
-            let step = if key.mods.shift { count - 1 } else { 1 };
-            s.focus(open[(current + step) % count]);
-            tx.scroll_into_view(format!(
-                "version-{}",
-                s.docs[s.selected].versions[s.active].id
-            ));
-        }
-        return true;
-    }
-    if key.is_command('b') {
-        s.sidebar = !s.sidebar;
-        return true;
-    }
-    if key.is_command('n') {
-        s.preferences = false;
-        s.reload(true);
-        return true;
-    }
-    if key.is_command(',') {
-        s.preferences = !s.preferences;
-        s.context = None;
-        s.item_menu = None;
-        return true;
-    }
-    if key.key == Key::Escape && (s.preferences || s.context.is_some() || s.item_menu.is_some()) {
-        s.preferences = false;
-        s.context = None;
-        s.item_menu = None;
-        return true;
-    }
-    false
+    keyboard::key(s, key, tx)
 }
 fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -> bool {
     if s.docs[di].pending_removal {
@@ -212,6 +204,15 @@ fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -
     }
     if key.is_command('i') {
         s.format("*", tx);
+        return true;
+    }
+    if key.is_command('u') {
+        s.format_pair("<u>", "</u>", tx);
+        return true;
+    }
+    if key.is_command('y') {
+        s.docs[di].versions[vi].edit.redo();
+        s.edited(di, vi, tx);
         return true;
     }
     if key.is_command('s') {
@@ -363,7 +364,10 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                     ),
                 ),
         )
-        .on_press(move |s: &mut State| s.focus(vi))
+        .on_press(move |s: &mut State| {
+            s.keyboard.navigation += 1;
+            s.focus(vi);
+        })
         .on_secondary_press(move |s: &mut State, point, _| {
             items::open(s, s.selected, Some(vi), [point.x, point.y]);
         })
@@ -375,6 +379,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
     let narrow = width <= 560.0;
     let (px, py) = if narrow { (24.0, 32.0) } else { (56.0, 50.0) };
     let mut spans = v.spans.clone();
+    spans.extend(design::underlined(&v.edit.text, p.text));
     if !s.source {
         spans.extend(v.hidden.iter().cloned());
     }
@@ -576,16 +581,15 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                         .color(p.muted),
                     ),
             )
-            .on_press(move |s: &mut State| {
+            .on_press_tx(move |s: &mut State, tx| {
                 s.context = None;
                 s.preferences = false;
                 s.item_menu = None;
                 if s.selected == i {
                     s.expanded = !s.expanded;
                 } else {
-                    s.selected = i;
                     s.expanded = true;
-                    s.focus(s.docs[i].open_versions()[0]);
+                    keyboard::open_draft(s, i, tx);
                 }
             })
             .on_secondary_press(move |s: &mut State, point, _| {
@@ -711,7 +715,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         s.dark
     };
     let p = design::Palette::new(dark);
-    let [width, height] = cx.layout_size("draft-root").unwrap_or([1200.0, 820.0]);
+    let viewport = cx.layout_size("draft-root").unwrap_or([1200.0, 820.0]);
+    let [width, height] = viewport.map(|v| v / s.keyboard.zoom);
     let side = if width <= 1100.0 { 235.0 } else { 260.0 };
     let side = if s.sidebar { side } else { 0.0 };
     let open = s.docs[s.selected].open_versions();
@@ -745,11 +750,12 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         content = settings::page(s, dark, side, p);
     }
     let mut root = el()
-        .key("draft-root")
+        .key("draft-page")
         // Ancestor handlers run before control traversal; AppSpec::on_key runs after it.
-        .on_key(global_key)
-        .w_full()
-        .h_full()
+        .w(width)
+        .h(height)
+        .scale(s.keyboard.zoom)
+        .origin(0.0, 0.0)
         .fill(p.background)
         .system_material(rune::SystemMaterial::Popover)
         .child(
@@ -792,11 +798,10 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .map(|menu| menu.at)
                 .or(s.context)
                 .unwrap();
-            root = root.child(
-                el().key("context-anchor")
-                    .size(0.0, 0.0)
-                    .absolute(a[0].clamp(8.0, width - 8.0), a[1].clamp(8.0, height - 8.0)),
-            );
+            root = root.child(el().key("context-anchor").size(0.0, 0.0).absolute(
+                (a[0] / s.keyboard.zoom).clamp(8.0, width - 8.0),
+                (a[1] / s.keyboard.zoom).clamp(8.0, height - 8.0),
+            ));
             popup.anchored_fit(
                 "context-anchor",
                 rune::Side::Bottom,
@@ -806,7 +811,11 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         };
         root = root.child(popup);
     }
-    root
+    el().key("draft-root")
+        .w_full()
+        .h_full()
+        .on_key(global_key)
+        .child(root)
 }
 pub(super) fn spec() -> AppSpec<State> {
     let fonts = design::fonts();
