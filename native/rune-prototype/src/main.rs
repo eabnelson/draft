@@ -550,6 +550,7 @@ impl State {
     }
 }
 
+mod appearance;
 mod caret;
 mod design;
 mod glass;

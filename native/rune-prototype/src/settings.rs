@@ -385,15 +385,14 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
         .child(page_title(SECTIONS[section], p));
     match section {
         0 => {
-            body = body.child(copy("Choose how Draft looks.", p));
-            for (key, label, active, mode) in [
-                ("theme-system", "System", s.follow_theme, 0),
-                ("theme-light", "Light", !s.follow_theme && !s.dark, 1),
-                ("theme-dark", "Dark", !s.follow_theme && s.dark, 2),
-            ] {
-                let label = format!("{label}{}", if active { "  ✓" } else { "" });
-                body = body.child(button(key, &label, p, move |s, _| { s.follow_theme = mode == 0; if mode != 0 { s.dark = mode == 2; } }));
-            }
+            let page_width = cx.layout_size("draft-root").map_or(1200.0, |size| size[0]) / s.keyboard.zoom;
+            let main_width = (page_width - side.max(210.0) - 1.0).max(1.0);
+            let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
+            body = col().w_full().max_w(960.0).padding(padding).gap(24.0)
+                .child(col().w_full().gap(6.0)
+                    .child(page_title("Appearance", p))
+                    .child(copy("Choose your light, or let Draft follow your device.", p).wrap()))
+                .child(appearance::choices(s, cx, (main_width.min(960.0) - padding * 2.0).max(1.0), dark, p));
         }
         1 => body = body.child(copy("Markdown formatting stays in your files. Show the formatting marks while you write, or keep them out of the way.", p))
             .child(button("source", if s.source { "Hide Markdown marks" } else { "Show Markdown marks" }, p, |s, _| s.source = !s.source)),

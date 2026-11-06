@@ -51,6 +51,9 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
   to the editor. Appearance offers system/light/dark, and Editor offers **Show Markdown**. The initial
   dark appearance matches the original app reference, with Markdown punctuation
   concealed in the prose.
+- Appearance offers illustrated Light, Dark, and System previews of Draft's writing
+  workspace, with daylight, moonlight, and a split day/night view. The selected
+  preview has a glass edge; click or use arrow keys to choose a mode.
 - Settings → Shortcuts shows individual beveled keycaps, with Mac modifier symbols
   and Linux Ctrl/Alt labels. Its card grid fits one, two, or three columns as the
   window changes width, and alternate combinations wrap together within a card.
