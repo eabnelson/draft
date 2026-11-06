@@ -17,6 +17,8 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 ## What to try
 
 - Edit the two version columns, switch drafts, and return to your writing.
+- Control+Tab and Control+Shift+Tab cycle forward and backward through the open
+  versions, including when the highlighted draft in the sidebar has focus.
 - Right-click selected text for Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-I
   formats italic; Cmd/Ctrl-B toggles the sidebar, as in Draft. Cmd/Ctrl-S saves.
   Plain Return always inserts a newline.

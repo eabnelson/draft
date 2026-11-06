@@ -32,6 +32,89 @@ pub fn run() {
         "PASS Markdown/Unicode round trip, unknown metadata, and undo retained across equal reload"
     );
     interactions();
+    tab_shortcuts();
+}
+
+fn tab_shortcuts() {
+    let mut rt = App::new(ui::spec())
+        .tab_visits_controls(true)
+        .headless_runtime((1280.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let di = rt.state.selected;
+    rt.update(|s, _| {
+        s.focus(0);
+        for v in &mut s.docs[di].versions {
+            v.edit.anchor = 2;
+            v.edit.focus = 3;
+        }
+    });
+    rt.frame(0.016);
+    let before = rt.state.docs[di].snapshot();
+    let selections = rt.state.docs[di]
+        .versions
+        .iter()
+        .map(|v| (v.edit.anchor, v.edit.focus))
+        .collect::<Vec<_>>();
+    rt.accessibility_action(&format!("draft-{di}"), rune::accesskit::Action::Focus, None);
+    rt.frame(0.016);
+    assert!(
+        rt.state.docs[di].versions.iter().all(|v| !v.edit.focused),
+        "start with the highlighted sidebar draft holding focus"
+    );
+    let cycle = |rt: &mut rune::Runtime<State>, shift| {
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: rune::Mods {
+                ctrl: true,
+                cmd: !cfg!(target_os = "macos"),
+                shift,
+                ..Default::default()
+            },
+        });
+        rt.frame(0.016);
+    };
+    cycle(&mut rt, false);
+    assert_eq!(
+        rt.state.active_version(),
+        1,
+        "Control+Tab from a highlighted sidebar draft must select its next open version"
+    );
+    assert!(rt.state.docs[di].versions[1].edit.focused);
+    cycle(&mut rt, true);
+    assert_eq!(
+        rt.state.active_version(),
+        0,
+        "Control+Shift+Tab switches back while an editor holds focus"
+    );
+    cycle(&mut rt, true);
+    assert_eq!(
+        rt.state.active_version(),
+        1,
+        "backward cycling wraps around"
+    );
+    cycle(&mut rt, false);
+    assert_eq!(rt.state.active_version(), 0, "forward cycling wraps around");
+    assert_eq!(
+        rt.state.selected, di,
+        "cycling versions keeps the highlighted draft"
+    );
+    assert_eq!(
+        rt.state.docs[di].snapshot(),
+        before,
+        "cycling never inserts a tab or changes writing"
+    );
+    assert_eq!(
+        rt.state.docs[di]
+            .versions
+            .iter()
+            .map(|v| (v.edit.anchor, v.edit.focus))
+            .collect::<Vec<_>>(),
+        selections,
+        "each version retains its selection"
+    );
+    println!(
+        "PASS Control+Tab and Control+Shift+Tab from sidebar and editor, wrapping, and selection preservation"
+    );
 }
 
 fn key(rt: &mut rune::Runtime<State>, key: Key) {

@@ -141,6 +141,16 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     changed
 }
 fn global_key(s: &mut State, key: &KeyEvent, _: &mut Tx) -> bool {
+    if key.key == Key::Tab && key.mods.ctrl && !key.mods.logo && !key.mods.alt {
+        // Cycle only the versions this prototype renders, before Rune traverses controls.
+        let count = s.docs[s.selected].versions.len().min(2);
+        if count > 1 {
+            let current = s.active_version();
+            let step = if key.mods.shift { count - 1 } else { 1 };
+            s.focus((current + step) % count);
+        }
+        return true;
+    }
     if key.is_command('b') {
         s.sidebar = !s.sidebar;
         return true;
@@ -684,6 +694,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
     content = content.child(col().grow(1.0).min_w(0.0).h_full().child(columns));
     let mut root = el()
         .key("draft-root")
+        // Ancestor handlers run before control traversal; AppSpec::on_key runs after it.
+        .on_key(global_key)
         .w_full()
         .h_full()
         .fill(p.background)
