@@ -17,17 +17,24 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 ## What to try
 
 - Edit the two version columns, switch drafts, and return to your writing.
-- Select text and use Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-B and I format;
-  Cmd/Ctrl-S saves. Plain Return always inserts a newline.
+- Right-click selected text for Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-I
+  formats italic; Cmd/Ctrl-B toggles the sidebar, as in Draft. Cmd/Ctrl-S saves.
+  Plain Return always inserts a newline.
 - Paste an image. It becomes a Markdown reference plus an image preview below
   the editor. Image insertion is one undo step. If typing continues while the
   image saves, it inserts at the current caret in the original version.
-- Choose **Reload files** to read the saved `.draft` packages. Equal text retains
+- Choose **Settings → Reload files** to read the saved `.draft` packages. Equal text retains
   the live editor's selection and undo history.
-- Switch light/dark appearance or toggle between styled and unstyled source.
+- Settings offers system/light/dark appearance and **Show Markdown**. The initial
+  dark appearance matches the original app reference, with Markdown punctuation
+  concealed in the prose.
 
-The sidebar and editor are Rune, without a webview. Formatting decorates the
-Markdown source; its punctuation remains visible. Ordinary saves and image
+The sidebar and editor are Rune, without a webview. The layout follows the
+existing Draft design: a single frosted surface, joined floating version tabs,
+compact draft previews and status chips, and bottom-corner settings and save
+controls. macOS loads its system font from the OS; Linux retains Rune's font
+fallback. Formatting and concealed punctuation use display spans over the same
+Markdown source. Ordinary saves and image
 imports run on a worker. The Bun host reuses `desktop/documents.ts` and Draft's
 model rather than introducing another document format.
 
@@ -61,7 +68,10 @@ executable checks pass, and the same frontend passes Linux `cargo check`.
 Parley's `complex-scripts` feature is enabled explicitly; without it the
 Japanese-text scenario emitted missing-segmentation-model warnings.
 
-This remains a prototype. It shows at most two versions, keeps undo only for the
+This remains a prototype. The native rendering is an approximation of Draft's
+glass, not a pixel-identical port. Concealed punctuation needs further checks
+for cursor movement and selection around invisible source positions. It shows
+at most two versions, keeps undo only for the
 current process, and does not implement Draft's spelling, full inline-image
 editing, sync, personal-feature builds, native updater, or distribution. Manual
 screen-reader and real input-method checks are still needed. No comparative

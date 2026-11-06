@@ -140,13 +140,33 @@ pub(super) fn poll(s: &mut State, _: f64, tx: &mut Tx) -> bool {
     }
     changed
 }
+fn global_key(s: &mut State, key: &KeyEvent, _: &mut Tx) -> bool {
+    if key.is_command('b') {
+        s.sidebar = !s.sidebar;
+        return true;
+    }
+    if key.is_command('n') {
+        s.reload(true);
+        return true;
+    }
+    if key.is_command(',') {
+        s.preferences = !s.preferences;
+        s.context = None;
+        return true;
+    }
+    if key.key == Key::Escape && (s.preferences || s.context.is_some()) {
+        s.preferences = false;
+        s.context = None;
+        return true;
+    }
+    false
+}
 fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -> bool {
     s.active = vi;
     if s.docs[di].versions[vi].edit.preedit.is_some() {
         return false;
     }
-    if key.is_command('b') {
-        s.format("**", tx);
+    if global_key(s, key, tx) {
         return true;
     }
     if key.is_command('i') {
@@ -164,290 +184,574 @@ fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -
     }
     false
 }
-fn button(key: &str, label: &str, dark: bool, f: impl Fn(&mut State, &mut Tx) + 'static) -> El {
-    let t = tok::theme(dark);
+fn menu_item(
+    key: &str,
+    label: &str,
+    p: design::Palette,
+    f: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
     row()
         .key(key)
         .role("button")
         .label(label)
         .focusable(true)
-        .center_y()
-        .px(13.0)
+        .w_full()
         .h(32.0)
-        .radius(8.0)
-        .fill(t.card)
-        .hover(t.control_off)
-        .border(1.0, t.card_border)
-        .child(text(label).font(TextStyle::new(12.0, 500.0)).color(t.text))
+        .px(10.0)
+        .radius(6.0)
+        .center_y()
+        .hover(p.selected)
+        .child(text(label).font(TextStyle::new(13.0, 400.0)).color(p.text))
         .on_press_tx(f)
 }
-fn column(s: &State, di: usize, vi: usize) -> El {
-    let t = tok::theme(s.dark);
-    let doc = &s.docs[di];
-    let v = &doc.versions[vi];
-    let mut content = col().w_full().gap(22.0).padding(30.0).child(
-        text_input(&v.edit, BODY)
-            .key(format!("editor-{}", v.id))
-            .role("textbox")
-            .label(format!("Version {} Markdown editor", v.number))
-            .w_full()
-            .min_h(560.0)
-            .color(t.text)
-            .spans(if s.source { vec![] } else { v.spans.clone() })
-            .on_edit(move |s: &mut State| &mut s.docs[di].versions[vi].edit)
-            .on_input_change(move |s: &mut State, tx| s.edited(di, vi, tx))
-            .on_input_key(move |s, key, tx| input_key(s, di, vi, key, tx))
-            .on_input_paste(move |s: &mut State, data, tx| {
-                if let Some(image) = data.image() {
-                    s.paste_image(di, vi, image.png().to_vec(), tx);
-                    true
+fn menu(s: &State, p: design::Palette, at: [f32; 2]) -> El {
+    let mut menu = col()
+        .key("editor-menu")
+        .w(238.0)
+        .padding(6.0)
+        .radius(12.0)
+        .fill(p.menu.alpha(0.98))
+        .border(1.0, p.line)
+        .shadow(8.0, 30.0, Color::BLACK.alpha(0.2))
+        .absolute(at[0], at[1]);
+    if s.preferences {
+        menu = menu
+            .child(
+                text("Appearance")
+                    .font(TextStyle::new(11.0, 500.0))
+                    .color(p.muted)
+                    .px(10.0)
+                    .py(6.0),
+            )
+            .child(menu_item("theme-system", "System", p, |s, _| {
+                s.follow_theme = true;
+                s.preferences = false;
+            }))
+            .child(menu_item("theme-light", "Light", p, |s, _| {
+                s.dark = false;
+                s.follow_theme = false;
+                s.preferences = false;
+            }))
+            .child(menu_item("theme-dark", "Dark", p, |s, _| {
+                s.dark = true;
+                s.follow_theme = false;
+                s.preferences = false;
+            }))
+            .child(el().w_full().h(1.0).fill(p.line))
+            .child(menu_item("new-draft", "New draft", p, |s, _| {
+                s.preferences = false;
+                s.reload(true);
+            }))
+            .child(menu_item(
+                "source",
+                if s.source {
+                    "Hide Markdown"
                 } else {
-                    false
-                }
-            }),
-    );
+                    "Show Markdown"
+                },
+                p,
+                |s, _| {
+                    s.source = !s.source;
+                    s.preferences = false;
+                },
+            ))
+            .child(menu_item("reload", "Reload files", p, |s, _| {
+                s.preferences = false;
+                s.reload(false);
+            }));
+    } else {
+        menu = menu
+            .child(menu_item("bold", "Bold", p, |s, tx| {
+                s.context = None;
+                s.format("**", tx);
+            }))
+            .child(menu_item("italic", "Italic", p, |s, tx| {
+                s.context = None;
+                s.format("*", tx);
+            }))
+            .child(menu_item("code", "Code", p, |s, tx| {
+                s.context = None;
+                s.format("`", tx);
+            }))
+            .child(el().w_full().h(1.0).fill(p.line))
+            .child(menu_item("undo", "Undo", p, |s, tx| {
+                s.context = None;
+                let vi = s.active_version();
+                s.docs[s.selected].versions[vi].edit.undo();
+                s.focus(vi);
+                s.edited(s.selected, vi, tx);
+            }))
+            .child(menu_item("redo", "Redo", p, |s, tx| {
+                s.context = None;
+                let vi = s.active_version();
+                s.docs[s.selected].versions[vi].edit.redo();
+                s.focus(vi);
+                s.edited(s.selected, vi, tx);
+            }));
+    }
+    menu
+}
+fn tab(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
+    let d = &s.docs[s.selected];
+    let v = &d.versions[vi];
+    let title = d.raw["versions"][vi]["name"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| design::title(&v.edit.text));
+    let source = if v.edit.selected().is_empty() {
+        v.edit.text.as_str()
+    } else {
+        v.edit.selected()
+    };
+    let time = design::reading(source);
+    let count = format!("{} char", design::characters(source));
+    let tw = time.len() as f32 * 5.8 + 20.0;
+    let cw = count.len() as f32 * 5.8 + 20.0;
+    let inset = if !s.sidebar && vi == 0 { 84.0 } else { 8.0 };
+    let title_width = (title.chars().count() as f32 * 6.3 + 26.0)
+        .clamp(48.0, 260.0)
+        .min((width - inset - 8.0 - tw - cw - 10.5).max(48.0));
+    let widths = [title_width, tw, cw];
+    let fill = if vi == s.active_version() {
+        p.selected
+    } else {
+        p.glass
+    };
+    row()
+        .key(format!("tab-{}", v.id))
+        .role("tab")
+        .label(format!("Version {} · {title}", v.number))
+        .focus_selected(vi == s.active_version())
+        .h(40.0)
+        .w_full()
+        .absolute(0.0, 0.0)
+        .window_drag()
+        .child(
+            row()
+                .absolute(inset, 6.0)
+                .h(28.0)
+                .gap(5.25)
+                .child(design::pill(&widths, fill).absolute(0.0, 0.0))
+                .child(
+                    row().w(title_width).h(28.0).px(13.0).center_y().child(
+                        text(title)
+                            .font(TextStyle::new(12.5, 550.0))
+                            .color(p.text)
+                            .truncate(),
+                    ),
+                )
+                .child(
+                    row()
+                        .w(tw)
+                        .h(28.0)
+                        .px(10.0)
+                        .center_y()
+                        .child(text(time).font(TextStyle::new(11.5, 400.0)).color(p.muted)),
+                )
+                .child(
+                    row().w(cw).h(28.0).px(10.0).center_y().child(
+                        text(count)
+                            .key(format!("count-{vi}"))
+                            .font(TextStyle::new(11.5, 400.0))
+                            .color(p.muted),
+                    ),
+                ),
+        )
+        .on_press(move |s: &mut State| s.focus(vi))
+}
+fn column(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
+    let di = s.selected;
+    let d = &s.docs[di];
+    let v = &d.versions[vi];
+    let narrow = width <= 560.0;
+    let (px, py) = if narrow { (24.0, 32.0) } else { (56.0, 50.0) };
+    let mut spans = v.spans.clone();
+    if !s.source {
+        spans.extend(v.hidden.iter().cloned());
+    }
+    let editor = text_input(&v.edit, BODY)
+        .key(format!("editor-{}", v.id))
+        .role("textbox")
+        .label(format!("Version {} Markdown editor", v.number))
+        .w_full()
+        .min_h(560.0)
+        .color(p.text)
+        .spans(spans)
+        .on_edit(move |s: &mut State| &mut s.docs[di].versions[vi].edit)
+        .on_input_change(move |s: &mut State, tx| s.edited(di, vi, tx))
+        .on_input_key(move |s, key, tx| input_key(s, di, vi, key, tx))
+        .on_secondary_press(move |s: &mut State, point, _| {
+            s.focus(vi);
+            s.preferences = false;
+            s.context = Some([point.x, point.y]);
+        })
+        .on_input_paste(move |s: &mut State, data, tx| {
+            if let Some(image) = data.image() {
+                s.paste_image(di, vi, image.png().to_vec(), tx);
+                true
+            } else {
+                false
+            }
+        });
+    let mut paper = col()
+        .w_full()
+        .max_w(790.0)
+        .px(px)
+        .py(py)
+        .gap(12.0)
+        .child(editor);
     for src in &v.media {
-        if let Some(image) = s.images.get(&s.image_path(doc.id(), src)) {
+        if let Some(image) = s.images.get(&s.image_path(d.id(), src)) {
             let ratio = image
                 .size()
                 .map_or(1.5, |[w, h]| w as f32 / h.max(1) as f32);
-            content = content.child(
+            paper = paper.child(
                 el().key(format!("image-{src}"))
                     .role("img")
                     .label("Pasted image attachment")
                     .w_full()
-                    .h((360.0 / ratio).clamp(60.0, 260.0))
+                    .h(((width - px * 2.0) / ratio).clamp(60.0, 500.0))
                     .radius(10.0)
                     .pixels(image.pixels()),
             );
         }
     }
-    let header = row()
-        .w_full()
-        .h(58.0)
-        .px(28.0)
-        .center_y()
-        .gap(12.0)
-        .child(
-            text(format!("VERSION {:02}", v.number))
-                .font(TextStyle::new(11.0, 600.0))
-                .color(t.text_secondary),
-        )
-        .child(el().grow(1.0))
-        .child(
-            text(format!("{} words", v.edit.text.split_whitespace().count()))
-                .key(format!("count-{vi}"))
-                .font(TextStyle::new(11.0, 400.0))
-                .color(t.text_secondary),
-        );
     col()
         .key(format!("version-{}", v.id))
         .grow(1.0)
         .min_w(0.0)
         .h_full()
         .min_h(0.0)
-        .fill(t.card)
-        .child(header)
-        .child(el().h(1.0).w_full().fill(t.card_border))
         .child(
             col()
                 .key(format!("scroll-{}", v.id))
+                .w_full()
+                .h_full()
+                .min_h(0.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .clip_fade(0.0, 22.0, 0.0, 0.0)
+                .child(
+                    col()
+                        .w_full()
+                        .items_center()
+                        .child(el().h(40.0))
+                        .child(paper)
+                        .child(el().h(500.0)),
+                ),
+        )
+        .child(tab(s, vi, width, p))
+}
+fn date_label(value: &Value) -> String {
+    let iso = value.as_str().unwrap_or("");
+    let months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let month = iso
+        .get(5..7)
+        .and_then(|s| s.parse::<usize>().ok())
+        .and_then(|m| months.get(m.saturating_sub(1)));
+    match (month, iso.get(8..10).and_then(|s| s.parse::<usize>().ok())) {
+        (Some(m), Some(day)) => format!("{m} {day}"),
+        _ => String::new(),
+    }
+}
+fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
+    let mut list = col().w_full().px(8.0).gap(4.0);
+    for (i, d) in s.docs.iter().enumerate() {
+        let title = d.raw["title"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Untitled draft");
+        let latest = d.versions.last().unwrap();
+        let prose = design::prose(&latest.edit.text);
+        let summary = d.raw["summary"]["text"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                let mut lines = prose.lines().filter(|s| !s.trim().is_empty());
+                let first = lines.next().unwrap_or("");
+                let rest = lines.collect::<Vec<_>>().join(" ");
+                if first.to_lowercase() == title.to_lowercase() {
+                    rest
+                } else {
+                    format!("{first} {rest}")
+                }
+            });
+        let drafting = d.versions.len() > 1 || prose.split_whitespace().count() >= 50;
+        let (chip, chip_text) = p.stage(dark, drafting);
+        let selected = i == s.selected;
+        let mut entry = col()
+            .key(format!("draft-{i}"))
+            .role("button")
+            .label(title)
+            .focusable(true)
+            .w_full()
+            .padding(10.0)
+            .gap(4.0)
+            .radius(8.0)
+            .fill(if selected {
+                p.selected
+            } else {
+                Color::TRANSPARENT
+            })
+            .hover(p.glass)
+            .child(
+                row()
+                    .w_full()
+                    .gap(8.0)
+                    .center_y()
+                    .child(
+                        text(title)
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .truncate()
+                            .font(TextStyle::new(13.0, 550.0))
+                            .color(p.text),
+                    )
+                    .child(
+                        text(date_label(&d.raw["updatedAt"]))
+                            .font(TextStyle::new(11.0, 400.0))
+                            .color(p.muted),
+                    ),
+            );
+        if !summary.trim().is_empty() {
+            entry = entry.child(
+                text(summary)
+                    .w_full()
+                    .max_lines(3)
+                    .font(TextStyle {
+                        line_height: 16.8,
+                        ..TextStyle::new(12.0, 400.0)
+                    })
+                    .color(p.muted),
+            );
+        }
+        entry = entry
+            .child(
+                row()
+                    .w_full()
+                    .center_y()
+                    .child(
+                        row()
+                            .h(18.0)
+                            .px(7.0)
+                            .center_y()
+                            .radius(9.0)
+                            .fill(chip)
+                            .child(
+                                text(if drafting { "Drafting" } else { "Idea" })
+                                    .font(TextStyle::new(10.5, 400.0))
+                                    .color(chip_text),
+                            ),
+                    )
+                    .child(el().grow(1.0))
+                    .child(
+                        text(format!(
+                            "{} {}",
+                            d.versions.len(),
+                            if d.versions.len() == 1 {
+                                "version"
+                            } else {
+                                "versions"
+                            }
+                        ))
+                        .font(TextStyle::new(11.0, 400.0))
+                        .color(p.muted),
+                    ),
+            )
+            .on_press(move |s: &mut State| {
+                s.context = None;
+                s.preferences = false;
+                if s.selected == i {
+                    s.expanded = !s.expanded;
+                } else {
+                    s.selected = i;
+                    s.expanded = true;
+                    s.focus(0);
+                }
+            });
+        let mut group = col().w_full().radius(8.0).child(entry);
+        if selected && s.expanded {
+            for (vi, v) in d.versions.iter().enumerate() {
+                group = group.child(
+                    row()
+                        .key(format!("sidebar-version-{}", v.id))
+                        .w_full()
+                        .px(10.0)
+                        .h(23.0)
+                        .center_y()
+                        .role("button")
+                        .label(format!("Version {}", v.number))
+                        .focusable(true)
+                        .child(
+                            text(design::title(&v.edit.text))
+                                .truncate()
+                                .font(TextStyle::new(
+                                    12.0,
+                                    if vi == s.active_version() {
+                                        550.0
+                                    } else {
+                                        400.0
+                                    },
+                                ))
+                                .color(if vi == s.active_version() {
+                                    p.text
+                                } else {
+                                    p.muted
+                                }),
+                        )
+                        .on_press(move |s: &mut State| s.focus(vi)),
+                );
+            }
+        }
+        list = list.child(group);
+    }
+    let footer = row().w_full().h(52.0).px(12.0).center_y().child(
+        row()
+            .h(28.0)
+            .gap(5.25)
+            .child(design::pill(&[32.0, 32.0], p.glass).absolute(0.0, 0.0))
+            .child(
+                row()
+                    .key("settings")
+                    .size(32.0, 28.0)
+                    .center()
+                    .role("button")
+                    .label("Settings")
+                    .focusable(true)
+                    .child(rune::icon(&design::SETTINGS, 14.0).color(p.muted))
+                    .on_press(|s: &mut State| {
+                        s.preferences = !s.preferences;
+                        s.context = None;
+                    }),
+            )
+            .child(
+                row()
+                    .key("save-status")
+                    .size(32.0, 28.0)
+                    .center()
+                    .role("status")
+                    .label(&s.notice)
+                    .help(&s.notice)
+                    .child(rune::icon(&design::CLOUD, 14.0).color(p.muted)),
+            ),
+    );
+    col()
+        .key("sidebar")
+        .w(width)
+        .h_full()
+        .min_h(0.0)
+        .child(el().h(40.0).w_full().window_drag())
+        .child(
+            col()
                 .grow(1.0)
                 .min_h(0.0)
                 .w_full()
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(content),
+                .child(list),
         )
+        .child(footer)
 }
 fn view(s: &State, cx: &mut Cx<State>) -> El {
-    let t = tok::theme(s.dark);
-    let di = s.selected;
-    let doc = &s.docs[di];
-    let mut list = col().w_full().gap(6.0);
-    for (i, d) in s.docs.iter().enumerate() {
-        let title = d.raw["title"].as_str().unwrap_or("Untitled draft");
-        list = list.child(
-            col()
-                .key(format!("draft-{i}"))
-                .role("button")
-                .label(title)
-                .focusable(true)
-                .px(14.0)
-                .py(14.0)
-                .gap(7.0)
-                .radius(10.0)
-                .fill(if i == di {
-                    t.control_off
-                } else {
-                    Color::TRANSPARENT
-                })
-                .hover(t.control_off)
-                .child(text(title).font(TextStyle::new(13.0, 500.0)).color(t.text))
-                .child(
-                    text(format!("{} versions", d.versions.len()))
-                        .font(TextStyle::new(11.0, 400.0))
-                        .color(t.text_secondary),
-                )
-                .on_press(move |s: &mut State| {
-                    s.selected = i;
-                    s.focus(0);
-                }),
-        );
-    }
-    let sidebar = col()
-        .w(232.0)
-        .h_full()
-        .padding(18.0)
-        .gap(26.0)
-        .fill(t.bg)
-        .child(
-            row().h(42.0).center_y().child(
-                text("Draft")
-                    .font(TextStyle::new(25.0, 600.0))
-                    .color(t.text),
-            ),
-        )
-        .child(button("new-draft", "+ New draft", s.dark, |s, _| {
-            s.reload(true)
-        }))
-        .child(
-            text("YOUR DRAFTS")
-                .font(TextStyle::new(10.0, 600.0))
-                .color(t.text_secondary),
-        )
-        .child(list)
-        .child(el().grow(1.0))
-        .child(
-            text("A little room to think.")
-                .font(TextStyle::new(12.0, 400.0).italic())
-                .color(t.text_secondary),
-        )
-        .child(
-            text("Native editor experiment\nDisposable writing library")
-                .font(TextStyle::new(10.0, 400.0))
-                .color(t.text_secondary),
-        );
-    let titlebar = row()
-        .w_full()
-        .h(60.0)
-        .px(26.0)
-        .gap(12.0)
-        .center_y()
-        .child(
-            text(doc.raw["title"].as_str().unwrap_or("Untitled draft"))
-                .font(TextStyle::new(16.0, 500.0))
-                .color(t.text),
-        )
-        .child(el().grow(1.0))
-        .child(button(
-            "theme",
-            if s.dark { "Light" } else { "Dark" },
-            s.dark,
-            |s, _| s.dark = !s.dark,
-        ));
-    let toolbar = row()
-        .w_full()
-        .h(52.0)
-        .px(24.0)
-        .gap(8.0)
-        .center_y()
-        .child(button("bold", "Bold", s.dark, |s, tx| s.format("**", tx)))
-        .child(button("italic", "Italic", s.dark, |s, tx| {
-            s.format("*", tx)
-        }))
-        .child(button("code", "Code", s.dark, |s, tx| s.format("`", tx)))
-        .child(button("undo", "Undo", s.dark, |s, tx| {
-            let vi = s.active_version();
-            s.docs[s.selected].versions[vi].edit.undo();
-            s.focus(vi);
-            s.edited(s.selected, vi, tx);
-        }))
-        .child(button("redo", "Redo", s.dark, |s, tx| {
-            let vi = s.active_version();
-            s.docs[s.selected].versions[vi].edit.redo();
-            s.focus(vi);
-            s.edited(s.selected, vi, tx);
-        }))
-        .child(el().grow(1.0))
-        .child(button(
-            "source",
-            if s.source { "Styled" } else { "Source" },
-            s.dark,
-            |s, _| s.source = !s.source,
-        ))
-        .child(button("reload", "Reload files", s.dark, |s, _| {
-            s.reload(false)
-        }));
-    let mut columns = row().w_full().grow(1.0).min_h(0.0);
-    for vi in 0..doc.versions.len().min(2) {
+    let dark = if s.follow_theme {
+        cx.system_dark()
+    } else {
+        s.dark
+    };
+    let p = design::Palette::new(dark);
+    let [width, height] = cx.layout_size("draft-root").unwrap_or([1200.0, 820.0]);
+    let side = if width <= 1100.0 { 235.0 } else { 260.0 };
+    let side = if s.sidebar { side } else { 0.0 };
+    let count = s.docs[s.selected].versions.len().min(2);
+    let column_width = (width - side) / count.max(1) as f32;
+    let mut columns = row().w_full().h_full().min_h(0.0);
+    for vi in 0..count {
         if vi > 0 {
-            columns = columns.child(el().w(1.0).h_full().fill(t.card_border));
+            columns = columns.child(el().w(1.0).h_full().fill(p.line));
         }
-        columns = columns.child(column(s, di, vi));
+        columns = columns.child(column(s, vi, column_width, p));
     }
-    let status = row()
-        .w_full()
-        .h(34.0)
-        .px(26.0)
-        .center_y()
-        .gap(12.0)
-        .child(
-            text(&s.notice)
-                .key("save-status")
-                .role("status")
-                .font(TextStyle::new(11.0, 400.0))
-                .color(t.text_secondary),
-        )
-        .child(el().grow(1.0))
-        .child(
-            text("Markdown · Separate undo for each version")
-                .font(TextStyle::new(10.0, 400.0))
-                .color(t.text_secondary),
-        );
-    let inset = if cx.titlebar_inset() > 0.0 { 30.0 } else { 0.0 };
-    col()
+    let mut content = row().w_full().h_full().min_h(0.0);
+    if s.sidebar {
+        content = content
+            .child(sidebar(s, dark, side, p))
+            .child(el().w(1.0).h_full().fill(p.line));
+    }
+    content = content.child(col().grow(1.0).min_w(0.0).h_full().child(columns));
+    let mut root = el()
         .key("draft-root")
         .w_full()
         .h_full()
-        .fill(t.bg)
-        .child(el().w_full().h(inset).window_drag())
+        .fill(p.background)
+        .system_material(rune::SystemMaterial::Popover)
         .child(
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(sidebar)
-                .child(el().w(1.0).h_full().fill(t.card_border))
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .h_full()
-                        .child(titlebar)
-                        .child(toolbar)
-                        .child(columns)
-                        .child(status),
-                ),
+            el().w_full()
+                .h_full()
+                .absolute(0.0, 0.0)
+                .fill(p.background.alpha(if dark { 0.78 } else { 0.8 })),
         )
+        .child(content);
+    if s.context.is_some() || s.preferences {
+        root = root.child(
+            el().w_full()
+                .h_full()
+                .absolute(0.0, 0.0)
+                .on_press(|s: &mut State| {
+                    s.context = None;
+                    s.preferences = false;
+                }),
+        );
+        let at = if s.preferences {
+            [12.0, (height - 332.0).max(40.0)]
+        } else {
+            let a = s.context.unwrap();
+            [
+                a[0].min(width - 250.0).max(0.0),
+                a[1].min(height - 190.0).max(0.0),
+            ]
+        };
+        root = root.child(menu(s, p, at));
+    }
+    root
 }
 pub(super) fn spec() -> AppSpec<State> {
+    let fonts = design::fonts();
+    let sans = if cfg!(target_os = "macos") && !fonts.is_empty() {
+        ".SF NS"
+    } else {
+        "Inter"
+    };
     AppSpec {
-        min_size: Some((1060.0, 650.0)),
+        min_size: Some((780.0, 560.0)),
         setup: Some(setup),
         poll: Some(poll),
+        on_key: Some(global_key),
+        fonts,
+        families: (sans, "ui-monospace"),
         scenes: &[
-            ("dark", |s| s.dark = true),
+            ("light", |s| {
+                s.dark = false;
+                s.follow_theme = false;
+            }),
+            ("dark", |s| {
+                s.dark = true;
+                s.follow_theme = false;
+            }),
             ("long", |s| {
                 for d in &mut s.docs {
                     for v in &mut d.versions {
                         v.edit=TextEdit::new("A paragraph with café, 日本語, and 👩🏽‍💻. Keep the cursor and the thought together.\n\n".repeat(250));
                         v.spans = styled(&v.edit.text);
+                        v.hidden = design::concealed(&v.edit.text);
+                        v.media = media_paths(&v.edit.text);
                     }
                 }
             }),
         ],
-        ..AppSpec::new("Draft · Rune prototype", (1280.0, 820.0), State::load, view)
+        ..AppSpec::new("Draft · Rune prototype", (1200.0, 820.0), State::load, view)
     }
 }

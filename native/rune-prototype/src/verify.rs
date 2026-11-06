@@ -115,6 +115,8 @@ fn interactions() {
         e.focus = "café 日本語".len();
     });
     rt.frame(0.016);
+    rt.update(|s, _| s.context = Some([300.0, 200.0]));
+    rt.frame(0.016);
     click(&mut rt, "bold");
     assert_eq!(
         rt.state.docs[di].versions[1].edit.text, "café **日本語** 👩🏽‍💻",
@@ -134,7 +136,7 @@ fn interactions() {
         rt.state.docs[di].versions[1].edit.text.is_empty(),
         "Backspace must remove the entire grapheme"
     );
-    println!("PASS toolbar selection, atomic formatting undo, and joined-emoji Backspace");
+    println!("PASS context-menu formatting, atomic undo, and joined-emoji Backspace");
 
     key(&mut rt, Key::Text("Before save".into()));
     rt.update(|s, _| s.save());

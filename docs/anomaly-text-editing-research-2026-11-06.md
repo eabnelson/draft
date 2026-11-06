@@ -108,7 +108,7 @@ events, joined emoji, independent undo, save concurrency, media, and accessible
 names. Rust compilation also passed in a Debian Linux container.
 
 Keep the current application on Tauri while evaluating the remaining writing
-requirements: source punctuation versus a prose-first surface, truly inline
+requirements: cursor behavior around concealed Markdown punctuation, truly inline
 images, durable undo across restarts, spelling, real IME and screen-reader
 behavior, and X11/Wayland interaction. A Rust personal-feature build and rollback
 path also remains necessary. The prototype does not settle memory, latency, or

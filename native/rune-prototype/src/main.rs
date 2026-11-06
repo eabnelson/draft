@@ -16,7 +16,7 @@ use std::{
 
 const DEBOUNCE: Duration = Duration::from_millis(600);
 const BODY: TextStyle = TextStyle {
-    line_height: 30.0,
+    line_height: 32.3,
     ..TextStyle::new(17.0, 400.0)
 };
 
@@ -93,6 +93,7 @@ struct Version {
     number: u64,
     edit: TextEdit,
     spans: Vec<Span>,
+    hidden: Vec<Span>,
     media: Vec<String>,
 }
 struct Document {
@@ -150,6 +151,11 @@ struct State {
     active: usize,
     dark: bool,
     source: bool,
+    follow_theme: bool,
+    sidebar: bool,
+    expanded: bool,
+    preferences: bool,
+    context: Option<[f32; 2]>,
     generation: u64,
     due: Option<Instant>,
     notice: String,
@@ -164,7 +170,11 @@ fn styled(source: &str) -> Vec<Span> {
     for (event, range) in Parser::new(source).into_offset_iter() {
         let span = Span::new(range.start, range.end);
         match event {
-            Event::Start(Tag::Heading { .. }) => spans.push(span.bold().size(23.0)),
+            Event::Start(Tag::Heading { level, .. }) => spans.push(span.bold().size(match level {
+                pulldown_cmark::HeadingLevel::H1 => 25.5,
+                pulldown_cmark::HeadingLevel::H2 => 22.1,
+                _ => 19.55,
+            })),
             Event::Start(Tag::Strong) => spans.push(span.bold()),
             Event::Start(Tag::Emphasis) => spans.push(span.italic()),
             Event::Code(_) | Event::Start(Tag::CodeBlock(_)) => spans.push(span.mono()),
@@ -197,8 +207,13 @@ impl State {
             docs: vec![],
             selected: 0,
             active: 0,
-            dark: false,
+            dark: true,
             source: false,
+            follow_theme: false,
+            sidebar: true,
+            expanded: false,
+            preferences: false,
+            context: None,
             generation: 0,
             due: None,
             notice: "All changes saved".into(),
@@ -242,6 +257,7 @@ impl State {
                         number: v["number"].as_u64().unwrap(),
                         edit: TextEdit::new(value),
                         spans: styled(value),
+                        hidden: design::concealed(value),
                         media: media_paths(value),
                     }
                 })
@@ -292,6 +308,7 @@ impl State {
         let d = &mut self.docs[doc];
         d.revision += 1;
         d.versions[version].spans = styled(&d.versions[version].edit.text);
+        d.versions[version].hidden = design::concealed(&d.versions[version].edit.text);
         d.versions[version].media = media_paths(&d.versions[version].edit.text);
         self.due = Some(Instant::now() + DEBOUNCE);
         self.notice = "Saving…".into();
@@ -421,6 +438,7 @@ impl State {
     }
 }
 
+mod design;
 mod ui;
 mod verify;
 
@@ -431,6 +449,16 @@ fn main() {
     }
     rune::set_app_id("com.studiofour.draft.rune-prototype");
     App::new(ui::spec())
+        .chrome(rune::Chrome {
+            full_size_content: true,
+            traffic_lights: Some((16.0, 13.0)),
+            drag_regions: true,
+        })
+        .window_options(rune::WindowOptions {
+            transparent: true,
+            ..Default::default()
+        })
+        .font_smoothing(rune::FontSmoothing::Off)
         .standard_menus()
         .tab_visits_controls(true)
         .on_close(|s, tx| {
