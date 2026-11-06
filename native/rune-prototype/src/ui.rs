@@ -208,22 +208,20 @@ fn menu_item(
         .w_full()
         .h(32.0)
         .px(10.0)
-        .radius(6.0)
+        .radius(9.0)
+        .continuous_corners()
         .center_y()
         .hover(p.selected)
         .child(text(label).font(TextStyle::new(13.0, 400.0)).color(p.text))
         .on_press_tx(f)
 }
-fn menu(s: &State, p: design::Palette, at: [f32; 2]) -> El {
+fn menu(s: &State, dark: bool, p: design::Palette) -> El {
     let mut menu = col()
         .key("editor-menu")
         .w(238.0)
         .padding(6.0)
-        .radius(12.0)
-        .fill(p.menu.alpha(0.98))
-        .border(1.0, p.line)
-        .shadow(8.0, 30.0, Color::BLACK.alpha(0.2))
-        .absolute(at[0], at[1]);
+        .radius(16.0)
+        .continuous_corners();
     if s.preferences {
         menu = menu
             .child(
@@ -299,9 +297,16 @@ fn menu(s: &State, p: design::Palette, at: [f32; 2]) -> El {
                 s.edited(s.selected, vi, tx);
             }));
     }
-    menu
+    design::glass_surface(menu, dark)
+        .fill(p.menu.alpha(0.84))
+        .backdrop_blur(22.0)
+        .shadow(
+            8.0,
+            24.0,
+            Color::BLACK.alpha(if dark { 0.18 } else { 0.10 }),
+        )
 }
-fn tab(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
+fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
     let d = &s.docs[s.selected];
     let v = &d.versions[vi];
     let title = d.raw["versions"][vi]["name"]
@@ -322,11 +327,6 @@ fn tab(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
         .clamp(48.0, 260.0)
         .min((width - inset - 8.0 - tw - cw - 10.5).max(48.0));
     let widths = [title_width, tw, cw];
-    let fill = if vi == s.active_version() {
-        p.selected
-    } else {
-        p.glass
-    };
     row()
         .key(format!("tab-{}", v.id))
         .role("tab")
@@ -341,7 +341,9 @@ fn tab(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
                 .absolute(inset, 6.0)
                 .h(28.0)
                 .gap(5.25)
-                .child(design::pill(&widths, fill).absolute(0.0, 0.0))
+                .child(
+                    design::glass_pill(&widths, dark, vi == s.active_version()).absolute(0.0, 0.0),
+                )
                 .child(
                     row().w(title_width).h(28.0).px(13.0).center_y().child(
                         text(title)
@@ -369,7 +371,7 @@ fn tab(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
         )
         .on_press(move |s: &mut State| s.focus(vi))
 }
-fn column(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
+fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
     let di = s.selected;
     let d = &s.docs[di];
     let v = &d.versions[vi];
@@ -451,7 +453,7 @@ fn column(s: &State, vi: usize, width: f32, p: design::Palette) -> El {
                         .child(el().h(500.0)),
                 ),
         )
-        .child(tab(s, vi, width, p))
+        .child(tab(s, vi, width, dark, p))
 }
 fn date_label(value: &Value) -> String {
     let iso = value.as_str().unwrap_or("");
@@ -630,7 +632,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
             group = group.child(versions);
         }
         if selected {
-            group = design::selection_glass(group, dark);
+            group = design::glass_surface(group, dark);
         }
         list = list.child(group);
     }
@@ -699,7 +701,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         if vi > 0 {
             columns = columns.child(el().w(1.0).h_full().fill(p.line));
         }
-        columns = columns.child(column(s, vi, column_width, p));
+        columns = columns.child(column(s, vi, column_width, dark, p));
     }
     let mut content = row().w_full().h_full().min_h(0.0);
     if s.sidebar {
@@ -733,16 +735,34 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                     s.preferences = false;
                 }),
         );
-        let at = if s.preferences {
-            [12.0, (height - 332.0).max(40.0)]
+        let popup = menu(s, dark, p);
+        let popup = if s.preferences {
+            let anchor = if s.sidebar {
+                "settings"
+            } else {
+                root = root.child(
+                    el().key("settings-anchor")
+                        .size(0.0, 0.0)
+                        .absolute(12.0, height - 12.0),
+                );
+                "settings-anchor"
+            };
+            popup.anchored(anchor, rune::Side::Top, rune::Align::Start, 6.0)
         } else {
             let a = s.context.unwrap();
-            [
-                a[0].min(width - 250.0).max(0.0),
-                a[1].min(height - 190.0).max(0.0),
-            ]
+            root = root.child(
+                el().key("context-anchor")
+                    .size(0.0, 0.0)
+                    .absolute(a[0].clamp(8.0, width - 8.0), a[1].clamp(8.0, height - 8.0)),
+            );
+            popup.anchored(
+                "context-anchor",
+                rune::Side::Bottom,
+                rune::Align::Start,
+                2.0,
+            )
         };
-        root = root.child(menu(s, p, at));
+        root = root.child(popup);
     }
     root
 }

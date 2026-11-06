@@ -34,7 +34,10 @@ window when finished. To try an optimized build, use `bun run rune:dev --release
 The sidebar and editor are Rune, without a webview. The layout follows the
 existing Draft design: a single frosted surface, joined floating version tabs,
 compact draft previews and status chips, and bottom-corner settings and save
-controls. macOS loads its system font from the OS; Linux retains Rune's font
+controls. The selected draft, joined tabs, and floating menus share a glass
+treatment. Tab lighting follows the full outline through its necks. Settings
+anchors just above the gear; context menus flip near window edges.
+macOS loads its system font from the OS; Linux retains Rune's font
 fallback. Formatting and concealed punctuation use display spans over the same
 Markdown source. Ordinary saves and image
 imports run on a worker. The Bun host reuses `desktop/documents.ts` and Draft's

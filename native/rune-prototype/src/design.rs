@@ -54,36 +54,50 @@ impl Palette {
     }
 }
 
-pub fn selection_glass(surface: El, dark: bool) -> El {
-    let (tint, top, bottom, sheen, rim, edge) = if dark {
-        (
-            rgb(174, 194, 219).alpha(0.055),
-            Color::WHITE.alpha(0.055),
-            Color::WHITE.alpha(0.012),
-            Color::WHITE.alpha(0.065),
-            Color::WHITE.alpha(0.28),
-            Color::WHITE.alpha(0.045),
-        )
-    } else {
-        (
-            rgb(203, 213, 226).alpha(0.5),
-            Color::WHITE.alpha(0.32),
-            Color::WHITE.alpha(0.06),
-            Color::WHITE.alpha(0.5),
-            Color::WHITE.alpha(0.95),
-            Color::BLACK.alpha(0.10),
-        )
-    };
+struct GlassColors {
+    tint: Color,
+    top: Color,
+    bottom: Color,
+    sheen: Color,
+    rim: Color,
+    edge: Color,
+}
+impl GlassColors {
+    fn new(dark: bool) -> Self {
+        if dark {
+            Self {
+                tint: rgb(174, 194, 219).alpha(0.055),
+                top: Color::WHITE.alpha(0.055),
+                bottom: Color::WHITE.alpha(0.012),
+                sheen: Color::WHITE.alpha(0.065),
+                rim: Color::WHITE.alpha(0.28),
+                edge: Color::WHITE.alpha(0.045),
+            }
+        } else {
+            Self {
+                tint: rgb(203, 213, 226).alpha(0.5),
+                top: Color::WHITE.alpha(0.32),
+                bottom: Color::WHITE.alpha(0.06),
+                sheen: Color::WHITE.alpha(0.5),
+                rim: Color::WHITE.alpha(0.95),
+                edge: Color::BLACK.alpha(0.10),
+            }
+        }
+    }
+}
+
+pub fn glass_surface(surface: El, dark: bool) -> El {
+    let c = GlassColors::new(dark);
     surface
         .backdrop_blur(14.0)
-        .fill(tint)
-        .gradient(top, bottom)
+        .fill(c.tint)
+        .gradient(c.top, c.bottom)
         .radial_gradient(
             [0.08, 0.0],
             [220.0, 140.0],
-            [(0.0, sheen), (1.0, Color::TRANSPARENT)],
+            [(0.0, c.sheen), (1.0, Color::TRANSPARENT)],
         )
-        .border_gradient(0.75, rim, edge)
+        .border_gradient(0.75, c.rim, c.edge)
         .shadow(
             3.0,
             10.0,
@@ -178,7 +192,7 @@ pub fn concealed(source: &str) -> Vec<Span> {
 }
 
 /// One continuous outline, including the scooped 5.25pt necks of Draft's tabs.
-pub fn pill(widths: &[f32], color: Color) -> El {
+fn pill_paths(widths: &[f32]) -> (f32, Path, Path) {
     let (r, h, g, k) = (7.0, 28.0, 5.25, 0.5522848);
     let width = widths.iter().sum::<f32>() + g * (widths.len() - 1) as f32;
     let mut p = Path::new().move_to([r, 0.0]);
@@ -197,15 +211,21 @@ pub fn pill(widths: &[f32], color: Color) -> El {
             .cubic_to([b, r - r * k], [b + r - r * k, 0.0], [b + r, 0.0]);
         x = b;
     }
-    p = p
-        .line_to([width - r, 0.0])
-        .cubic_to([width - r + r * k, 0.0], [width, r - r * k], [width, r])
-        .line_to([width, h - r])
-        .cubic_to(
-            [width, h - r + r * k],
-            [width - r + r * k, h],
-            [width - r, h],
-        );
+    p = p.line_to([width - r, 0.0]).cubic_to(
+        [width - r + r * k, 0.0],
+        [width, r - r * k],
+        [width, r],
+    );
+    let top = p.clone().move_to([0.0, h - r]).line_to([0.0, r]).cubic_to(
+        [0.0, r - r * k],
+        [r - r * k, 0.0],
+        [r, 0.0],
+    );
+    p = p.line_to([width, h - r]).cubic_to(
+        [width, h - r + r * k],
+        [width - r + r * k, h],
+        [width - r, h],
+    );
     for (a, b) in joins.into_iter().rev() {
         let q = g / 2.0;
         p = p
@@ -225,7 +245,43 @@ pub fn pill(widths: &[f32], color: Color) -> El {
         .line_to([0.0, r])
         .cubic_to([0.0, r - r * k], [r - r * k, 0.0], [r, 0.0])
         .close();
-    el().size(width, h).shape(Shape::new().fill_path(&p, color))
+    (width, p, top)
+}
+
+pub fn pill(widths: &[f32], color: Color) -> El {
+    let (width, outline, _) = pill_paths(widths);
+    el().size(width, 28.0)
+        .shape(Shape::new().fill_path(&outline, color))
+}
+
+pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
+    let (width, outline, top) = pill_paths(widths);
+    let c = GlassColors::new(dark);
+    let layer = |color| {
+        el().size(width, 28.0)
+            .shape(Shape::new().fill_path(&outline, color))
+            .absolute(0.0, 0.0)
+    };
+    // Fade filled copies of the same contour: the sheen never fills the scoops
+    // with a rectangle or leaves seams where a neck meets a lobe.
+    el().size(width, 28.0)
+        .child(
+            layer(Color::BLACK.alpha(if dark { 0.18 } else { 0.09 }))
+                .absolute(0.0, 2.0)
+                .blur(2.0),
+        )
+        .child(layer(c.tint))
+        .child(layer(c.bottom))
+        .child(layer(c.top).clip_fade(0.0, 0.0, 0.0, 28.0))
+        .child(layer(c.sheen).clip_fade(0.0, 0.0, width, 28.0))
+        .child(
+            el().size(width, 28.0).absolute(0.0, 0.0).shape(
+                Shape::new()
+                    .stroke_path(&outline, 0.65, rune::LineCap::Butt, c.edge)
+                    .stroke_path(&top, 0.65, rune::LineCap::Butt, c.rim),
+            ),
+        )
+        .dim(if active { 1.0 } else { 0.6 })
 }
 
 pub fn fonts() -> &'static [&'static [u8]] {

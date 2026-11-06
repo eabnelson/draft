@@ -33,6 +33,65 @@ pub fn run() {
     );
     interactions();
     tab_shortcuts();
+    popover_placement();
+}
+
+fn popover_placement() {
+    let rect = |rt: &rune::Runtime<State>, key: &str| {
+        let [x, y, w, h] = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("Missing {key}"))
+            .rect;
+        [x, y, x + w, y + h]
+    };
+    for (width, height) in [(1280.0, 820.0), (780.0, 560.0)] {
+        let mut rt =
+            App::new(ui::spec()).headless_runtime((width, height), rune::Env::new(false, 1.0));
+        rt.frame(0.0);
+        click(&mut rt, "settings");
+        assert!(rt.state.preferences);
+        let button = rect(&rt, "settings");
+        let popup = rect(&rt, "editor-menu");
+        assert!((popup[0] - button[0]).abs() < 1.0);
+        assert!(
+            (button[1] - popup[3] - 6.0).abs() < 1.0,
+            "Settings sits six points above its actual button: {button:?}, {popup:?}"
+        );
+        key(&mut rt, Key::Escape);
+        assert!(!rt.state.preferences);
+        rt.update(|s, _| s.context = Some([width - 2.0, height - 2.0]));
+        rt.frame(0.016);
+        let popup = rect(&rt, "editor-menu");
+        assert!(
+            popup[0] >= 8.0
+                && popup[1] >= 8.0
+                && popup[2] <= width - 8.0
+                && popup[3] <= height - 8.0,
+            "A context menu near the bottom-right edge stays fully visible: {popup:?}"
+        );
+        assert!(height - popup[3] <= 10.0, "stay close to the click");
+        rt.update(|s, _| {
+            s.context = None;
+            s.sidebar = false;
+            s.preferences = true;
+        });
+        rt.frame(0.016);
+        let popup = rect(&rt, "editor-menu");
+        assert!((popup[0] - 12.0).abs() < 1.0);
+        assert!(
+            (popup[3] - (height - 18.0)).abs() < 1.0,
+            "Keyboard Settings keeps a visible anchor when the sidebar is hidden: {popup:?}"
+        );
+        rt.pointer_down(width - 24.0, 24.0);
+        rt.pointer_up(width - 24.0, 24.0);
+        rt.frame(0.016);
+        assert!(!rt.state.preferences, "clicking outside dismisses Settings");
+    }
+    println!(
+        "PASS Settings anchoring, context-menu edge flipping, hidden sidebar, and dismissal at two window sizes"
+    );
 }
 
 fn tab_shortcuts() {
