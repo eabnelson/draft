@@ -1,18 +1,23 @@
-# Draft's Rune editor experiment
+# Draft's native development app
 
-Question: can a native Rune frontend preserve Draft's writing behavior while
-keeping the existing Markdown document store?
+This is the approved design and native development direction for Draft, as of
+November 6, 2026. It keeps the existing Markdown document store and Bun services.
+See the [rollout](../../docs/native-design-rollout-2026-11-06.md) for the agreed
+interface and remaining product migration work. The directory and isolated
+preview profile keep their existing names so current preview writing stays in place.
 
 Run from the repository root with Bun, Rust, and Cargo installed:
 
 ```sh
-bun run rune:dev
+bun run dev
 ```
 
 The first run downloads and builds the pinned Rust dependencies. On macOS the
 launcher creates a development app bundle and opens its native window. Start it
 with this command so the Bun document host runs alongside it. Close the native
-window when finished. To try an optimized build, use `bun run rune:dev --release`.
+window when finished. To try an optimized build, use `bun run dev --release`.
+`bun run desktop:dev` and `bun run native:dev` open the same app; `rune:*`
+commands remain available for existing scripts.
 
 ## What to try
 
@@ -87,7 +92,7 @@ installed app. `DRAFT_RUNE_DATA_ROOT` selects another experimental library.
 The launcher uses a random loopback port and a per-launch authorization token.
 
 ```sh
-bun run rune:check
+bun run native:check
 bun native/rune-prototype/run.ts --check-shortcuts
 bun run rune:snap
 cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D warnings
@@ -105,8 +110,9 @@ actions, export, archive/restore, Recovery, Settings navigation, sync-error visi
 and recovery, and the final write barrier. Snapshots and tree dumps
 go to `native/rune-prototype/artifacts/`.
 
-Linux compilation was checked in the official `rust:1.96.1-bookworm` container,
-with `pkg-config`, `libxkbcommon-dev`, and `libwayland-dev` installed. Running a
+Linux compilation, formatting, Clippy, and the full headless interaction checks
+pass in the official `rust:1.96.1-bookworm` ARM64 container with Bun 1.4.3,
+`pkg-config`, `libxkbcommon-dev`, and `libwayland-dev` installed. Running a
 Linux window also requires a desktop session and graphics drivers. X11/Wayland
 interaction and Orca have not been verified.
 
@@ -126,18 +132,17 @@ activation have not been verified by that test.
 ## What this establishes
 
 The Mac window supports native text entry, Unicode paste, and save/reload. The
-executable checks pass, and the same frontend passes Linux `cargo check`.
+executable checks pass on Mac and in a Linux container.
 Parley's `complex-scripts` feature is enabled explicitly; without it the
 Japanese-text scenario emitted missing-segmentation-model warnings.
 
-This remains a prototype. The native rendering is an approximation of Draft's
-glass, not a pixel-identical port. Concealed punctuation needs further checks
+This is a development preview of the approved design. Concealed punctuation needs further checks
 for cursor movement and selection around invisible source positions. It keeps
 undo only for the current process, and does not implement Draft's spelling, full inline-image
 editing, automatic refresh after sync, personal-feature builds, native updater, or distribution. Manual
 screen-reader and real input-method checks are still needed. No comparative
-performance claim has been established. Keep this experiment on its prototype
-branch rather than releasing it as Draft.
+performance claim has been established. Native release packaging and feature parity
+remain the next stage; the existing packaged app and its update flow are retained.
 
 See [the Anomaly findings](../../docs/anomaly-text-editing-research-2026-11-06.md)
-for the source patterns and next decisions.
+for the source patterns that informed the native editor.

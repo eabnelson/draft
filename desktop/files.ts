@@ -11,7 +11,13 @@ export async function readJSON<T>(path:string):Promise<T>{return JSON.parse(awai
 export async function exists(path:string){try{await stat(path);return true;}catch{return false;}}
 export function within(root:string,path:string){const r=relative(resolve(root),resolve(path));return r===''||(!r.startsWith('..')&&!isAbsolute(r));}
 export function safeId(value:string){if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,150}$/.test(value))throw Error('Invalid document or version identity.');return value;}
-const ignoredSourcePath=(path:string)=>path.split(/[\\/]/).some(name=>['node_modules','.git','dist','resources','target','release','binaries','.draft-upstream','gen','.build-cache','.DS_Store'].includes(name)||name.startsWith('.env'));
+const ignoredSourcePath=(path:string)=>{
+  const parts=path.split(/[\\/]/);
+  // The native preview keeps writing, screenshots, and app bundles next to its source.
+  // None belongs in personal-update workspaces, packaged source, or its identity hash.
+  if(parts[0]==='native'&&parts[1]==='rune-prototype'&&['scratch','artifacts'].includes(parts[2]))return true;
+  return parts.some(name=>['node_modules','.git','dist','resources','target','release','binaries','.draft-upstream','gen','.build-cache','.DS_Store'].includes(name)||name.startsWith('.env'));
+};
 export async function copySource(source:string,target:string){
   const filter=async(path:string)=>!ignoredSourcePath(relative(source,path));
   await mkdir(target,{recursive:true});

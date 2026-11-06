@@ -91,7 +91,9 @@ Pushes to `main` build and publish the landing page to GitHub Pages through the 
 
 ## Develop
 
-Install [Bun](https://bun.sh), then:
+The [approved native design](docs/native-design-rollout-2026-11-06.md) is now the
+default development app for macOS and Linux. Install [Bun](https://bun.sh), Rust,
+and Cargo (plus Xcode command-line tools on macOS), then:
 
 ```sh
 bun install
@@ -99,9 +101,19 @@ bun run test
 bun run dev
 ```
 
-The local preview runs at `http://127.0.0.1:4319`. Development mode is loopback-only and uses a separate profile when `DRAFT_DATA_ROOT` is set. The packaged app uses a random loopback port and a per-launch session cookie.
+This opens the Rune interface with its local document host and a separate preview
+library in `native/rune-prototype/scratch`. `bun run desktop:dev` opens the same
+app, and `bun run dev --release` uses an optimized build. Native interaction checks
+run with `bun run native:check`. See the [native README](native/rune-prototype/README.md)
+for Linux build libraries, verification, and current feature coverage.
 
-For the native macOS app, install Rust and Xcode command-line tools:
+For the previous frontend, `bun run web:dev` serves the browser preview at
+`http://127.0.0.1:4319`, and `bun run tauri:dev` opens its desktop shell. Browser
+development is loopback-only and uses a separate profile when `DRAFT_DATA_ROOT`
+is set. The packaged app uses a random loopback port and a per-launch session cookie.
+
+The existing macOS release build still uses Tauri while native product parity and
+distribution are completed. It also requires Xcode command-line tools:
 
 ```sh
 bun run desktop:build

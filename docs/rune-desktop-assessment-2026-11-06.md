@@ -1,5 +1,11 @@
 # Rune for Draft on macOS and Linux
 
+Decision update, November 6: after the native prototype was built and reviewed,
+Erik approved its design as the direction for continued development. See the
+[approved design and rollout](native-design-rollout-2026-11-06.md) for the current
+decision, verification status, and migration work. The assessment below records
+the investigation that preceded the prototype.
+
 Research date: November 6, 2026. Rune's `dev` branch was inspected through GitHub;
 Draft was inspected in this checkout. This is a source-based assessment. Rune was
 not built or benchmarked, and no Linux installation was tested.

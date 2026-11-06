@@ -3,7 +3,7 @@ import {mkdtemp,rm,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateCatalog,differences,likelyMatch} from '../desktop/catalog';
-import {readJSON,atomicWrite,sourceHash,safeId,within,copySource} from '../desktop/files';
+import {readJSON,atomicWrite,sourceHash,safeId,within,copySource,exists} from '../desktop/files';
 import {Updates,parseAgentResult} from '../desktop/updates';
 import type {Catalog,HostState,Version} from '../desktop/types';
 const catalog=await readJSON<Catalog>(join(import.meta.dir,'../features.json'));
@@ -35,6 +35,25 @@ test('changed candidates cannot be applied after verification',async()=>{
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('paths reject traversal outside their owned area',()=>{expect(()=>safeId('../documents')).toThrow();expect(within('/tmp/draft','/tmp/draft/app')).toBe(true);expect(within('/tmp/draft','/tmp/draft-other')).toBe(false);});
+
+test('native preview writing and artifacts stay out of source bundles and source hashes',async()=>{
+ const temporary=await mkdtemp(join(tmpdir(),'draft-native-source-'));
+ try{
+  const source=join(temporary,'source'),copy=join(temporary,'copy'),native=join(source,'native/rune-prototype');
+  await atomicWrite(join(native,'src/main.rs'),'fn main() {}');
+  await atomicWrite(join(native,'Cargo.toml'),'[package]\nname="draft"\n');
+  const before=await sourceHash(source);
+  await atomicWrite(join(native,'scratch/Drafts/private.draft/versions/v1.md'),'Private preview writing');
+  await atomicWrite(join(native,'artifacts/editor.png'),'Local screenshot');
+  await atomicWrite(join(native,'artifacts/Draft Rune Prototype.app/Contents/MacOS/draft-rune-prototype'),'Local executable');
+  expect(await sourceHash(source)).toBe(before);
+  await copySource(source,copy);
+  expect(await exists(join(copy,'native/rune-prototype/scratch'))).toBe(false);
+  expect(await exists(join(copy,'native/rune-prototype/artifacts'))).toBe(false);
+  expect(await Bun.file(join(copy,'native/rune-prototype/src/main.rs')).text()).toBe('fn main() {}');
+  expect(await Bun.file(join(copy,'native/rune-prototype/Cargo.toml')).text()).toContain('[package]');
+ }finally{await rm(temporary,{recursive:true,force:true});}
+});
 
 test('changed application assets cannot bypass the verified source gate',async()=>{
  const root=await mkdtemp(join(tmpdir(),'draft-assets-'));try{

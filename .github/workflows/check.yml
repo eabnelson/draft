@@ -21,3 +21,27 @@ jobs:
       - run: bun run source:bundle
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+  native:
+    name: Native (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.96.1
+          components: rustfmt, clippy
+      - name: Install Linux window-system development libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: cargo fmt --manifest-path native/rune-prototype/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D warnings
+      - run: bun run native:check

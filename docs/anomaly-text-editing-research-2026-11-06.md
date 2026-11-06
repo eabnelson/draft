@@ -107,8 +107,10 @@ Unicode paste, and save/reload. Executable runtime checks cover editing, IME
 events, joined emoji, independent undo, save concurrency, media, and accessible
 names. Rust compilation also passed in a Debian Linux container.
 
-Keep the current application on Tauri while evaluating the remaining writing
-requirements: cursor behavior around concealed Markdown punctuation, truly inline
+Erik approved continuing with the Rune design on November 6. It is now the default
+development interface; the existing packaged app remains on Tauri until the
+[native rollout requirements](native-design-rollout-2026-11-06.md) are completed.
+Remaining writing requirements include cursor behavior around concealed Markdown punctuation, truly inline
 images, durable undo across restarts, spelling, real IME and screen-reader
 behavior, and X11/Wayland interaction. A Rust personal-feature build and rollback
 path also remains necessary. The prototype does not settle memory, latency, or
