@@ -51,12 +51,19 @@ function pillShape(pill:Element):{fill:string;edge:string}|null{
   return {fill:url(false),edge:url(true)};
 }
 
+// The website's download control uses the same measured outline as writing tabs.
+export function updatePillShape(pill:HTMLElement){
+  const shape=pillShape(pill);
+  if(!shape||pill.style.getPropertyValue('--pill-shape')===shape.fill)return;
+  pill.style.setProperty('--pill-shape',shape.fill);pill.style.setProperty('--pill-edge',shape.edge);
+  pill.classList.add('has-glass-shape');
+}
+
 export function startGlass(fill:HTMLElement):()=>void{
   let frame=0,last='';
   const draw=()=>{frame=0;
     for(const pill of document.querySelectorAll<HTMLElement>('.version-tab-pill')){
-      resize.observe(pill);const shape=pillShape(pill);
-      if(shape&&pill.style.getPropertyValue('--pill-shape')!==shape.fill){pill.style.setProperty('--pill-shape',shape.fill);pill.style.setProperty('--pill-edge',shape.edge);}
+      resize.observe(pill);updatePillShape(pill);
     }
     const svg=maskFor(innerWidth,innerHeight);if(svg===last)return;last=svg;
     const url=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;

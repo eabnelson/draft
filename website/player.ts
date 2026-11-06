@@ -1,4 +1,9 @@
 import {walkthroughLayout,fitWalkthrough} from './layout';
+import {updatePillShape} from '../src/glass';
+
+const download=document.querySelector<HTMLElement>('.download')!;
+const downloadSize=new ResizeObserver(()=>updatePillShape(download));downloadSize.observe(download);
+void document.fonts.ready.then(()=>updatePillShape(download));
 
 const frame=document.querySelector<HTMLIFrameElement>('#demo')!;
 const slot=document.querySelector<HTMLElement>('#stage-slot')!;
