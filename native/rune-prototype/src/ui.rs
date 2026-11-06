@@ -492,6 +492,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
         let drafting = d.versions.len() > 1 || prose.split_whitespace().count() >= 50;
         let (chip, chip_text) = p.stage(dark, drafting);
         let selected = i == s.selected;
+        let expanded = selected && s.expanded;
         let mut entry = col()
             .key(format!("draft-{i}"))
             .role("button")
@@ -500,9 +501,14 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
             .w_full()
             .padding(10.0)
             .gap(4.0)
-            .radius(8.0)
+            .corners(if expanded {
+                [16.0, 16.0, 0.0, 0.0]
+            } else {
+                [16.0; 4]
+            })
+            .continuous_corners()
             .fill(if selected {
-                p.selected
+                p.glass
             } else {
                 Color::TRANSPARENT
             })
@@ -582,15 +588,38 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     s.focus(0);
                 }
             });
-        let mut group = col().w_full().radius(8.0).child(entry);
-        if selected && s.expanded {
+        // The shared fill keeps expanded versions selected; the header's second
+        // layer makes the parent a little stronger than its children.
+        let mut group = col()
+            .key(format!("draft-group-{i}"))
+            .w_full()
+            .radius(16.0)
+            .continuous_corners()
+            .clip_rounded(16.0)
+            .fill(if selected {
+                p.glass
+            } else {
+                Color::TRANSPARENT
+            })
+            .child(entry);
+        if expanded {
+            let mut versions = col()
+                .key(format!("draft-versions-{i}"))
+                .w_full()
+                .padding(6.0)
+                .gap(2.0);
             for (vi, v) in d.versions.iter().enumerate() {
-                group = group.child(
+                let active = vi == s.active_version();
+                versions = versions.child(
                     row()
                         .key(format!("sidebar-version-{}", v.id))
                         .w_full()
-                        .px(10.0)
-                        .h(23.0)
+                        .px(12.0)
+                        .h(28.0)
+                        .radius(10.0)
+                        .continuous_corners()
+                        .fill(if active { p.glass } else { Color::TRANSPARENT })
+                        .hover(p.glass)
                         .center_y()
                         .role("button")
                         .label(format!("Version {}", v.number))
@@ -598,23 +627,13 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                         .child(
                             text(design::title(&v.edit.text))
                                 .truncate()
-                                .font(TextStyle::new(
-                                    12.0,
-                                    if vi == s.active_version() {
-                                        550.0
-                                    } else {
-                                        400.0
-                                    },
-                                ))
-                                .color(if vi == s.active_version() {
-                                    p.text
-                                } else {
-                                    p.muted
-                                }),
+                                .font(TextStyle::new(12.0, if active { 550.0 } else { 400.0 }))
+                                .color(if active { p.text } else { p.muted }),
                         )
                         .on_press(move |s: &mut State| s.focus(vi)),
                 );
             }
+            group = group.child(versions);
         }
         list = list.child(group);
     }
