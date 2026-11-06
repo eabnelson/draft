@@ -11,7 +11,7 @@ if(await build.exited)process.exit(1);
 const data=check?await mkdtemp(join(tmpdir(),'draft-rune-check-')):resolve(process.env.DRAFT_RUNE_DATA_ROOT??join(root,'scratch'));
 await mkdir(data,{recursive:true});await mkdir(join(root,'artifacts'),{recursive:true});
 const token=crypto.randomUUID()+crypto.randomUUID();
-const {server,store,close}=await startPrototypeHost(data,token);
+const {server,store,close}=await startPrototypeHost(data,token,{examples:true});
 let executable=join(root,`target/${release?'release':'debug'}/draft-rune-prototype`);
 if(process.platform==='darwin'&&!check&&nativeArgs.every(arg=>arg==='--hidden')){
   const contents=join(root,'artifacts/Draft Rune Prototype.app/Contents');await mkdir(join(contents,'MacOS'),{recursive:true});

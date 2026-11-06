@@ -91,6 +91,10 @@ struct Library {
     active: String,
     drafts: Vec<Value>,
     archived: usize,
+    #[serde(default)]
+    seq: u64,
+    #[serde(default)]
+    histories: HashMap<String, Value>,
 }
 #[derive(Deserialize)]
 struct ActionResult {
@@ -110,12 +114,25 @@ struct Document {
     raw: Value,
     versions: Vec<Version>,
     revision: u64,
+    seen: u64,
     saved: u64,
     queued: Option<u64>,
     pending_action: bool,
     pending_removal: bool,
 }
 impl Document {
+    fn save_job(&self) -> Job {
+        Job::Save(
+            self.id().into(),
+            self.revision,
+            self.snapshot(),
+            self.seen,
+            self.versions
+                .iter()
+                .map(|v| (v.id.clone(), v.edit.clone()))
+                .collect(),
+        )
+    }
     fn id(&self) -> &str {
         self.raw["id"].as_str().unwrap()
     }
@@ -155,11 +172,12 @@ impl Document {
     }
 }
 enum Job {
-    Save(String, u64, Value),
+    Save(String, u64, Value, u64, Vec<(String, TextEdit)>),
     Reload(u64),
     New,
     Active(String),
     Zoom(f32),
+    Session(session::Saved),
     Restore(u64),
     PrepareAction(String, Value),
     Action(String, u64, Value, Value),
@@ -169,15 +187,26 @@ enum Job {
         selection: (usize, usize),
         before: String,
         bytes: Vec<u8>,
+        file: Option<PathBuf>,
     },
+    Crop(attachments::Editing, PathBuf),
+    CopyImage(attachments::Editing, PathBuf),
     Barrier(mpsc::Sender<()>),
 }
 enum Reply {
+    Cropped(attachments::Editing, Result<String, String>),
+    CopyImage(Result<Vec<u8>, String>),
     New(Result<Library, String>),
     Active(Result<Value, String>),
     Zoom(Result<(), String>),
+    Session(Result<Value, String>),
     Sync(settings::Update),
-    Saved(String, u64, Result<(), String>),
+    Services(services::Update),
+    Spelling(spelling::Update),
+    Writing(writing::Update),
+    Changes(Value),
+    Desktop(Value),
+    Saved(String, u64, Result<Value, String>),
     Library(u64, Result<Library, String>),
     PrepareAction(String, Value),
     Action(String, u64, Result<ActionResult, String>),
@@ -192,6 +221,8 @@ enum Reply {
 struct State {
     keyboard: keyboard::Controls,
     caret: caret::Blink,
+    session: session::Persistence,
+    remote: sync::Remote,
     host: Host,
     docs: Vec<Document>,
     selected: usize,
@@ -204,7 +235,13 @@ struct State {
     archived: usize,
     preferences: bool,
     settings: settings::Preferences,
+    services: services::Services,
+    spelling: spelling::Spelling,
+    desktop: desktop::Integration,
+    writing: writing::Assistance,
     context: Option<[f32; 2]>,
+    attachment: Option<attachments::Editing>,
+    link: Option<links::Editing>,
     item_menu: Option<items::Context>,
     generation: u64,
     due: Option<Instant>,
@@ -213,6 +250,7 @@ struct State {
     replies: Option<mpsc::Receiver<Reply>>,
     cache: Option<ImageCache>,
     images: HashMap<PathBuf, Image>,
+    ready_images: usize,
 }
 fn styled(source: &str) -> Vec<Span> {
     // Decorations never mutate stored Markdown or the editor's history.
@@ -251,23 +289,31 @@ fn media_paths(source: &str) -> Vec<String> {
 impl State {
     fn load() -> Self {
         let host = Host::from_env();
-        let library = host.library().expect("Load disposable Draft library");
+        let library = host.library().expect("Load Draft library");
         let mut s = Self {
             keyboard: keyboard::Controls::default(),
             caret: caret::Blink::default(),
+            session: session::Persistence::default(),
+            remote: sync::Remote::default(),
             host,
             docs: vec![],
             selected: 0,
             active: 0,
             dark: true,
             source: false,
-            follow_theme: false,
+            follow_theme: true,
             sidebar: true,
             expanded: false,
             archived: 0,
             preferences: false,
             settings: settings::Preferences::default(),
+            services: services::Services::default(),
+            spelling: spelling::Spelling::default(),
+            desktop: desktop::Integration::default(),
+            writing: writing::Assistance::default(),
             context: None,
+            attachment: None,
+            link: None,
             item_menu: None,
             generation: 0,
             due: None,
@@ -276,8 +322,10 @@ impl State {
             replies: None,
             cache: None,
             images: HashMap::new(),
+            ready_images: 0,
         };
         s.install(library);
+        session::load(&mut s);
         s
     }
     fn install(&mut self, library: Library) {
@@ -308,10 +356,16 @@ impl State {
                     if let Some(previous) = versions.remove(&id).filter(|v| v.edit.text == value) {
                         return previous;
                     }
+                    let edit = history::load(
+                        value,
+                        library
+                            .histories
+                            .get(&format!("{}/{}", raw["id"].as_str().unwrap(), id)),
+                    );
                     Version {
                         id,
                         number: v["number"].as_u64().unwrap(),
-                        edit: TextEdit::new(value),
+                        edit,
                         spans: styled(value),
                         hidden: design::concealed(value),
                         media: media_paths(value),
@@ -322,6 +376,7 @@ impl State {
                 raw,
                 versions: buffers,
                 revision,
+                seen: library.seq,
                 saved: revision,
                 queued: None,
                 pending_action: false,
@@ -353,15 +408,21 @@ impl State {
             .join(source)
     }
     fn refresh_images(&mut self) {
-        let paths: Vec<_> = self
-            .docs
-            .iter()
-            .flat_map(|d| {
-                d.versions
+        let d = &self.docs[self.selected];
+        let mut paths: Vec<_> = d
+            .open_versions()
+            .into_iter()
+            .flat_map(|vi| {
+                d.versions[vi]
+                    .media
                     .iter()
-                    .flat_map(|v| v.media.iter().map(|src| self.image_path(d.id(), src)))
+                    .map(|src| self.image_path(d.id(), src))
             })
             .collect();
+        if let Some(edit) = &self.attachment {
+            paths.push(self.image_path(&edit.draft, &edit.original));
+        }
+        self.images.retain(|path, _| paths.contains(path));
         if let Some(cache) = &self.cache {
             for path in paths {
                 self.images
@@ -427,6 +488,7 @@ impl State {
         }
         self.active = version;
         self.docs[self.selected].versions[version].edit.focused = true;
+        self.refresh_images();
     }
     fn format(&mut self, marker: &str, tx: &mut Tx) {
         self.format_pair(marker, marker, tx);
@@ -474,10 +536,7 @@ impl State {
                 && !d.pending_action
                 && let Some(jobs) = &self.jobs
             {
-                if jobs
-                    .send(Job::Save(d.id().into(), d.revision, d.snapshot()))
-                    .is_ok()
-                {
+                if jobs.send(d.save_job()).is_ok() {
                     d.queued = Some(d.revision);
                 } else {
                     self.notice = "Save worker stopped; keep this window open".into();
@@ -493,7 +552,7 @@ impl State {
         // Place snapshots after older saves and before the reload on one worker queue.
         if let Some(jobs) = &self.jobs {
             for d in &self.docs {
-                let _ = jobs.send(Job::Save(d.id().into(), d.revision, d.snapshot()));
+                let _ = jobs.send(d.save_job());
             }
             let _ = jobs.send(if new {
                 Job::New
@@ -512,6 +571,7 @@ impl State {
                 selection: edit.range(),
                 before: edit.text.clone(),
                 bytes,
+                file: None,
             });
         }
         self.notice = "Pasting image…".into();
@@ -538,35 +598,57 @@ impl State {
             self.jobs
                 .as_ref()
                 .unwrap()
-                .send(Job::Save(d.id().into(), d.revision, d.snapshot()))
+                .send(d.save_job())
                 .map_err(|e| e.to_string())?;
         }
+        self.jobs
+            .as_ref()
+            .unwrap()
+            .send(Job::Session(session::snapshot(self)))
+            .map_err(|e| e.to_string())?;
         self.barrier()?;
         ui::poll(self, 0.0, tx);
         if self.docs.iter().any(|d| d.revision != d.saved) {
             return Err(self.notice.clone());
+        }
+        if let Some(error) = &self.session.error {
+            return Err(error.clone());
         }
         Ok(())
     }
 }
 
 mod appearance;
+mod attachments;
 mod caret;
 mod design;
+mod desktop;
 mod glass;
+mod history;
 mod items;
 mod keyboard;
+mod links;
+mod paste;
+mod services;
+mod session;
 mod settings;
 mod shortcut_help;
+mod spelling;
+mod sync;
 mod ui;
 mod verify;
+mod writing;
 
 fn main() {
     if std::env::args().any(|a| a == "--verify") {
         verify::run();
         return;
     }
-    rune::set_app_id("com.studiofour.draft.rune-prototype");
+    rune::set_app_id(if std::env::var_os("DRAFT_PACKAGED").is_some() {
+        "com.studiofour.draft.native"
+    } else {
+        "com.studiofour.draft.rune-prototype"
+    });
     keyboard::app()
         .compositor(glass::Glass::default())
         .chrome(rune::Chrome {

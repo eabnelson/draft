@@ -19,6 +19,7 @@ struct Command {
 pub struct Controls {
     pub app: Option<rune::AppHandle<State>>,
     pub focused: bool,
+    quitting: bool,
     pub zoom: f32,
     pub shortcut_error: Option<String>,
     pub viewing: HashMap<String, String>,
@@ -37,6 +38,7 @@ impl Default for Controls {
         Self {
             app: None,
             focused: false,
+            quitting: false,
             zoom,
             shortcut_error: None,
             viewing: HashMap::new(),
@@ -61,6 +63,8 @@ fn composing(s: &State) -> bool {
 fn clear_menus(s: &mut State) {
     s.context = None;
     s.item_menu = None;
+    s.attachment = None;
+    s.link = None;
 }
 fn enqueue(s: &mut State, kind: Kind) {
     if composing(s) {
@@ -215,6 +219,7 @@ pub fn accept_new(s: &mut State, result: Result<Library, String>, tx: &mut Tx) {
             raw,
             versions,
             revision: 0,
+            seen: library.seq,
             saved: 0,
             queued: None,
             pending_action: false,
@@ -261,6 +266,7 @@ fn zoom(s: &mut State, direction: i8) {
     };
     if let Some(jobs) = &s.jobs {
         let _ = jobs.send(Job::Zoom(s.keyboard.zoom));
+        let _ = jobs.send(Job::Session(session::snapshot(s)));
     }
 }
 fn settings(s: &mut State, _: &mut Tx) {
@@ -422,4 +428,18 @@ pub fn app() -> App<State> {
         app = app.windowless();
     }
     app.args(std::env::args().skip(1).filter(|a| a != "--hidden"))
+}
+
+pub fn quit(s: &mut State, tx: &mut Tx) {
+    if s.keyboard.quitting {
+        return;
+    }
+    s.keyboard.quitting = true;
+    match s.flush(tx) {
+        Ok(()) => tx.quit(),
+        Err(error) => {
+            s.keyboard.quitting = false;
+            s.notice = format!("Could not save before quitting: {error}");
+        }
+    }
 }

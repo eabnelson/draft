@@ -40,8 +40,19 @@ jobs:
           components: rustfmt, clippy
       - name: Install Linux window-system development libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev mesa-vulkan-drivers libvulkan1 hunspell hunspell-en-us libsecret-tools bubblewrap xdg-utils libglib2.0-bin dbus-daemon
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: cargo fmt --manifest-path native/rune-prototype/Cargo.toml -- --check
       - run: cargo clippy --manifest-path native/rune-prototype/Cargo.toml --locked -- -D warnings
+      - run: cargo test --manifest-path native/rune-prototype/Cargo.toml --locked
       - run: bun run native:check
+      - run: bun run native:build --skip-checks
+      - name: Verify relocated Linux desktop shortcut
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- bun native/rune-prototype/checks/linux-desktop.ts native/rune-prototype/artifacts/Draft-Native
+      - name: Render Linux frame with software Vulkan
+        if: runner.os == 'Linux'
+        env:
+          DRAFT_RUNE_DATA_ROOT: ${{ runner.temp }}/draft-native-render
+          XDG_RUNTIME_DIR: /tmp
+        run: bun native/rune-prototype/run.ts --scene light --snap native/rune-prototype/artifacts/linux-frame.png --tree native/rune-prototype/artifacts/linux-frame.json

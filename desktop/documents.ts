@@ -194,6 +194,27 @@ export class DraftStore {
     }
     return {seq:this.seq,changes,archived:(await this.packages(this.archiveRoot)).length};
   }
+
+  // An open native buffer can contain typing that hadn't reached disk when sync
+  // moved its package away. Recover that writing with its media and identity.
+  recoverEditing(input:Draft):Promise<{draft:Draft;seq:number;restored:true}>{
+    return this.serial(async()=>{
+      const draft=parseDraft(toRecord(input),Object.fromEntries(input.versions.map(v=>[v.id,v.text])));
+      const target=this.package(draft.id),place=await this.place(draft.id);
+      if(place==='live')throw Error('This draft is available again. Save it again to merge your writing.');
+      if(place==='archived')await rename(this.package(draft.id,true),target);
+      else{
+        const folder=join(this.recovery,'Deleted');
+        const names=(await readdir(folder)).filter(name=>name.endsWith(`-${draft.id}.draft`)).sort().reverse();
+        if(!names.length)throw Error('The previous draft package could not be recovered. Keep this window open.');
+        await cp(join(folder,names[0]),target,{recursive:true});
+      }
+      const before=await this.read(target),now=new Date().toISOString();
+      const recovered={...draft,updatedAt:now,versions:draft.versions.map(v=>before.versions.find(p=>p.id===v.id)?.text===v.text?v:{...v,updatedAt:now})};
+      this.deleted.delete(draft.id);await this.write(target,recovered);
+      return {draft:recovered,seq:this.note(draft.id),restored:true};
+    });
+  }
   // Restores the most recently archived draft.
   restoreLast():Promise<Draft|null>{
     return this.serial(async()=>{

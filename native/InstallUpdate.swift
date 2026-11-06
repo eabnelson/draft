@@ -30,6 +30,7 @@ func launch(_ app: URL, _ root: URL) throws -> Process {
     let task = Process(); task.executableURL = app.appendingPathComponent("Contents/MacOS/" + executable)
     var environment = ProcessInfo.processInfo.environment
     environment["DRAFT_DATA_ROOT"] = root.path
+    environment["DRAFT_NATIVE_DATA_ROOT"] = root.path
     environment.removeValue(forKey: "DRAFT_RUNTIME_ROOT"); environment.removeValue(forKey: "DRAFT_TEMPLATE_ROOT")
     task.environment = environment; task.standardInput = FileHandle.nullDevice
     task.standardOutput = FileHandle.nullDevice; task.standardError = FileHandle.nullDevice

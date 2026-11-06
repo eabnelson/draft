@@ -18,12 +18,19 @@ test('an official update keeps independent custom code and personal removals',as
   await atomicWrite(join(next,'src/app.ts'),'export const writing = true;\nexport const spelling = true;\n');
   for(const folder of [base,next])await atomicWrite(join(folder,'src/overflow.ts'),'export const overflow = true;\n');
   await atomicWrite(join(mine,'src/reading.ts'),'export const readingTime = true;\n');
+  await atomicWrite(join(mine,'native/rune-prototype/src/reading.rs'),'pub const MINUTES: usize = 3;\n');
+  for(const folder of [base,mine])await atomicWrite(join(folder,'native/rune-prototype/src/launcher.rs'),'original protected launcher');
+  await atomicWrite(join(next,'native/rune-prototype/src/launcher.rs'),'updated protected launcher');
   const result=await prepareOfficialMerge({base,mine,official:next,destination:candidate});
   assert.equal(result.conflicts.length,0);assert.equal(result.needsAgent,false);
   assert.equal(await readFile(join(candidate,'src/reading.ts'),'utf8'),'export const readingTime = true;\n');
   assert.match(await readFile(join(candidate,'src/app.ts'),'utf8'),/spelling = true/);
   assert.equal(result.catalog.features.find(f=>f.id==='overflow')?.state,'removed');
   assert.equal(result.catalog.appVersion,'1.1.0');
+  assert.equal(await readFile(join(candidate,'native/rune-prototype/src/reading.rs'),'utf8'),'pub const MINUTES: usize = 3;\n');
+  assert.equal(await readFile(join(candidate,'native/rune-prototype/src/launcher.rs'),'utf8'),'updated protected launcher');
+  await atomicWrite(join(mine,'native/rune-prototype/src/launcher.rs'),'personal launcher replacement');
+  await assert.rejects(prepareOfficialMerge({base,mine,official:next,destination:candidate}),/desktop update controls/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

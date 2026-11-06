@@ -112,8 +112,12 @@ For the previous frontend, `bun run web:dev` serves the browser preview at
 development is loopback-only and uses a separate profile when `DRAFT_DATA_ROOT`
 is set. The packaged app uses a random loopback port and a per-launch session cookie.
 
-The existing macOS release build still uses Tauri while native product parity and
-distribution are completed. It also requires Xcode command-line tools:
+A standalone native preview is available with `bun run native:build`. It bundles
+its host and tools and uses an isolated Draft Native profile. See the
+[native rollout status](docs/native-design-rollout-2026-11-06.md) for verification
+and the remaining public-release gates.
+
+The published macOS release build still uses Tauri until those gates are met. It also requires Xcode command-line tools:
 
 ```sh
 bun run desktop:build

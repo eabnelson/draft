@@ -5,15 +5,19 @@ import {addVersion,chooseStage,deleteVersion,editVersion,inboxOrder,openVersions
 
 export type DraftAction={kind:string;version?:string;value?:string;destination?:string};
 
-export async function saveSnapshot(store:DraftStore,draft:Draft):Promise<Draft>{
+export async function saveWithRevision(store:DraftStore,draft:Draft,seen?:number){
   const previous=await store.read(store.package(draft.id));
   let next={...draft,updatedAt:previous.updatedAt,versions:draft.versions.map(v=>{
     const before=previous.versions.find(p=>p.id===v.id);
     return {...v,text:before?.text??v.text,updatedAt:before?.updatedAt??v.updatedAt};
   })};
   for(const v of draft.versions)next=editVersion(next,v.id,v.text);
-  await store.save(next);
-  return store.read(store.package(next.id));
+  return store.save(next,seen);
+}
+
+export async function saveSnapshot(store:DraftStore,draft:Draft):Promise<Draft>{
+  await saveWithRevision(store,draft);
+  return store.read(store.package(draft.id));
 }
 
 export async function draftAction(store:DraftStore,input:Draft,action:DraftAction){

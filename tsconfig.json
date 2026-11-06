@@ -31,6 +31,7 @@
     "website/layout.ts",
     "website/build.ts",
     "website/serve.ts",
-    "website/download.ts"
+    "website/download.ts",
+    "native/rune-prototype/*.ts"
   ]
 }

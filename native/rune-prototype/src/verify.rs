@@ -38,6 +38,213 @@ pub fn run() {
     popover_placement();
     sidebar_context();
     shortcut_parity();
+    durability();
+    inline_media();
+    live_sync();
+    link_editing();
+}
+
+fn link_editing() {
+    let mut rt = keyboard::app().headless_runtime((780.0, 560.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    rt.update(|s, _| {
+        s.preferences = false;
+        s.source = false;
+        s.focus(0);
+        let edit = &mut s.docs[s.selected].versions[0].edit;
+        *edit = TextEdit::new("A linked phrase.");
+        edit.anchor = 2;
+        edit.focus = 8;
+        edit.focused = true;
+        s.context = Some([400.0, 200.0]);
+    });
+    rt.frame(0.05);
+    click(&mut rt, "link-edit");
+    let panel = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("editor-menu"))
+        .unwrap();
+    assert_eq!(panel.rect[2], 238.0);
+    rt.update(|s, _| s.link.as_mut().unwrap().url = TextEdit::new("https://example.com"));
+    rt.frame(0.05);
+    click(&mut rt, "link-save");
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[0].edit.text,
+        "A [linked](<https://example.com>) phrase."
+    );
+    rt.update(|s, _| s.docs[s.selected].versions[0].edit.undo());
+    assert_eq!(
+        rt.state.docs[rt.state.selected].versions[0].edit.text,
+        "A linked phrase."
+    );
+    assert_eq!(links::label("[a [nested] label][ref]"), "a [nested] label");
+    println!(
+        "PASS anchored link editor, reference/nested labels, Markdown save, and one-step undo"
+    );
+}
+
+fn live_sync() {
+    let mut rt = keyboard::app().headless_runtime((1200.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let di = rt.state.selected;
+    let id = rt.state.docs[di].id().to_owned();
+    rt.update(|s, tx| {
+        s.docs[di].versions[0].edit.insert("Unsaved local writing");
+        s.edited(di, 0, tx);
+    });
+    let local = rt.state.docs[di].versions[0].edit.text.clone();
+    let revision = rt.state.docs[di].revision;
+    let mut remote = rt.state.docs[di].snapshot();
+    remote["versions"][0]["text"] = json!("Remote writing");
+    sync::received(
+        &mut rt.state,
+        json!({"seq":1000,"changes":[{"id":id,"seq":1000,"draft":remote}]}),
+    );
+    sync::poll(&mut rt.state);
+    assert_eq!(rt.state.docs[di].versions[0].edit.text, local);
+    sync::saved(
+        &mut rt.state,
+        &id,
+        revision - 1,
+        Ok(json!({"seq":1000,"draft":remote})),
+    );
+    assert_eq!(
+        rt.state.docs[di].versions[0].edit.text, local,
+        "an older merged reply keeps newer typing"
+    );
+    remote["versions"][0]["text"] = json!(format!("Remote writing\n{local}"));
+    sync::saved(
+        &mut rt.state,
+        &id,
+        revision,
+        Ok(json!({"seq":1000,"draft":remote})),
+    );
+    sync::poll(&mut rt.state);
+    let d = rt.state.docs.iter().find(|d| d.id() == id).unwrap();
+    assert!(d.versions[0].edit.text.contains(&local));
+    assert!(d.versions[0].edit.text.contains("Remote writing"));
+    assert_eq!(d.saved, d.revision);
+    println!(
+        "PASS live sync defers dirty buffers, ignores older merged acknowledgements, and accepts the latest merged writing"
+    );
+}
+
+fn inline_media() {
+    let mut rt = keyboard::app().headless_runtime((1200.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let di = rt.state.selected;
+    let id = rt.state.docs[di].id().to_owned();
+    let src = rt
+        .state
+        .host
+        .media(&id, include_bytes!("../../../src-tauri/icons/icon.png"))
+        .unwrap();
+    let marker = format!("![Example]({src})");
+    rt.update(|s, tx| {
+        s.source = false;
+        s.preferences = false;
+        s.focus(0);
+        s.docs[di].versions[0].edit =
+            TextEdit::new(format!("Before image.\n\n{marker}\n\nAfter image."));
+        s.edited(di, 0, tx);
+    });
+    let path = rt.state.image_path(&id, &src);
+    rt.state.images.get(&path).unwrap().wait().unwrap();
+    for _ in 0..10 {
+        rt.frame(0.05);
+    }
+    let vid = rt.state.docs[di].versions[0].id.clone();
+    let image_key = format!("image-{vid}-15");
+    let image = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(image_key.as_str()))
+        .expect("inline image is laid out");
+    let editor = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(format!("editor-{vid}").as_str()))
+        .unwrap();
+    assert!(
+        image.rect[1] > editor.rect[1] + 25.0,
+        "the image follows the first paragraph"
+    );
+    assert!(
+        image.rect[1] + image.rect[3] < editor.rect[1] + editor.rect[3],
+        "writing continues after the image"
+    );
+    rt.update(|s, _| attachments::open(s, di, 0, &src, "", &marker));
+    rt.frame(0.05);
+    assert!(rt.find("crop-save").is_some());
+    rt.update(|s, tx| {
+        let mut crop = s.attachment.take().unwrap();
+        crop.shape = 2;
+        let bytes = attachments::render(&crop, &s.image_path(&id, &src)).unwrap();
+        let decoded = image::load_from_memory(&bytes).unwrap();
+        assert_eq!([decoded.width(), decoded.height()], [1080, 1350]);
+        let next = s.host.media(&id, &bytes).unwrap();
+        attachments::received(s, crop, Ok(next), tx);
+    });
+    assert!(
+        rt.state.docs[di].versions[0]
+            .edit
+            .text
+            .contains("![Example]("),
+        "cropping preserves authored image alt text"
+    );
+    assert!(
+        rt.state.docs[di].versions[0]
+            .edit
+            .text
+            .contains("draft-crop:instagram-carousel")
+    );
+    rt.update(|s, _| s.docs[di].versions[0].edit.undo());
+    assert!(rt.state.docs[di].versions[0].edit.text.contains(&marker));
+    println!(
+        "PASS inline media geometry, native crop controls, exact social output size, remembered original, and atomic undo"
+    );
+}
+
+fn durability() {
+    let mut rt = keyboard::app().headless_runtime((1200.0, 820.0), rune::Env::new(false, 1.0));
+    rt.frame(0.0);
+    let id = rt.state.docs[rt.state.selected].id().to_owned();
+    let before = rt.state.docs[rt.state.selected].versions[0]
+        .edit
+        .text
+        .clone();
+    rt.update(|s, tx| {
+        s.focus(0);
+        let edit = &mut s.docs[s.selected].versions[0].edit;
+        edit.anchor = edit.text.len();
+        edit.focus = edit.anchor;
+        edit.break_history_group();
+        edit.insert("\nDurable 日本語 👩🏽‍💻");
+        s.edited(s.selected, 0, tx);
+        s.dark = false;
+        s.follow_theme = false;
+        s.source = true;
+        s.expanded = true;
+        s.settings.section = 4;
+        s.flush(tx).unwrap();
+    });
+    let after = rt.state.docs[rt.state.selected].versions[0]
+        .edit
+        .text
+        .clone();
+    let mut reopened = State::load();
+    assert!(!reopened.dark && !reopened.follow_theme && reopened.source && reopened.expanded);
+    assert_eq!(reopened.settings.section, 4);
+    let d = reopened.docs.iter_mut().find(|d| d.id() == id).unwrap();
+    assert_eq!(d.versions[0].edit.text, after);
+    d.versions[0].edit.undo();
+    assert_eq!(d.versions[0].edit.text, before);
+    d.versions[0].edit.redo();
+    assert_eq!(d.versions[0].edit.text, after);
+    println!(
+        "PASS native undo/redo, Unicode writing, preferences, and navigation survive a fresh process state"
+    );
 }
 
 fn caret_blink() {
@@ -794,11 +1001,14 @@ fn popover_placement() {
     for (width, height) in [(1280.0, 820.0), (780.0, 560.0)] {
         let mut rt =
             App::new(ui::spec()).headless_runtime((width, height), rune::Env::new(false, 1.0));
+        rt.update(|s, _| {
+            s.sidebar = true;
+            s.preferences = false;
+        });
         rt.frame(0.0);
         let gear = rect(&rt, "settings");
-        let version = rt.state.docs[rt.state.selected].versions[rt.state.active_version()]
-            .id
-            .clone();
+        let first = rt.state.docs[rt.state.selected].open_versions()[0];
+        let version = rt.state.docs[rt.state.selected].versions[first].id.clone();
         let writing_header = rect(&rt, &format!("tab-{version}"));
         click(&mut rt, "settings");
         assert!(rt.state.preferences);

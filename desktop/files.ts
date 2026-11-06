@@ -1,5 +1,5 @@
 import {mkdir,open,readFile,rename,stat,realpath,cp,readdir,readlink} from 'node:fs/promises';
-import {dirname,resolve,join,relative,isAbsolute} from 'node:path';
+import {dirname,resolve,join,relative,isAbsolute,basename} from 'node:path';
 import {createHash} from 'node:crypto';
 
 export async function atomicWrite(path:string,value:string|Uint8Array){
@@ -11,15 +11,17 @@ export async function readJSON<T>(path:string):Promise<T>{return JSON.parse(awai
 export async function exists(path:string){try{await stat(path);return true;}catch{return false;}}
 export function within(root:string,path:string){const r=relative(resolve(root),resolve(path));return r===''||(!r.startsWith('..')&&!isAbsolute(r));}
 export function safeId(value:string){if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,150}$/.test(value))throw Error('Invalid document or version identity.');return value;}
-const ignoredSourcePath=(path:string)=>{
+const ignoredSourcePath=(path:string,root?:string)=>{
   const parts=path.split(/[\\/]/);
   // The native preview keeps writing, screenshots, and app bundles next to its source.
   // None belongs in personal-update workspaces, packaged source, or its identity hash.
   if(parts[0]==='native'&&parts[1]==='rune-prototype'&&['scratch','artifacts'].includes(parts[2]))return true;
+  if(parts[0]==='rune-prototype'&&['scratch','artifacts'].includes(parts[1]))return true;
+  if(root&&basename(root)==='rune-prototype'&&['scratch','artifacts'].includes(parts[0]))return true;
   return parts.some(name=>['node_modules','.git','dist','resources','target','release','binaries','.draft-upstream','gen','.build-cache','.DS_Store'].includes(name)||name.startsWith('.env'));
 };
 export async function copySource(source:string,target:string){
-  const filter=async(path:string)=>!ignoredSourcePath(relative(source,path));
+  const filter=async(path:string)=>!ignoredSourcePath(relative(source,path),source);
   await mkdir(target,{recursive:true});
   for(const entry of await readdir(source)){const path=join(source,entry);if(await filter(path))await cp(path,join(target,entry),{recursive:true,filter});}
 }
@@ -27,7 +29,7 @@ export async function sourceHash(root:string):Promise<string>{
   const hash=createHash('sha256');
   async function visit(dir:string){for(const entry of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){
     const path=join(dir,entry.name),r=relative(root,path).replaceAll('\\','/');
-    if(ignoredSourcePath(r))continue;
+    if(ignoredSourcePath(r,root))continue;
     if(entry.isSymbolicLink())throw Error(`Source contains a symlink: ${r}`);
     if(entry.isDirectory())await visit(path);else if(entry.isFile()){hash.update(r);hash.update(await readFile(path));}
   }}await visit(root);return hash.digest('hex');

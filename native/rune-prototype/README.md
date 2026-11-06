@@ -45,16 +45,18 @@ commands remain available for existing scripts.
   Cmd/Ctrl-Shift-Z or Cmd/Ctrl-Y redoes in the active version. Cmd/Ctrl-B toggles
   the sidebar, as in Draft. Cmd/Ctrl-S saves, including from the sidebar.
   Plain Return always inserts a newline.
-- Paste an image. It becomes a Markdown reference plus an image preview below
-  the editor. Image insertion is one undo step. If typing continues while the
+- Paste or drop an image. It becomes a Markdown reference with an inline preview
+  between paragraphs. Click the image to choose a social size, drag its framing,
+  zoom, save the crop, or copy the image. The original remains available for
+  re-cropping. Image insertion is one undo step. If typing continues while the
   image saves, it inserts at the current caret in the original version.
 - Choose **Settings → Files → Reload files** to read the saved `.draft` packages. Equal text retains
   the live editor's selection and undo history.
-- The gear opens the Settings page, with Appearance, Editor, Files, Sync, and
-  Shortcuts sections, using the writing view's sidebar cards and floating glass headers.
+- The gear opens Settings, including Appearance, Editor, Files, Sync, Shortcuts,
+  Model, Features, and Updates, using the writing view's sidebar cards and floating glass headers.
   Cmd/Ctrl-comma opens it too; Escape or the bottom chevron-and-Back tab returns
   to the editor. Appearance offers system/light/dark, and Editor offers **Show Markdown**. The initial
-  dark appearance matches the original app reference, with Markdown punctuation
+  appearance follows the system, with Markdown punctuation
   concealed in the prose.
 - Appearance offers illustrated Light, Dark, and System previews of Draft's writing
   workspace, with daylight, moonlight, and a split day/night view. The selected
@@ -81,9 +83,9 @@ model rather than introducing another document format.
 
 Sync settings reuse `desktop/zo-sync.ts`, with status and commands on a separate
 worker from document saves. Sync is off initially; the prototype's data-root-specific
-credential is separate from the installed app. Sign-in uses the existing macOS
-Keychain backend. New sync downloads can be loaded through Files → Reload files;
-automatic reconciliation into live native editor buffers is not implemented yet.
+credential is separate from the installed app. Sign-in uses macOS Keychain or
+Linux Secret Service. Remote changes refresh clean buffers; edits in progress
+are preserved and merged when saved.
 
 ## Disposable data and checks
 
@@ -136,13 +138,54 @@ executable checks pass on Mac and in a Linux container.
 Parley's `complex-scripts` feature is enabled explicitly; without it the
 Japanese-text scenario emitted missing-segmentation-model warnings.
 
-This is a development preview of the approved design. Concealed punctuation needs further checks
-for cursor movement and selection around invisible source positions. It keeps
-undo only for the current process, and does not implement Draft's spelling, full inline-image
-editing, automatic refresh after sync, personal-feature builds, native updater, or distribution. Manual
-screen-reader and real input-method checks are still needed. No comparative
-performance claim has been established. Native release packaging and feature parity
-remain the next stage; the existing packaged app and its update flow are retained.
+Writing history, selection, appearance, navigation, and scroll positions persist
+across restart. Rich paste becomes Markdown. Links can be added, edited, opened,
+and removed from the text menu. Local spelling uses macOS dictionaries or Linux
+Hunspell. Sync refreshes clean buffers and merges stale saves; concurrent writing
+survives a remote archive or deletion. Automatic model titles and summaries are
+optional under Editor and remain off until enabled.
+
+## Standalone packages
+
+```sh
+bun run native:build
+```
+
+This produces `artifacts/Draft Native.app` on macOS or a Linux portable directory
+and archive. The package contains its own Bun host, native renderer, build source,
+dependencies, and independent update controls. It launches without a development
+server. macOS packages are ad-hoc signed unless `APPLE_SIGNING_IDENTITY` is set.
+`--installer` also creates a macOS DMG; public distribution still requires
+Developer ID signing and notarization.
+
+On Linux, unpack the archive and run `Draft-Native/bin/draft`. Optionally run
+`Draft-Native/install-desktop` to add a shortcut at that unpacked location, or
+`Draft-Native/install-desktop --uninstall` to remove it. After moving the folder,
+run the installer again. This does not enable launch at login.
+Use a folder without literal backslashes: Bun 1.4.3 interprets them as path
+separators when loading its host script, including on Linux.
+
+The package uses `~/Library/Application Support/Draft Native` on Mac or
+`${XDG_DATA_HOME:-~/.local/share}/draft-native` on Linux. Override with
+`DRAFT_NATIVE_DATA_ROOT` or `--profile PATH`. This intentionally leaves the installed
+Draft profile separate. A second launch activates the existing process. Files
+settings controls the menu bar/tray icon and optional launch at login.
+
+Linux needs `xdg-utils` for links, `libsecret-tools` and an unlocked Secret Service
+keyring for sync credentials, and Hunspell with a language dictionary for spelling.
+Personal native builds need the pinned Rust toolchain, cached Cargo dependencies,
+and `bubblewrap` with user namespaces enabled on Linux. Builds use an isolated
+filesystem and loopback-only networking for local test hosts. The additional
+`bun native/rune-prototype/checks/update.ts` check exercises a real native feature
+build, verification, activation, and rollback without contacting a model.
+
+The framework extension for inline media and Mesa rendering is documented under
+[`native/vendor`](../vendor/README.md). Manual screen-reader, real input-method,
+desktop-wide quick capture, and Linux desktop activation checks still gate a
+public native release. Linux full-host upgrades currently require downloading
+the portable package; the existing signed Mac host installer is reused on Mac.
+The existing published release channel remains unchanged until native release
+verification and distribution-channel configuration are complete.
 
 See [the Anomaly findings](../../docs/anomaly-text-editing-research-2026-11-06.md)
 for the source patterns that informed the native editor.

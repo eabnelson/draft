@@ -9,7 +9,7 @@ import type {NativePackage,Version,Update} from './types';
 async function command(args:string[]){const child=Bun.spawn(args,{stdout:'pipe',stderr:'pipe'});const [output,error]=await Promise.all([new Response(child.stdout).text(),new Response(child.stderr).text()]);if(await child.exited)throw Error(error||'The desktop update could not be checked.');return output.trim();}
 export async function fileDigest(path:string){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
 export class NativeUpdates {
- constructor(readonly root:string,readonly appPath:string,readonly channel:ReleaseChannel){}
+ constructor(readonly root:string,readonly appPath:string,readonly channel:ReleaseChannel,readonly parentPid=process.ppid){}
  async stage(id:string,release:SignedRelease,signal:AbortSignal,onProgress?:(received:number,total:number)=>void):Promise<NativePackage>{
   try{await access(dirname(this.appPath),constants.W_OK);}catch{throw Error('Move Draft to Applications before installing this update.');}
   const folder=join(this.root,'NativeUpdates',id),archive=join(folder,'desktop.zip'),expanded=join(folder,'check');
@@ -35,7 +35,7 @@ export class NativeUpdates {
  }
  private async writePlan(update:Update,target:Version,previous:Version,operation:object){
   const path=join(this.root,'NativeUpdates',update.id,'install-plan.json');
-  await atomicWrite(path,JSON.stringify({schemaVersion:1,...operation,appPath:resolve(this.appPath),dataRoot:resolve(this.root),updateId:update.id,target:target.id,previous:previous.id,previousOfficial:previous.officialId,targetHost:target.hostVersion,previousHost:previous.hostVersion??previous.catalog.appVersion,bundleId:this.channel.options.bundleId??'com.eriknelson.draft',parentPid:process.ppid,runtimePid:process.pid},null,2));return path;
+  await atomicWrite(path,JSON.stringify({schemaVersion:1,...operation,appPath:resolve(this.appPath),dataRoot:resolve(this.root),updateId:update.id,target:target.id,previous:previous.id,previousOfficial:previous.officialId,targetHost:target.hostVersion,previousHost:previous.hostVersion??previous.catalog.appVersion,bundleId:this.channel.options.bundleId??'com.eriknelson.draft',parentPid:this.parentPid,runtimePid:process.pid},null,2));return path;
  }
 }
 

@@ -1,5 +1,5 @@
 import {spawn, type ChildProcessWithoutNullStreams} from 'node:child_process';
-import {realpathSync} from 'node:fs';
+import {realpathSync,existsSync} from 'node:fs';
 import {readFile,mkdir,realpath,mkdtemp,rm} from 'node:fs/promises';
 import {homedir,tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
@@ -51,9 +51,20 @@ export function builderSandbox(workspace:string,protectedRoot:string){
   const quote=(v:string)=>JSON.stringify(v);
   // The coding process can use its own auth/config, but never real documents or
   // the controller's activation records. Source candidates live in Caches.
-  const privateRoots=[join(protectedRoot,'Drafts'),join(protectedRoot,'Documents'),join(protectedRoot,'Exports'),join(protectedRoot,'state.json'),join(homedir(),'Desktop'),join(homedir(),'Downloads'),join(homedir(),'Pictures'),join(homedir(),'Library/Messages'),join(homedir(),'Library/Mail'),join(homedir(),'Library/Application Support/DraftSigning'),join(homedir(),'.appstoreconnect/private_keys')];
+  const privateRoots=[protectedRoot,join(protectedRoot,'Drafts'),join(protectedRoot,'Documents'),join(protectedRoot,'Exports'),join(protectedRoot,'state.json'),join(homedir(),'Desktop'),join(homedir(),'Downloads'),join(homedir(),'Pictures'),join(homedir(),'Library/Messages'),join(homedir(),'Library/Mail'),join(homedir(),'Library/Application Support/DraftSigning'),join(homedir(),'.appstoreconnect/private_keys')];
   const runtime=resolve(import.meta.dir,'..');
   return `(version 1) (allow default) (deny file-write*) (allow file-write* (subpath ${quote(workspace)}) (subpath ${quote(realpathSync(tmpdir()))}) (subpath "/private/tmp") (subpath ${quote(join(homedir(),'.claude'))}) (subpath ${quote(join(homedir(),'.codex'))}) (subpath ${quote(join(homedir(),'.cache'))}) (literal "/dev/null")) (deny file-read* (require-all (subpath ${quote(join(homedir(),'Documents'))}) (require-not (subpath ${quote(runtime)})))) ${privateRoots.map(p=>`(deny file-read* file-write* (subpath ${quote(p)}))`).join(' ')}`;
+}
+export function sandboxCommand(command:string,args:string[],workspace:string,protectedRoot:string,network=true):[string,string[]]{
+  if(process.platform==='darwin')return ['/usr/bin/sandbox-exec',['-p',builderSandbox(workspace,protectedRoot)+(network?'':' (deny network*) (allow network-bind (local tcp "localhost:*")) (allow network-inbound (local tcp "localhost:*")) (allow network-outbound (remote tcp "localhost:*"))'),command,...args]];
+  if(process.platform!=='linux'||!Bun.which('bwrap'))throw Error('Install bubblewrap to prepare personal features safely on Linux.');
+  if(within(protectedRoot,workspace))throw Error('Keep feature build workspaces outside the writing profile.');
+  const mounts=['--die-with-parent','--new-session','--unshare-user','--unshare-pid','--unshare-ipc','--unshare-uts',...(network?[]:['--unshare-net']),'--ro-bind','/','/','--dev','/dev','--proc','/proc','--tmpfs','/tmp'];
+  for(const folder of [protectedRoot,...['Documents','Desktop','Downloads','Pictures','.ssh','.aws','.gnupg','.config'].map(name=>join(homedir(),name))])if(existsSync(folder))mounts.push('--tmpfs',realpathSync(folder));
+  // Agents may refresh their own login. The writing profile and other personal files stay hidden.
+  if(network)for(const folder of ['.codex','.claude']){const path=join(homedir(),folder);if(existsSync(path))mounts.push('--bind',path,path);}
+  mounts.push('--bind',workspace,workspace,'--chdir',workspace,'--',command,...args);
+  return [Bun.which('bwrap')!,mounts];
 }
 export class CodexClient {
   private process:ChildProcessWithoutNullStreams;
@@ -61,7 +72,8 @@ export class CodexClient {
   listeners=new Set<(method:string,params:any)=>void>();
   constructor(binary:string,workspace?:string,protectedRoot?:string){
     const args=['app-server','--stdio','-c','analytics.enabled=false','-c','features.multi_agent=false','-c','mcp_servers={}'];
-    this.process=spawn(workspace?'/usr/bin/sandbox-exec':binary,workspace?['-p',builderSandbox(workspace,protectedRoot!),binary,...args]:args,{env:cleanEnvironment(),cwd:workspace,stdio:['pipe','pipe','pipe']});
+    const [command,arguments_]=workspace?sandboxCommand(binary,args,workspace,protectedRoot!):[binary,args];
+    this.process=spawn(command,arguments_,{env:cleanEnvironment(),cwd:workspace,stdio:['pipe','pipe','pipe']});
     let buffer='';this.process.stdout.on('data',data=>{buffer+=data.toString();if(buffer.length>8_000_000){this.close();return;}let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);try{this.receive(JSON.parse(line));}catch{}}});
     this.process.stderr.on('data',()=>{});
     const failed=()=>{for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('The local Codex connection closed.'));}this.pending.clear();};
@@ -115,7 +127,7 @@ export class Agents {
       const {query}=await import('@anthropic-ai/claude-agent-sdk');const abort=new AbortController();const cancel=()=>abort.abort();options.signal?.addEventListener('abort',cancel,{once:true});
       const q=query({prompt,options:{model:selection.model,pathToClaudeCodeExecutable:binary,cwd:options.workspace??tmpdir(),settingSources:[],tools:options.workspace?['Read','Edit','Write','Glob','Grep']:[],mcpServers:{},permissionMode:'default',abortController:abort,env:cleanEnvironment(),maxTurns:options.workspace?80:4,
         ...(options.schema?{outputFormat:{type:'json_schema',schema:options.schema}}:{}),
-        ...(options.workspace?{spawnClaudeCodeProcess:spawnOptions=>spawn('/usr/bin/sandbox-exec',['-p',builderSandbox(options.workspace!,options.protectedRoot!),spawnOptions.command,...spawnOptions.args],{cwd:spawnOptions.cwd,env:spawnOptions.env,stdio:['pipe','pipe','pipe'],signal:spawnOptions.signal}),
+        ...(options.workspace?{spawnClaudeCodeProcess:spawnOptions=>{const [command,args]=sandboxCommand(spawnOptions.command,spawnOptions.args,options.workspace!,options.protectedRoot!);return spawn(command,args,{cwd:spawnOptions.cwd,env:spawnOptions.env,stdio:['pipe','pipe','pipe'],signal:spawnOptions.signal});},
           canUseTool:async(name,input)=>{
             if(!['Read','Edit','Write','Glob','Grep'].includes(name))return {behavior:'deny',message:'Use the candidate source files; the host runs build and test checks.'};
             const target=String(input.file_path??input.path??options.workspace);let canonical=resolve(options.workspace!,target);try{canonical=await realpath(canonical);}catch{try{canonical=join(await realpath(dirname(canonical)),canonical.split('/').at(-1)!);}catch{}}

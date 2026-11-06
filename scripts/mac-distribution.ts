@@ -39,7 +39,7 @@ export async function signBundledCode(resources:string,identity:string){
  const paths=await machFiles(resources);
  for(const path of paths){
   const args=['/usr/bin/codesign','--force','--sign',identity,'--options','runtime',identity==='-'?'--timestamp=none':'--timestamp'];
-  if(relative(resources,path)==='bun')args.push('--entitlements',resolve(import.meta.dir,'../native/Bun.entitlements.plist'));
+  if((relative(resources,path)==='bun'||relative(resources,path).endsWith('/runtime/bun')))args.push('--entitlements',resolve(import.meta.dir,'../native/Bun.entitlements.plist'));
   await macCommand([...args,path]);await macCommand(['/usr/bin/codesign','--verify','--strict',path]);
  }
  return paths;

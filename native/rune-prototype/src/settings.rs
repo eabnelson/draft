@@ -1,13 +1,25 @@
 //! Settings uses the same saved documents and sync engine as the editor host.
 use super::*;
 
-const SECTIONS: [&str; 5] = ["Appearance", "Editor", "Files", "Sync", "Shortcuts"];
-const DETAILS: [&str; 5] = [
+pub const SECTIONS: [&str; 8] = [
+    "Appearance",
+    "Editor",
+    "Files",
+    "Sync",
+    "Shortcuts",
+    "Model",
+    "Features",
+    "Updates",
+];
+const DETAILS: [&str; 8] = [
     "Light, dark, or your system appearance.",
     "Markdown marks and the way you write.",
     "Autosaving, local files, and archived drafts.",
     "Your workspace, connection, and sync status.",
     "A key-by-key guide to getting around Draft.",
+    "Your writing and coding models.",
+    "Make Draft work your way.",
+    "Prepared changes, releases, and rollback.",
 ];
 
 #[derive(Clone, Default, Deserialize)]
@@ -187,7 +199,7 @@ pub fn open_sync(s: &mut State) {
     s.context = None;
     s.item_menu = None;
 }
-fn copy(label: impl Into<String>, p: design::Palette) -> El {
+pub fn copy(label: impl Into<String>, p: design::Palette) -> El {
     text(label.into())
         .w_full()
         .font(TextStyle {
@@ -196,7 +208,7 @@ fn copy(label: impl Into<String>, p: design::Palette) -> El {
         })
         .color(p.muted)
 }
-fn button(
+pub fn button(
     key: &str,
     label: &str,
     p: design::Palette,
@@ -395,12 +407,20 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 .child(appearance::choices(s, cx, (main_width.min(960.0) - padding * 2.0).max(1.0), dark, p));
         }
         1 => body = body.child(copy("Markdown formatting stays in your files. Show the formatting marks while you write, or keep them out of the way.", p))
-            .child(button("source", if s.source { "Hide Markdown marks" } else { "Show Markdown marks" }, p, |s, _| s.source = !s.source)),
+            .child(button("source", if s.source { "Hide Markdown marks" } else { "Show Markdown marks" }, p, |s, _| s.source = !s.source))
+            .child(button("writing-assistance",if s.writing.enabled{"Turn off automatic titles and summaries"}else{"Enable automatic titles and summaries"},p,|s,_|s.writing.enabled = !s.writing.enabled))
+            .child(copy("When enabled, the model you choose receives draft text to suggest titles and summaries after you pause.",p).wrap()),
         2 => {
             let folder = std::env::var("DRAFT_RUNE_DATA_ROOT").unwrap_or_default();
             body = body.child(copy("Drafts are saved automatically as Markdown files.", p))
                 .child(copy(PathBuf::from(folder).join("Drafts").display().to_string(), p))
                 .child(button("reload", "Reload files", p, |s, _| { s.preferences = false; s.reload(false); }));
+            let menu=s.services.desktop["menuBarIcon"].as_bool().unwrap_or(true);
+            let login=s.services.desktop["openAtLogin"].as_bool().unwrap_or(false);
+            body=body.child(button("desktop-tray",if menu{"Hide menu bar / tray icon"}else{"Show menu bar / tray icon"},p,move|s,_|services::request(s,"/desktop/preferences",Some(json!({"menuBarIcon":!menu})))))
+                .child(button("desktop-login",if login{"Stop opening at login"}else{"Open at login"},p,move|s,_|services::request(s,"/desktop/preferences",Some(json!({"openAtLogin":!login})))));
+            if let Some(issue)=&s.desktop.issue{body=body.child(copy(issue,p).wrap());}
+            if !s.services.message.is_empty(){body=body.child(copy(&s.services.message,p).wrap());}
             if s.archived > 0 {
                 body = body.child(button("restore", "Restore last archived draft", p, |s, _| {
                     s.preferences = false;
@@ -410,7 +430,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
             }
         }
         3 => body = body.child(sync(s, p)),
-        _ => {
+        4 => {
             let page_width = cx.layout_size("draft-root").map_or(1200.0, |size| size[0]) / s.keyboard.zoom;
             let main_width = (page_width - side.max(210.0) - 1.0).max(1.0);
             let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
@@ -421,6 +441,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 .child(shortcut_help::grid(cx, (main_width.min(1180.0) - padding * 2.0).max(1.0), dark, p));
             if let Some(error) = &s.keyboard.shortcut_error { body = body.child(copy(error, p)); }
         }
+        _ => body = body.child(services::page(s, p)),
     }
     row()
         .key("settings-page")
@@ -435,7 +456,9 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 .min_w(0.0)
                 .h_full()
                 .min_h(0.0)
-                .child(
+                .child(session::watch(
+                    s,
+                    &format!("settings-scroll-{section}"),
                     col()
                         .key(format!("settings-scroll-{section}"))
                         .w_full()
@@ -452,7 +475,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                                 .child(el().h(40.0))
                                 .child(body),
                         ),
-                )
+                ))
                 .child(header(section, dark, p)),
         )
 }

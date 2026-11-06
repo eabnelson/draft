@@ -60,6 +60,23 @@ export class Keychain implements Secrets{
   async delete(account:string){const result=await this.run(['delete-generic-password','-s',this.service,'-a',account]);if(result.code!==0&&result.code!==44)throw Error('Draft couldn’t remove the credential from your Keychain. Try again.');}
 }
 
+// Freedesktop Secret Service (GNOME Keyring/KWallet), isolated by the same profile account.
+// Secrets are piped on stdin; they never appear in process arguments or a plaintext file.
+export class SecretService implements Secrets {
+  constructor(readonly service='Draft Zo sync'){}
+  private run(args:string[],input?:string){return new Promise<{code:number;out:string}>((resolve)=>{
+    const child=spawn('secret-tool',args,{stdio:['pipe','pipe','ignore']});let out='';
+    const timer=setTimeout(()=>child.kill(),15000);
+    child.stdout.on('data',chunk=>{out+=chunk;if(out.length>65536)child.kill();});
+    child.stdin.on('error',()=>{});child.once('error',()=>{clearTimeout(timer);resolve({code:1,out:''});});
+    child.once('close',code=>{clearTimeout(timer);resolve({code:code??1,out});});child.stdin.end(input??'');
+  });}
+  private attributes(account:string){return ['service',this.service,'account',account];}
+  async get(account:string){const value=await this.run(['lookup',...this.attributes(account)]);return value.code===0?value.out.replace(/\n$/,''):null;}
+  async set(account:string,value:string){const result=await this.run(['store','--label=Draft sync',...this.attributes(account)],value);if(result.code!==0||await this.get(account)!==value)throw Error('Unlock your system keyring and install libsecret-tools to connect sync.');}
+  async delete(account:string){if(!await this.get(account))return;const result=await this.run(['clear',...this.attributes(account)]);if(result.code!==0)throw Error('Draft couldn’t remove the credential from your system keyring.');}
+}
+
 export class ZoError extends Error{constructor(readonly code:string,message:string,readonly transient=false){super(message);}}
 class NeedsCredentials extends Error{}
 
@@ -118,7 +135,7 @@ export class ZoSync{
   readonly draftsRoot:string;
   constructor(readonly dataRoot:string,readonly store:DraftStore,options:Options={}){
     this.draftsRoot=store.root;
-    this.secrets=options.secrets??new Keychain();this.config=options.config??ZO;
+    this.secrets=options.secrets??(process.platform==='linux'?new SecretService():new Keychain());this.config=options.config??ZO;
     this.fetch=options.fetch??((input,init)=>globalThis.fetch(input,init));this.sleep=options.sleep??(ms=>new Promise(r=>setTimeout(r,ms)));this.timers=options.timers??true;
     this.now=options.now??Date.now;this.lastActivity=this.now();
     this.auth=new ZoAuth(dataRoot,this.secrets,this.account,this.config,this.fetch);

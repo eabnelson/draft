@@ -137,6 +137,9 @@ pub(super) fn prepared(s: &mut State, id: &str, action: Value) {
     };
     // Earlier image jobs have now replied and inserted their references. Only
     // now capture the snapshot for the action on the same serial worker.
+    if let Some(jobs) = &s.jobs {
+        let _ = jobs.send(d.save_job());
+    }
     if let Some(jobs) = &s.jobs
         && jobs
             .send(Job::Action(id.into(), d.revision, d.snapshot(), action))

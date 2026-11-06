@@ -9,10 +9,30 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
     s.jobs = Some(jobs);
     s.replies = Some(replies);
     settings::setup(s, send.clone(), waker.clone());
+    services::setup(s, send.clone(), waker.clone());
+    spelling::setup(s, send.clone(), waker.clone());
+    writing::setup(s, send.clone(), waker.clone());
+    sync::setup(s, send.clone(), waker.clone());
     std::thread::spawn(move || {
+        let mut failed_saves = std::collections::HashSet::new();
         while let Ok(job) = receive.recv() {
             let reply = match job {
-                Job::Save(id, revision, value) => Reply::Saved(id, revision, host.save(&value)),
+                Job::Save(id, revision, value, seen, buffers) => {
+                    let histories: HashMap<_, _> = buffers
+                        .into_iter()
+                        .map(|(id, edit)| (id, history::capture(&edit)))
+                        .collect();
+                    let result = host.post::<_, Value>(
+                        "/save",
+                        &json!({"draft":value,"histories":histories,"seen":seen}),
+                    );
+                    if result.is_err() {
+                        failed_saves.insert(id.clone());
+                    } else {
+                        failed_saves.remove(&id);
+                    }
+                    Reply::Saved(id, revision, result)
+                }
                 Job::Reload(g) => Reply::Library(g, host.library()),
                 Job::New => Reply::New(host.post("/new", &json!({}))),
                 Job::Active(id) => Reply::Active(host.post("/active", &json!({"id":id}))),
@@ -24,12 +44,17 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
                     )
                     .map_err(|e| e.to_string()),
                 ),
+                Job::Session(value) => Reply::Session(host.post("/session", &value)),
                 Job::Restore(g) => Reply::Library(g, host.post("/restore", &json!({}))),
                 Job::PrepareAction(id, action) => Reply::PrepareAction(id, action),
                 Job::Action(id, revision, draft, action) => Reply::Action(
-                    id,
+                    id.clone(),
                     revision,
-                    host.post("/action", &json!({"draft":draft,"action":action})),
+                    if failed_saves.contains(&id) {
+                        Err("Save your writing before changing this draft.".into())
+                    } else {
+                        host.post("/action", &json!({"draft":draft,"action":action}))
+                    },
                 ),
                 Job::Image {
                     draft,
@@ -37,8 +62,13 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
                     selection,
                     before,
                     bytes,
+                    file,
                 } => {
-                    let result = host.media(&draft, &bytes);
+                    let result = file
+                        .as_deref()
+                        .map(attachments::png)
+                        .unwrap_or(Ok(bytes))
+                        .and_then(|bytes| host.media(&draft, &bytes));
                     Reply::Image {
                         draft,
                         version,
@@ -47,6 +77,12 @@ pub(super) fn setup(s: &mut State, waker: Waker) {
                         result,
                     }
                 }
+                Job::Crop(edit, path) => {
+                    let result = attachments::render(&edit, &path)
+                        .and_then(|bytes| host.media(&edit.draft, &bytes));
+                    Reply::Cropped(edit, result)
+                }
+                Job::CopyImage(edit, path) => Reply::CopyImage(attachments::render(&edit, &path)),
                 Job::Barrier(done) => {
                     let _ = done.send(());
                     continue;
@@ -78,6 +114,15 @@ pub(super) fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     for reply in replies {
         match reply {
+            Reply::Cropped(edit, result) => attachments::received(s, edit, result, tx),
+            Reply::CopyImage(result) => match result {
+                Ok(bytes) => {
+                    if let Some(image) = rune::ClipboardImage::from_png(bytes) {
+                        tx.copy_rich(rune::ClipboardContent::new("").with_image(image));
+                    }
+                }
+                Err(error) => s.notice = error,
+            },
             Reply::New(result) => keyboard::accept_new(s, result, tx),
             Reply::Active(result) => {
                 if let Err(e) = result {
@@ -90,26 +135,31 @@ pub(super) fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
                 }
             }
             Reply::Sync(update) => settings::receive(s, update),
-            Reply::Saved(id, revision, result) => {
-                if let Some(d) = s.docs.iter_mut().find(|d| d.id() == id) {
-                    if d.queued == Some(revision) {
-                        d.queued = None;
-                    }
-                    match result {
-                        Ok(()) => d.saved = d.saved.max(revision.min(d.revision)),
-                        Err(e) => {
-                            s.notice = format!("Could not save: {e}");
-                            s.due = Some(Instant::now() + Duration::from_secs(5));
+            Reply::Services(update) => services::receive(s, update, tx),
+            Reply::Spelling(update) => spelling::receive(s, update),
+            Reply::Writing(update) => writing::receive(s, update),
+            Reply::Session(result) => session::received(s, result),
+            Reply::Changes(value) => sync::received(s, value),
+            Reply::Desktop(value) => {
+                if let Some(events) = value.as_array() {
+                    for event in events {
+                        if event["action"] == "quit" {
+                            keyboard::quit(s, tx);
+                            continue;
+                        }
+                        if event["action"] == "settings" {
+                            s.preferences = true;
+                        }
+                        if event["capture"].as_bool() == Some(true) {
+                            keyboard::new_draft(s, tx);
+                        }
+                        if let Some(app) = &s.keyboard.app {
+                            app.open();
                         }
                     }
                 }
-                if s.docs
-                    .iter()
-                    .all(|d| d.saved == d.revision && !d.pending_action)
-                {
-                    s.notice = "All changes saved".into();
-                }
             }
+            Reply::Saved(id, revision, result) => sync::saved(s, &id, revision, result),
             Reply::Library(g, result) => match result {
                 Ok(lib) if g == s.generation => {
                     let added = lib.drafts.len() > s.docs.len();
@@ -152,7 +202,7 @@ pub(super) fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
                                 edit.anchor = selection.0;
                                 edit.focus = selection.1;
                             }
-                            edit.insert(&format!("![Pasted image]({src})"));
+                            attachments::insertion(edit, &src);
                             s.edited(di, vi, tx);
                         }
                         Err(e) => s.notice = format!("Image paste failed: {e}"),
@@ -186,6 +236,12 @@ pub(super) fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     {
         s.save();
     }
+    sync::poll(s);
+    session::poll(s, tx);
+    services::poll(s, tx);
+    changed |= attachments::poll(s);
+    spelling::poll(s, tx);
+    writing::poll(s, tx);
     caret::poll(s, now, tx) || changed
 }
 fn global_key(s: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
@@ -199,6 +255,9 @@ fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -
     s.active = vi;
     if s.docs[di].versions[vi].edit.preedit.is_some() {
         return false;
+    }
+    if attachments::key(s, di, vi, key, tx) {
+        return true;
     }
     if global_key(s, key, tx) {
         return true;
@@ -295,6 +354,10 @@ fn menu(s: &State, dark: bool, p: design::Palette) -> El {
                 s.edited(s.selected, vi, tx);
             }));
     }
+    if s.item_menu.is_none() {
+        menu = spelling::menu(s, menu, p);
+        menu = links::menu(s, menu, p);
+    }
     design::glass_surface(menu, dark)
         .fill(p.menu.alpha(0.84))
         .backdrop_blur(22.0)
@@ -339,7 +402,7 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
                 .child(design::tab_surface(&widths, dark))
                 .child(
                     row().w(title_width).h(28.0).px(13.0).center_y().child(
-                        text(title)
+                        text(&title)
                             .font(TextStyle::new(
                                 12.5,
                                 if vi == s.active_version() {
@@ -377,7 +440,7 @@ fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
             items::open(s, s.selected, Some(vi), [point.x, point.y]);
         })
 }
-fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
+fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette, cx: &Cx<State>) -> El {
     let di = s.selected;
     let d = &s.docs[di];
     let v = &d.versions[vi];
@@ -385,6 +448,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
     let (px, py) = if narrow { (24.0, 32.0) } else { (56.0, 50.0) };
     let mut spans = v.spans.clone();
     spans.extend(design::underlined(&v.edit.text, p.text));
+    spans.extend(spelling::spans(s, vi));
     if !s.source {
         spans.extend(v.hidden.iter().cloned());
     }
@@ -396,7 +460,6 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
         .min_h(560.0)
         .color(p.text)
         .caret(s.caret.color(p.text), p.text.alpha(0.2))
-        .spans(spans)
         .on_edit(move |s: &mut State| &mut s.docs[di].versions[vi].edit)
         .on_selection_change(|s: &mut State, _, _| s.caret.restart())
         .on_input_change(move |s: &mut State, tx| s.edited(di, vi, tx))
@@ -405,7 +468,9 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
             s.focus(vi);
             s.preferences = false;
             s.item_menu = None;
+            s.link = None;
             s.context = Some([point.x, point.y]);
+            spelling::suggest(s);
         })
         .on_input_paste(move |s: &mut State, data, tx| {
             if s.docs[di].pending_removal {
@@ -414,43 +479,42 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
             if let Some(image) = data.image() {
                 s.paste_image(di, vi, image.png().to_vec(), tx);
                 true
+            } else if !data.files().is_empty() {
+                attachments::files(s, di, vi, data.files());
+                true
+            } else if let Some(html) = data.html() {
+                let markdown = paste::markdown(html);
+                s.docs[di].versions[vi].edit.insert(&markdown);
+                s.edited(di, vi, tx);
+                true
             } else {
                 false
             }
-        });
+        })
+        .on_drop_files(move |s: &mut State, files, _| attachments::files(s, di, vi, files))
+        .accepts_extensions(&["png", "jpg", "jpeg", "webp", "gif"]);
     if d.pending_removal {
         editor = editor.inert();
     }
-    let mut paper = col()
-        .w_full()
-        .max_w(790.0)
-        .px(px)
-        .py(py)
-        .gap(12.0)
-        .child(editor);
-    for src in &v.media {
-        if let Some(image) = s.images.get(&s.image_path(d.id(), src)) {
-            let ratio = image
-                .size()
-                .map_or(1.5, |[w, h]| w as f32 / h.max(1) as f32);
-            paper = paper.child(
-                el().key(format!("image-{src}"))
-                    .role("img")
-                    .label("Pasted image attachment")
-                    .w_full()
-                    .h(((width - px * 2.0) / ratio).clamp(60.0, 500.0))
-                    .radius(10.0)
-                    .pixels(image.pixels()),
-            );
-        }
-    }
+    let editor = attachments::inline(
+        s,
+        di,
+        vi,
+        (width.min(790.0) - px * 2.0).max(1.0),
+        editor,
+        cx,
+        spans,
+    );
+    let paper = col().w_full().max_w(790.0).px(px).py(py).child(editor);
     col()
         .key(format!("version-{}", v.id))
         .w(width)
         .min_w(width)
         .h_full()
         .min_h(0.0)
-        .child(
+        .child(session::watch(
+            s,
+            &format!("scroll-{}", v.id),
             col()
                 .key(format!("scroll-{}", v.id))
                 .w_full()
@@ -468,7 +532,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
                         .child(paper)
                         .child(el().h(500.0)),
                 ),
-        )
+        ))
         .child(tab(s, vi, width, dark, p))
 }
 fn date_label(value: &Value) -> String {
@@ -488,10 +552,15 @@ fn date_label(value: &Value) -> String {
 fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
     let mut list = col().w_full().px(8.0).gap(4.0);
     for (i, d) in s.docs.iter().enumerate() {
-        let title = d.raw["title"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .unwrap_or("Untitled draft");
+        let title = if d.raw["titleSource"] == "sentence" {
+            design::title(&d.versions.last().unwrap().edit.text)
+        } else {
+            d.raw["title"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Untitled draft")
+                .to_owned()
+        };
         let latest = d.versions.last().unwrap();
         let prose = design::prose(&latest.edit.text);
         let summary = d.raw["summary"]["text"]
@@ -514,7 +583,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
         let mut entry = col()
             .key(format!("draft-{i}"))
             .role("button")
-            .label(title)
+            .label(&title)
             .focusable(true)
             .w_full()
             .padding(10.0)
@@ -536,7 +605,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     .gap(8.0)
                     .center_y()
                     .child(
-                        text(title)
+                        text(&title)
                             .grow(1.0)
                             .min_w(0.0)
                             .truncate()
@@ -655,7 +724,9 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
         .h_full()
         .min_h(0.0)
         .child(el().h(40.0).w_full().window_drag())
-        .child(
+        .child(session::watch(
+            s,
+            "sidebar-scroll",
             col()
                 .grow(1.0)
                 .min_h(0.0)
@@ -664,7 +735,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     stick_bottom: false,
                 })
                 .child(list),
-        )
+        ))
         .child(footer(s, dark, p))
 }
 pub(super) fn footer(s: &State, dark: bool, p: design::Palette) -> El {
@@ -771,7 +842,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         if n > 0 {
             columns = columns.child(el().w(1.0).h_full().fill(p.line));
         }
-        columns = columns.child(column(s, vi, column_width, dark, p));
+        columns = columns.child(column(s, vi, column_width, dark, p, cx));
     }
     let mut content = row().key("draft-content").w_full().h_full().min_h(0.0);
     if s.sidebar {
@@ -779,14 +850,16 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             .child(sidebar(s, dark, side, p))
             .child(el().w(1.0).h_full().fill(p.line));
     }
-    content = content.child(
+    content = content.child(session::watch(
+        s,
+        &format!("columns-{}", s.docs[s.selected].id()),
         col()
             .grow(1.0)
             .min_w(0.0)
             .h_full()
             .scroll_x()
             .child(columns),
-    );
+    ));
     if s.preferences {
         content = settings::page(s, dark, side, p, cx);
     }
@@ -806,6 +879,46 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .fill(p.background.alpha(if dark { 0.78 } else { 0.8 })),
         )
         .child(content);
+    if let Some(attachment) = &s.attachment {
+        root = root.child(
+            el().w_full()
+                .h_full()
+                .absolute(0.0, 0.0)
+                .on_press(|s: &mut State| s.attachment = None),
+        );
+        root = root.child(
+            attachments::panel(s, dark, p)
+                .h((height - 64.0).min(740.0))
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .anchored_fit(
+                    &attachment.anchor,
+                    rune::Side::Right,
+                    rune::Align::Start,
+                    8.0,
+                ),
+        );
+    }
+    if s.notice.starts_with("Could not") || s.notice.contains(" failed:") {
+        root = root.child(
+            design::glass_surface(
+                col()
+                    .key("save-issue")
+                    .w((width - 32.0).min(480.0))
+                    .padding(12.0)
+                    .radius(14.0)
+                    .gap(8.0)
+                    .child(settings::copy(&s.notice, p).wrap())
+                    .child(menu_item("save-retry", "Try saving again", p, |s, _| {
+                        s.save()
+                    })),
+                dark,
+            )
+            .fill(p.menu.alpha(0.96))
+            .absolute((width - 496.0).max(16.0), height - 110.0),
+        );
+    }
     if s.context.is_some() || s.item_menu.is_some() {
         root = root.child(
             el().w_full()
@@ -892,6 +1005,6 @@ pub(super) fn spec() -> AppSpec<State> {
                 }
             }),
         ],
-        ..AppSpec::new("Draft · Rune prototype", (1200.0, 820.0), State::load, view)
+        ..AppSpec::new("Draft", (1200.0, 820.0), State::load, view)
     }
 }

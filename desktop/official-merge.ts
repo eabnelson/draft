@@ -12,11 +12,11 @@ export type MergeResult={catalog:Catalog;conflicts:UpdateConflict[];needsAgent:b
 export type MergeInput={base:string;mine:string;official:string;destination:string;choices?:Record<string,ConflictChoice>};
 const ignored=(name:string)=>['.git','node_modules','dist','resources','target','release','gen','.draft-upstream','.draft-update.json','.DS_Store','.build-cache'].includes(name)||name.startsWith('.env')||name.endsWith('.tsbuildinfo');
 export async function sourceFiles(root:string,prefix=''):Promise<Map<string,Buffer>>{
- const files=new Map<string,Buffer>();for(const entry of await readdir(join(root,prefix),{withFileTypes:true})){if(ignored(entry.name))continue;const path=join(prefix,entry.name);if(entry.isSymbolicLink())throw Error('The update contains an unexpected shortcut.');if(entry.isDirectory())for(const [name,value] of await sourceFiles(root,path))files.set(name,value);else if(entry.isFile())files.set(path,await readFile(join(root,path)));}return files;
+ const files=new Map<string,Buffer>();for(const entry of await readdir(join(root,prefix),{withFileTypes:true})){const path=join(prefix,entry.name);if(ignored(entry.name)||/^(?:native\/)?rune-prototype\/(scratch|artifacts)(\/|$)/.test(path))continue;if(entry.isSymbolicLink())throw Error('The update contains an unexpected shortcut.');if(entry.isDirectory())for(const [name,value] of await sourceFiles(root,path))files.set(name,value);else if(entry.isFile())files.set(path,await readFile(join(root,path)));}return files;
 }
 const same=(a:Buffer|undefined,b:Buffer|undefined)=>a===undefined?b===undefined:b!==undefined&&a.equals(b);
 const owns=(feature:Feature,path:string)=>feature.code?.some(name=>path===name||path.startsWith(name+'/'))??false;
-const controller=(path:string)=>/^(desktop|scripts|src-tauri|native|host-ui|host-tests)\//.test(path)||path==='update-public-key.pem';
+const controller=(path:string)=>!/^native\/rune-prototype\/src\/(?!launcher\.rs$)/.test(path)&&(/^(desktop|scripts|src-tauri|native|host-ui|host-tests)\//.test(path)||path==='update-public-key.pem');
 
 export async function prepareOfficialMerge(input:MergeInput):Promise<MergeResult>{
  const [base,mine,official]=await Promise.all([readJSON<Catalog>(join(input.base,'features.json')),readJSON<Catalog>(join(input.mine,'features.json')),readJSON<Catalog>(join(input.official,'features.json'))]);

@@ -52,28 +52,50 @@ Clippy, and those checks on macOS and Linux. GPU rendering and real desktop
 integration require separate verification.
 
 Verified locally on November 6: the default native launch and headless checks on
-macOS, 110 app tests, 36 host tests, TypeScript, and native formatting/Clippy.
+macOS, 111 app tests, 37 host tests, TypeScript, and native formatting/Clippy.
 Native formatting, Clippy, and the full headless interaction checks also pass in
 a Debian ARM64 container with Rust 1.96.1 and Bun 1.4.3. This does not verify a
 Linux desktop session or the new workflow on GitHub's runners.
 
 `bun run web:dev` retains the browser preview; `bun run tauri:dev` retains the
-previous desktop frontend. The existing release build and updater still produce
-that frontend until native distribution and feature parity are implemented.
+previous desktop frontend. The published release still produces that frontend
+until the native public-release gates below are satisfied.
 
-## Migration work
+## Migration implementation
 
-| Area | Current native state | Work before the native release |
+| Area | Native implementation | Remaining verification or release gate |
 | --- | --- | --- |
-| Writing and versions | Native buffers, editing, independent undo during the process, saves, recovery, version menus, and shortcuts | Persist undo across restarts; verify concealed Markdown caret/selection behavior with real input methods |
-| Preferences and navigation | Appearance choices, Settings sections, and persisted window zoom | Persist appearance and other preferences; preserve draft/version navigation and scroll state across the required lifetimes |
-| Media and links | Image paste stores media and displays previews below the text | Restore inline media editing, social crops, file drops, rich paste, links, spelling, and the remaining Draft 2 writing interactions |
-| Sync | Existing sync engine and isolated sign-in settings | Reconcile remote changes into open native buffers without overwriting typing; complete settings parity and Linux credentials/opening |
-| Personal and official updates | Existing services and previous frontend retained | Native Features/model settings, verified native build/activation, save-before-restart, rollback, and host-owned recovery controls |
-| Desktop and distribution | Mac development app, native menus, quick-capture handlers; Linux build and headless checks pass | Self-contained launch with its host, login/tray behavior, real desktop-wide shortcut and activation checks, Linux GUI/accessibility checks, packaging, signing, and updater integration |
-| Quality | Native interaction checks pass on Mac and in a Linux container; light/dark GPU comparisons pass on Mac | Representative launch/typing/scroll/idle measurements, long-document checks, manual screen-reader/input-method verification, and both-platform release verification |
+| Writing | Unicode editing, serialized saves, revision-aware sync, validated delta undo/redo across restart, preserved unknown metadata, and recovery | Real IME conversion, dictation, and concealed-source selection with assistive technology |
+| Session | Appearance, source mode, sidebar expansion/visibility, selected versions, selection, scroll positions, and zoom persist | Extended daily-use checks across multiple displays and sessions |
+| Media and text | Inline image geometry in one editor buffer; paste/drop, social crops, remembered originals, clipboard copy, rich-paste Markdown conversion, links, local spelling | Wayland file drops remain limited by upstream winit; use paste there |
+| Sync | Clean remote refresh, dirty-buffer deferral, stale-client merge, older-ack protection, and recovery of unsaved writing after a remote move/delete | Real signed-in Linux keyring and multi-device desktop session |
+| Models and features | Native settings, optional titles/summaries, protected host, offline native feature compilation/checks, activation confirmation, rollback, and independent recovery controls | A real provider sign-in/build session; the deterministic native update check passes on Mac |
+| Desktop | Standalone host launcher, profile isolation, single instance, menu bar/tray actions, optional login launch, native menus and quick-capture handlers | Actual desktop-wide shortcut and activation on Linux; installed Draft may own Alt-period on this Mac |
+| Packaging | macOS app with bundled Bun/helpers/source and signature verification; Linux portable archive; Mac host update helper | Developer ID/notarization, native release-channel configuration, and Linux full-host updater automation |
 
-Start with writing/session durability and preferences, then live sync and media,
-then personal-update and distribution integration. These are the next engineering
-steps on the approved design; the design experiment is no longer an open choice
-between Rune and the previous renderer.
+Automated verification now includes 111 app tests, 37 host tests, four Rust unit
+checks, native interaction checks, and light/dark glass-color comparisons on Mac.
+The native feature check edits Rust interface source, passes the real isolated
+build gate, verifies activation, and rolls back without a model call. The Mac
+standalone smoke test verifies launch, Unicode writing, new tabs, settings, and
+quit in an isolated profile, including undo/redo after reopening. Linux ARM64
+compilation, interaction checks, portable
+packaging, and a real frame rendered with Mesa software Vulkan pass in Debian.
+The Vulkan frame caught and fixed a half-float shader capability failure that
+compilation and headless interaction checks did not expose.
+
+A 120-frame optimized long-document sanity run on this Mac reported a 246 ms
+first rendered frame and 0.38 ms p95 CPU time for forced idle frames. That is a
+rendering sanity check, not an end-to-end typing benchmark or a comparison with
+the previous renderer.
+
+These are preview artifacts. Public release remains gated by the manual desktop,
+input-method, accessibility, signing, and channel checks above. No installed
+library was migrated and no release was published. `bun run native:build` prepares
+the native package; the existing `desktop:build` release remains the previous
+frontend until that gate is satisfied.
+
+Linux implementation references: [Secret Service CLI](https://manpages.debian.org/bookworm/libsecret-tools/secret-tool.1.en.html),
+[Hunspell protocol](https://manpages.debian.org/bookworm/hunspell/hunspell.1.en.html),
+and [bubblewrap isolation](https://manpages.debian.org/bookworm/bubblewrap/bwrap.1.en.html).
+Desktop shortcut quoting follows the [Desktop Entry specification](https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html).

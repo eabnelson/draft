@@ -4,8 +4,16 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[[bin]]
+name = "draft-rune-prototype"
+path = "src/main.rs"
+
+[[bin]]
+name = "draft"
+path = "src/launcher.rs"
+
 [dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "7ead7d63fcf6f9dd9669385a8b90e2ae80015d7b", default-features = false, features = ["accessibility", "dbus", "embedded-fonts", "metal-backend", "native-file-dialog"] }
+rune = { path = "../vendor/rune", default-features = false, features = ["accessibility", "dbus", "embedded-fonts", "metal-backend", "native-file-dialog"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "3", default-features = false, features = ["json"] }
@@ -14,6 +22,8 @@ pulldown-cmark = { version = "0.13", default-features = false }
 parley = { version = "0.12", default-features = false, features = ["std", "complex-scripts"] }
 wgpu = { version = "30", default-features = false, features = ["wgsl"] }
 bytemuck = { version = "1", features = ["derive"] }
+blake3 = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 
 [profile.dev]
 debug = 0
