@@ -93,7 +93,6 @@ impl GlassColors {
 pub fn glass_surface(surface: El, dark: bool) -> El {
     let c = GlassColors::new(dark);
     surface
-        .backdrop_blur(14.0)
         .fill(c.tint)
         .gradient(c.top, c.bottom)
         .radial_gradient(
@@ -252,12 +251,6 @@ fn pill_paths(widths: &[f32]) -> (f32, Path, Path) {
     (width, p, top)
 }
 
-pub fn pill(widths: &[f32], color: Color) -> El {
-    let (width, outline, _) = pill_paths(widths);
-    el().size(width, 28.0)
-        .shape(Shape::new().fill_path(&outline, color))
-}
-
 pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
     let (width, outline, top) = pill_paths(widths);
     let c = GlassColors::new(dark);
@@ -265,6 +258,12 @@ pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
         el().size(width, 28.0)
             .shape(Shape::new().fill_path(&outline, color))
             .absolute(0.0, 0.0)
+    };
+    let faded_layer = |color, [left, top, right, bottom]: [f32; 4]| {
+        el().size(width, 28.0)
+            .absolute(0.0, 0.0)
+            .clip_fade(left, top, right, bottom)
+            .child(layer(color))
     };
     // Fade filled copies of the same contour: the sheen never fills the scoops
     // with a rectangle or leaves seams where a neck meets a lobe.
@@ -276,8 +275,8 @@ pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
         )
         .child(layer(c.tint))
         .child(layer(c.bottom))
-        .child(layer(c.top).clip_fade(0.0, 0.0, 0.0, 28.0))
-        .child(layer(c.sheen).clip_fade(0.0, 0.0, width, 28.0))
+        .child(faded_layer(c.top, [0.0, 0.0, 0.0, 28.0]))
+        .child(faded_layer(c.sheen, [0.0, 0.0, width, 28.0]))
         .child(
             el().size(width, 28.0).absolute(0.0, 0.0).shape(
                 Shape::new()
@@ -286,6 +285,23 @@ pub fn glass_pill(widths: &[f32], dark: bool, active: bool) -> El {
             ),
         )
         .dim(if active { 1.0 } else { 0.6 })
+}
+
+pub fn tab_frost(p: Palette) -> El {
+    // One blur per visible column covers the joined tabs and their necks.
+    // Keep static glass cards unblurred so Rune's four-blur budget leaves
+    // room for a menu even while three columns are partially visible.
+    el().key("tab-frost")
+        .w_full()
+        .h(46.0)
+        .absolute(0.0, 0.0)
+        .clip_fade(0.0, 0.0, 0.0, 12.0)
+        .child(
+            el().w_full()
+                .h_full()
+                .backdrop_blur(14.0)
+                .fill(p.background.alpha(0.88)),
+        )
 }
 
 pub fn fonts() -> &'static [&'static [u8]] {

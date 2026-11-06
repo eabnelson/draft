@@ -510,6 +510,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> E
                         .child(el().h(500.0)),
                 ),
         )
+        .child(design::tab_frost(p))
         .child(tab(s, vi, width, dark, p))
 }
 fn date_label(value: &Value) -> String {
@@ -704,7 +705,11 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
         row()
             .h(28.0)
             .gap(5.25)
-            .child(design::pill(&[32.0, 32.0], p.glass).absolute(0.0, 0.0))
+            .child(
+                design::glass_pill(&[32.0, 32.0], dark, true)
+                    .key("footer-glass")
+                    .absolute(0.0, 0.0),
+            )
             .child(
                 row()
                     .key("settings")
@@ -713,7 +718,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     .role("button")
                     .label("Settings")
                     .focusable(true)
-                    .child(rune::icon(&design::SETTINGS, 14.0).color(p.muted))
+                    .child(rune::icon(&design::SETTINGS, 14.0).color(p.text.alpha(0.85)))
                     .on_press(|s: &mut State| {
                         s.preferences = !s.preferences;
                         s.context = None;
@@ -728,7 +733,7 @@ fn sidebar(s: &State, dark: bool, width: f32, p: design::Palette) -> El {
                     .role("status")
                     .label(&s.notice)
                     .help(&s.notice)
-                    .child(rune::icon(&design::CLOUD, 14.0).color(p.muted)),
+                    .child(rune::icon(&design::CLOUD, 14.0).color(p.text.alpha(0.85))),
             ),
     );
     col()
