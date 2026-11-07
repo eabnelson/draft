@@ -13,7 +13,7 @@
     "test": "bun test ./tests",
     "test:host": "bun test ./host-tests",
     "desktop:dev": "bun run scripts/desktop-dev.ts",
-    "desktop:build": "bun scripts/package-native.ts --public",
+    "desktop:build": "bun scripts/package-native.ts",
     "release:prepare": "bun run scripts/prepare-release.ts",
     "website:dev": "bun run website:build && bun website/serve.ts",
     "website:build": "bun website/build.ts",

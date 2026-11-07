@@ -6,11 +6,27 @@ final class MenuActions: NSObject {
     @objc func quit() { emit("quit") }
     func emit(_ action: String) { print(action); fflush(stdout) }
 }
+func menuBarIcon() -> NSImage {
+    let image = NSImage(size: NSSize(width: 22, height: 18))
+    let folder = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+    for name in ["tray-template.png", "tray-template@2x.png"] {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(name)),
+              let representation = NSBitmapImageRep(data: data) else {
+            fatalError("Draft’s menu bar artwork could not be loaded.")
+        }
+        representation.size = image.size
+        image.addRepresentation(representation)
+    }
+    image.isTemplate = true
+    return image
+}
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let actions = MenuActions()
 let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-item.button?.image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: "Draft")
+item.button?.image = menuBarIcon()
+item.button?.toolTip = "Draft"
+item.button?.setAccessibilityLabel("Draft")
 let menu = NSMenu()
 for (title, selector) in [("Show Draft", #selector(MenuActions.show)), ("New Draft", #selector(MenuActions.newDraft)), ("Settings…", #selector(MenuActions.settings)), ("Quit Draft", #selector(MenuActions.quit))] {
     let entry = NSMenuItem(title: title, action: selector, keyEquivalent: "")

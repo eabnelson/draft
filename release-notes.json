@@ -1,4 +1,6 @@
 [
+  "Draft’s original menu bar icon is restored for standard and Retina displays.",
+  "The app is named Draft in macOS and Linux launchers.",
   "Draft deletion now asks only “Delete this draft?” with Delete and Cancel.",
   "Untitled draft context menus now show “New Draft” as their title.",
   "The Settings sidebar toggle hides and reopens navigation while keeping Back available.",

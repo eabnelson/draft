@@ -9,5 +9,5 @@ export function desktopEntry(executable:string,args:string[]=[],icon?:string){
   if(executable.includes('='))throw Error('Move Draft to a folder without an equals sign before creating its desktop shortcut.');
   // GLib probes the first executable before expanding %% in its path. Keep the
   // movable path as env's argument so folders containing percent signs work too.
-  return `[Desktop Entry]\nType=Application\nName=Draft Native\nExec=/usr/bin/env -- ${[executable,...args].map(desktopArgument).join(' ')}\n${icon?`Icon=${desktopValue(icon)}\n`:''}Terminal=false\nCategories=Office;TextEditor;\nStartupWMClass=com.studiofour.draft.native\n`;
+  return `[Desktop Entry]\nType=Application\nName=Draft\nExec=/usr/bin/env -- ${[executable,...args].map(desktopArgument).join(' ')}\n${icon?`Icon=${desktopValue(icon)}\n`:''}Terminal=false\nCategories=Office;TextEditor;\nStartupWMClass=com.studiofour.draft.native\n`;
 }

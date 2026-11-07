@@ -20,7 +20,7 @@ if(process.platform==='darwin'){
   const app=join(root,'dist/native-renderer.app'),contents=join(app,'Contents');
   await mkdir(join(contents,'MacOS'),{recursive:true});
   await copyFile(join(root,'dist/draft-native'),join(contents,'MacOS/draft-native'));
-  await writeFile(join(contents,'Info.plist'),'<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>draft-native</string><key>CFBundleIdentifier</key><string>com.studiofour.draft.native</string><key>CFBundleName</key><string>Draft Native</string><key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/></dict></plist>');
+  await writeFile(join(contents,'Info.plist'),'<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>draft-native</string><key>CFBundleIdentifier</key><string>com.studiofour.draft.native</string><key>CFBundleDisplayName</key><string>Draft</string><key>CFBundleName</key><string>Draft</string><key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/></dict></plist>');
   const sign=Bun.spawn(['/usr/bin/codesign','--force','--sign','-',app],{stdout:'inherit',stderr:'inherit'});if(await sign.exited)throw Error('The prepared native renderer could not be signed.');
 }
 

@@ -151,16 +151,16 @@ optional under Editor and remain off until enabled.
 bun run native:build
 ```
 
-This produces `artifacts/Draft Native.app` on macOS or a Linux portable directory
+This produces `artifacts/Draft.app` on macOS or a Linux portable directory
 and archive. The package contains its own Bun host, native renderer, build source,
 dependencies, and independent update controls. It launches without a development
 server. macOS packages are ad-hoc signed unless `APPLE_SIGNING_IDENTITY` is set.
 `--installer` also creates a macOS DMG; public distribution still requires
 Developer ID signing and notarization.
 
-On Linux, unpack the archive and run `Draft-Native/bin/draft`. Optionally run
-`Draft-Native/install-desktop` to add a shortcut at that unpacked location, or
-`Draft-Native/install-desktop --uninstall` to remove it. After moving the folder,
+On Linux, unpack the archive and run `Draft/bin/draft`. Optionally run
+`Draft/install-desktop` to add a shortcut at that unpacked location, or
+`Draft/install-desktop --uninstall` to remove it. After moving the folder,
 run the installer again. This does not enable launch at login.
 Use a folder without literal backslashes: Bun 1.4.3 interprets them as path
 separators when loading its host script, including on Linux.
