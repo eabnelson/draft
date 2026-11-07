@@ -19,7 +19,7 @@ pub fn preferences(s: &mut State, value: Value) {
     let Some(handle) = s.keyboard.app.clone() else {
         return;
     };
-    let image = image::load_from_memory(include_bytes!("../../../src-tauri/icons/icon.png"))
+    let image = image::load_from_memory(include_bytes!("../../icons/icon.png"))
         .unwrap()
         .thumbnail(24, 24)
         .into_rgba8();

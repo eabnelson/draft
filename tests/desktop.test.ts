@@ -86,11 +86,11 @@ test('discarding an older failure leaves the current preparation running',async(
 test('generated native build files do not invalidate a clean working copy',async()=>{
  const root=await mkdtemp(join(tmpdir(),'draft-generated-'));try{
   const source=join(root,'original'),copy=join(root,'copy');
-  await atomicWrite(join(source,'src-tauri','host.rs'),'trusted source');
-  await atomicWrite(join(source,'src-tauri','gen','schema.json'),'generated metadata');
-  await atomicWrite(join(source,'src-tauri','binaries','build-helper'),'generated binary');
-  await atomicWrite(join(source,'src-tauri','.DS_Store'),'Finder metadata');
+  await atomicWrite(join(source,'native','host.rs'),'trusted source');
+  await atomicWrite(join(source,'native','gen','schema.json'),'generated metadata');
+  await atomicWrite(join(source,'native','binaries','build-helper'),'generated binary');
+  await atomicWrite(join(source,'native','.DS_Store'),'Finder metadata');
   await copySource(source,copy);
-  expect(await sourceHash(join(source,'src-tauri'))).toBe(await sourceHash(join(copy,'src-tauri')));
+  expect(await sourceHash(join(source,'native'))).toBe(await sourceHash(join(copy,'native')));
  }finally{await rm(root,{recursive:true,force:true});}
 });

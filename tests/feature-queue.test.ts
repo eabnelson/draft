@@ -9,7 +9,7 @@ import type {Catalog,FeatureResult,Update} from '../desktop/types';
 const baseline:Catalog={schemaVersion:1,appVersion:'1.0.0',name:'Draft',features:[{id:'writing',title:'Writing',description:'Write.',origin:'official',state:'active',updatedAt:'2026-10-24T16:00:00Z'}]};
 async function fixture(){
  const root=await mkdtemp(join(tmpdir(),'draft-queue-')),template=join(root,'template'),data=join(root,'data'),dependencies=join(root,'dependencies');
- for(const folder of ['src','dist','desktop','scripts','src-tauri','docs'])await mkdir(join(template,folder),{recursive:true});await mkdir(dependencies);
+ for(const folder of ['src','dist','desktop','scripts','native','docs'])await mkdir(join(template,folder),{recursive:true});await mkdir(dependencies);
  await atomicWrite(join(template,'features.json'),JSON.stringify(baseline));await atomicWrite(join(template,'dist/index.html'),'official');await atomicWrite(join(template,'docs/feature-builder.md'),'Build the full requested update.');
  const host=new Updates(data,template,dependencies,process.execPath);Object.assign(host,{builds:join(root,'Builds')});await host.initialize();
  Object.assign(host,{defaultSelection:async()=>({provider:'claude',model:'test'}),buildCandidate:async(workspace:string)=>{await mkdir(join(workspace,'dist'),{recursive:true});await atomicWrite(join(workspace,'dist/index.html'),'verified candidate');return [{name:'behavior',passed:true}];}});

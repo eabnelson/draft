@@ -18,9 +18,6 @@ jobs:
       - run: bun run build
       - run: bun run website:build
       - run: bun build src/runtime.ts --target=bun --outfile dist/runtime.js
-      - run: bun run source:bundle
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
   native:
     name: Native (${{ matrix.os }})
     strategy:

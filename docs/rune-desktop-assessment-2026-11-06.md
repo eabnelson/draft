@@ -72,7 +72,7 @@ inline images, would be migration work.
 [updates.ts](../desktop/updates.ts) validates personal changes using Bun tests,
 TypeScript, Vite, and the bundled local runtime. It expects `dist/index.html` and
 rejects ordinary personal updates that change protected host files.
-[prepare-resources.ts](../scripts/prepare-resources.ts) bundles Bun and the
+[prepare-resources.ts](https://github.com/eabnelson/draft/blob/v0.3.0-alpha.71/scripts/prepare-resources.ts) bundles Bun and the
 JavaScript dependencies needed to build those updates.
 
 If personal features change a Rust interface, Draft needs a way to compile,
@@ -101,13 +101,13 @@ possible in a prototype, so a native frontend need not also rewrite storage.
 
 These are concrete dependencies in Draft, independent of its renderer:
 
-1. **Shell and window behavior.** [main.rs](../src-tauri/src/main.rs) contains
+1. **Shell and window behavior.** [main.rs](https://github.com/eabnelson/draft/blob/v0.3.0-alpha.71/src-tauri/src/main.rs) contains
    unguarded Objective-C bindings, AppKit quit handling, macOS Spaces behavior,
    and macOS window configuration. Separate platform behavior while preserving
    the save-before-quit barrier, shortcuts, tray, and login preferences.
 2. **Credentials and operating-system actions.**
    [zo-sync.ts](../desktop/zo-sync.ts) uses `/usr/bin/security` for Keychain.
-   [links.ts](../desktop/links.ts) and [server.ts](../desktop/server.ts) use
+   [links.ts](../desktop/links.ts) and [server.ts](https://github.com/eabnelson/draft/blob/v0.3.0-alpha.71/desktop/server.ts) use
    `/usr/bin/open`; [images.ts](../desktop/images.ts) uses AppleScript for image
    copying. Add Linux implementations. The existing `Secrets` interface already
    provides a seam for credential storage.
@@ -117,8 +117,8 @@ These are concrete dependencies in Draft, independent of its renderer:
 4. **Feature-builder isolation.** [agents.ts](../desktop/agents.ts) and
    [updates.ts](../desktop/updates.ts) launch work through macOS `sandbox-exec`.
    Implement equivalent Linux isolation for feature generation and verification.
-5. **Paths, packaging, and updates.** [server.ts](../desktop/server.ts) defaults
-   to a macOS Application Support path. [tauri.conf.json](../src-tauri/tauri.conf.json)
+5. **Paths, packaging, and updates.** [server.ts](https://github.com/eabnelson/draft/blob/v0.3.0-alpha.71/desktop/server.ts) defaults
+   to a macOS Application Support path. [tauri.conf.json](https://github.com/eabnelson/draft/blob/v0.3.0-alpha.71/src-tauri/tauri.conf.json)
    selects only app/DMG bundles, [package-desktop.ts](../scripts/package-desktop.ts)
    constructs a Mac installer, and [native-update.ts](../desktop/native-update.ts)
    expects `.app` bundles and Apple verification tools. Add Linux resource paths,

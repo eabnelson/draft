@@ -35,7 +35,7 @@ export class NativeUpdates {
  }
  private async writePlan(update:Update,target:Version,previous:Version,operation:object){
   const path=join(this.root,'NativeUpdates',update.id,'install-plan.json');
-  await atomicWrite(path,JSON.stringify({schemaVersion:1,...operation,appPath:resolve(this.appPath),dataRoot:resolve(this.root),updateId:update.id,target:target.id,previous:previous.id,previousOfficial:previous.officialId,targetHost:target.hostVersion,previousHost:previous.hostVersion??previous.catalog.appVersion,bundleId:this.channel.options.bundleId??'com.eriknelson.draft',parentPid:this.parentPid,runtimePid:process.pid},null,2));return path;
+  await atomicWrite(path,JSON.stringify({schemaVersion:1,...operation,appPath:resolve(this.appPath),dataRoot:resolve(this.root),updateId:update.id,target:target.id,previous:previous.id,previousOfficial:previous.officialId,targetHost:target.hostVersion,previousHost:previous.hostVersion??previous.catalog.appVersion,bundleId:this.channel.options.bundleId??'com.studiofour.draft.native',parentPid:this.parentPid,runtimePid:process.pid},null,2));return path;
  }
 }
 

@@ -181,11 +181,12 @@ build, verification, activation, and rollback without contacting a model.
 
 The framework extension for inline media and Mesa rendering is documented under
 [`native/vendor`](../vendor/README.md). Manual screen-reader, real input-method,
-desktop-wide quick capture, and Linux desktop activation checks still gate a
-public native release. Linux full-host upgrades currently require downloading
-the portable package; the existing signed Mac host installer is reused on Mac.
-The existing published release channel remains unchanged until native release
-verification and distribution-channel configuration are complete.
+desktop-wide quick capture, and Linux desktop activation need further manual
+coverage. Linux full-host upgrades currently require downloading the portable
+package. The native Mac app has shipped since 0.3.0-alpha.71, through Developer ID
+signing, Apple notarization, authenticated downloads, and clean-Mac installation,
+native launch, rendered-frame, and interaction checks. The previous desktop shell
+and its build tooling have been removed; the shared web demo and recovery controls remain.
 
 See [the Anomaly findings](../../docs/anomaly-text-editing-research-2026-11-06.md)
 for the source patterns that informed the native editor.

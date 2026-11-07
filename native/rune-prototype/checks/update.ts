@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {mkdtemp,cp,rm,readFile,writeFile} from 'node:fs/promises';
+import {mkdtemp,cp,rm,readFile,writeFile,mkdir} from 'node:fs/promises';
 import {copySource,readJSON} from '../../../desktop/files';
 import {Updates,type AgentConnection} from '../../../desktop/updates';
 import type {Catalog} from '../../../desktop/types';
@@ -26,11 +26,16 @@ try{
   };
   const updates=new Updates(profile,template,join(root,'node_modules'),process.execPath,{nativeRenderer:true,agents,builds:join(temporary,'builds')});
   await updates.initialize();const original=updates.active.id;
+  // A retained alpha.71 interface must still build after the shell and its
+  // icon directory have been retired from the current packaged host.
+  await writeFile(join(updates.active.source,'native/rune-prototype/src/desktop.rs'),(await readFile(join(updates.active.source,'native/rune-prototype/src/desktop.rs'),'utf8')).replaceAll('include_bytes!("../../icons/icon.png")','include_bytes!("../../../src-tauri/icons/icon.png")'));
+  await mkdir(join(updates.active.source,'src-tauri'),{recursive:true});await writeFile(join(updates.active.source,'src-tauri/retired.rs'),'previous desktop controller');
   const update=await updates.request('add','Change the native window title for this check.');
   const timeout=Date.now()+20*60*1000;
   while(!['ready','failed','needs-attention'].includes(update.state)&&Date.now()<timeout)await Bun.sleep(500);
   assert.equal(update.state,'ready',update.error??'Native preparation timed out');
   assert.ok(update.checks?.some(check=>check.name.startsWith('Native format')&&check.passed));
+  await assert.rejects(readFile(join(updates.state.versions.find(v=>v.id===update.versionId)!.source,'src-tauri/retired.rs')),{code:'ENOENT'});
   await updates.apply(update.id,true);assert.notEqual(updates.active.id,original);
   await updates.abortActivation();assert.equal(updates.active.id,original);
   console.log('PASS native feature source edit, protected host, offline Rust checks/build, verified activation, and rollback');

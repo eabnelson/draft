@@ -38,7 +38,8 @@ If a feature isn’t quite right, choose **Keep working on this**. **Copy prompt
 
 ## Your files and source
 
-Draft keeps its data in `~/Library/Application Support/Draft/`:
+The native Mac app keeps its data in `~/Library/Application Support/Draft Native/`
+(Linux uses `${XDG_DATA_HOME:-~/.local/share}/draft-native`):
 
 - `Drafts/`: one `<id>.draft` folder per draft. Each holds `draft.json` (title, stage, versions, publications), every version as Markdown in `versions/`, its images in `media/`, and undo history in `history/`. `Archive/` holds archived drafts and `Recovery/` keeps the previous text of every changed or deleted version.
 - `Documents/`: Draft 1 files. They are migrated into `Drafts/` once and left in place as a recovery copy.
@@ -48,7 +49,7 @@ Draft keeps its data in `~/Library/Application Support/Draft/`:
 - `state.json`: model choice, queued ideas, feature-update history, and active/previous version pointers.
 - `Exports/`: exported drafts, each a plain folder with every version as Markdown and text plus its media.
 
-**Your source code** and **Your documents** in Preferences open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its build dependencies; ordinary personal updates do not require Node, Rust, Xcode, Git, or a GitHub account.
+**Your source code** and **Your documents** in Preferences open those folders. Code updates and resets retain document files. Preparation workspaces live separately in `~/Library/Caches/Draft/Builds/`. The app bundles Bun and its JavaScript dependencies. Personal native interface updates also require Rust, Cargo, and cached Rust dependencies; Node and a GitHub account are not required.
 
 The update builder edits candidate source rather than live files. Its process is restricted from your drafts and the activation record; verification also runs without network access. New package dependencies are installed in the candidate with lifecycle scripts disabled. Personal backend code runs as part of the app after you apply it, so request features you trust.
 
@@ -107,23 +108,26 @@ app, and `bun run dev --release` uses an optimized build. Native interaction che
 run with `bun run native:check`. See the [native README](native/rune-prototype/README.md)
 for Linux build libraries, verification, and current feature coverage.
 
-For the previous frontend, `bun run web:dev` serves the browser preview at
-`http://127.0.0.1:4319`, and `bun run tauri:dev` opens its desktop shell. Browser
-development is loopback-only and uses a separate profile when `DRAFT_DATA_ROOT`
-is set. The packaged app uses a random loopback port and a per-launch session cookie.
+`bun run website:dev` previews the web demo and landing page. Shared web components
+also provide the protected update and recovery controls. The installed writing
+interface uses Rune, with an authenticated host on a random loopback port.
 
-A standalone native preview is available with `bun run native:build`. It bundles
-its host and tools and uses an isolated Draft Native profile. See the
-[native rollout status](docs/native-design-rollout-2026-11-06.md) for verification
-and the remaining public-release gates.
+A standalone development package is available with `bun run native:build`. It
+bundles its host and tools and uses the Draft Native profile. The signed native
+Mac app has shipped since 0.3.0-alpha.71. See the
+[native rollout status](docs/native-design-rollout-2026-11-06.md) for verification.
 
-The published macOS release build still uses Tauri until those gates are met. It also requires Xcode command-line tools:
+Build the native public application with Xcode command-line tools installed on macOS:
 
 ```sh
 bun run desktop:build
 ```
 
-The app and disk image are produced under `src-tauri/target/release/bundle/`. The packaged app includes matching editable source and local build tools. See [Releasing](docs/releasing.md) for distribution signing and source-update signing.
+The app is produced at `native/rune-prototype/artifacts/Draft.app`. The release
+pipeline signs and notarizes it, creates the installer under `release/`, verifies
+the exact downloads on a clean Mac, and publishes them. The package includes
+matching editable source and local tools. Personal native feature builds require
+Rust and cached Cargo dependencies. See [Releasing](docs/releasing.md).
 
 ## Specs
 

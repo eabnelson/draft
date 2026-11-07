@@ -1,6 +1,6 @@
 [
-  "Draft now uses the new native editor, with glass tabs and sidebar selections, illustrated appearance choices, and matching settings and menus.",
-  "Writing includes persistent undo and redo, inline images and crops, rich paste, links, local spelling, and the familiar keyboard shortcuts.",
+  "The native editor is now the single desktop app, with the glass design, persistent undo and redo, inline images, spelling, and familiar shortcuts.",
+  "Personal feature handoffs now identify the native interface and its checks, helping your coding agent edit the app you use.",
   "This transition requires one manual installation from draft.studiofour.io. Quit the old Draft before opening the new app. Your writing is copied to the native library on first launch; the original stays intact.",
   "Reconnect cloud sync in Settings → Sync. Earlier editor undo history and personal interface changes remain with the previous app. Native personal feature builds require Rust and its cached dependencies."
 ]

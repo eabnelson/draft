@@ -11,9 +11,9 @@ const baseline:Catalog={schemaVersion:1,appVersion:'1.0.0',name:'Draft',features
 
 async function fixture(){
   const root=await mkdtemp(join(tmpdir(),'draft-handoff-')),template=join(root,'template'),data=join(root,'data'),dependencies=join(root,'dependencies');
-  for(const folder of ['src','dist','desktop','scripts','src-tauri'])await mkdir(join(template,folder),{recursive:true});
+  for(const folder of ['src','dist','desktop','scripts','native'])await mkdir(join(template,folder),{recursive:true});
   await mkdir(dependencies);await atomicWrite(join(template,'src/feature.ts'),'original');await atomicWrite(join(template,'dist/index.html'),'official');
-  for(const folder of ['desktop','scripts','src-tauri'])await atomicWrite(join(template,folder,'host.txt'),'trusted controller');
+  for(const folder of ['desktop','scripts','native'])await atomicWrite(join(template,folder,'host.txt'),'trusted controller');
   await atomicWrite(join(template,'features.json'),JSON.stringify(baseline));
   const host=new Updates(data,template,dependencies,process.execPath);Object.assign(host,{builds:join(root,'Builds')});await host.initialize();
   const docs=new DraftStore(join(data,'Drafts')),draft=fresh();await docs.save(editVersion(draft,draft.versions[0].id,'Private writing stays here'));
@@ -29,6 +29,8 @@ test('prompt retains the real feature context and creates an editable copy witho
   expect(handoff.prompt).toContain(original.request);expect(handoff.prompt).toContain(record.workspace);expect(handoff.prompt).toContain(original.error!);expect(handoff.prompt).toContain('First ask me what I would like to change');expect(handoff.prompt).toContain('Check my changes');expect(handoff.prompt).not.toContain('Private writing stays here');
   await atomicWrite(join(record.workspace,'src/feature.ts'),'my iteration');expect(await sourceHash(f.host.active.source)).toBe(before);
   const again=await f.host.handoff({updateId:original.id});expect(again.id).toBe(handoff.id);expect(await readFile(join(record.workspace,'src/feature.ts'),'utf8')).toBe('my iteration');
+  f.host.options.nativeRenderer=true;
+  const native=await f.host.handoff({updateId:original.id});expect(native.prompt).toContain('native/rune-prototype/src/ (except launcher.rs)');expect(native.prompt).toContain('native launcher, Cargo files, and vendored framework unchanged');
   const reopened=new Updates(f.data,f.template,f.dependencies,process.execPath);Object.assign(reopened,{builds:f.host.builds});await reopened.initialize();expect(reopened.state.handoffs![0].id).toBe(handoff.id);
  }finally{await rm(f.root,{recursive:true,force:true});}
 });

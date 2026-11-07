@@ -57,9 +57,10 @@ Native formatting, Clippy, and the full headless interaction checks also pass in
 a Debian ARM64 container with Rust 1.96.1 and Bun 1.4.3. This does not verify a
 Linux desktop session or the new workflow on GitHub's runners.
 
-`bun run web:dev` retains the browser preview; `bun run tauri:dev` retains the
-previous desktop frontend. The published release still produces that frontend
-until the native public-release gates below are satisfied.
+The signed native Mac app was published as 0.3.0-alpha.71 after the macOS/Linux
+Check workflow and the fresh-Mac release verification passed. The previous desktop
+shell, build commands, dependency, and CI target have now been removed. The shared
+web demo and protected recovery controls remain.
 
 ## Migration implementation
 
@@ -71,7 +72,7 @@ until the native public-release gates below are satisfied.
 | Sync | Clean remote refresh, dirty-buffer deferral, stale-client merge, older-ack protection, and recovery of unsaved writing after a remote move/delete | Real signed-in Linux keyring and multi-device desktop session |
 | Models and features | Native settings, optional titles/summaries, protected host, offline native feature compilation/checks, activation confirmation, rollback, and independent recovery controls | A real provider sign-in/build session; the deterministic native update check passes on Mac |
 | Desktop | Standalone host launcher, profile isolation, single instance, menu bar/tray actions, optional login launch, native menus and quick-capture handlers | Actual desktop-wide shortcut and activation on Linux; installed Draft may own Alt-period on this Mac |
-| Packaging | macOS app with bundled Bun/helpers/source and signature verification; Linux portable archive; Mac host update helper | Developer ID/notarization, native release-channel configuration, and Linux full-host updater automation |
+| Packaging | Native macOS app with bundled Bun/helpers/source, Developer ID signing, notarization, authenticated release channel, and clean-Mac download verification; Linux portable archive | Linux full-host updater automation |
 
 Automated verification now includes 111 app tests, 37 host tests, four Rust unit
 checks, native interaction checks, and light/dark glass-color comparisons on Mac.
@@ -89,11 +90,13 @@ first rendered frame and 0.38 ms p95 CPU time for forced idle frames. That is a
 rendering sanity check, not an end-to-end typing benchmark or a comparison with
 the previous renderer.
 
-These are preview artifacts. Public release remains gated by the manual desktop,
-input-method, accessibility, signing, and channel checks above. No installed
-library was migrated and no release was published. `bun run native:build` prepares
-the native package; the existing `desktop:build` release remains the previous
-frontend until that gate is satisfied.
+The public native release passed signature and hash verification, Gatekeeper,
+browser-style quarantine, installed window launch, a rendered native frame, and
+the downloaded editor's interaction checks on a clean Mac. The installed local
+copy was also upgraded to the signed release, with five drafts and six versions
+preserved. Original writing and recovery backups remain separate. Further manual
+input-method, accessibility, and Linux desktop checks remain useful coverage;
+they are not claimed as completed by the automated suite.
 
 Linux implementation references: [Secret Service CLI](https://manpages.debian.org/bookworm/libsecret-tools/secret-tool.1.en.html),
 [Hunspell protocol](https://manpages.debian.org/bookworm/hunspell/hunspell.1.en.html),

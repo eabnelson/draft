@@ -138,7 +138,7 @@ fn inline_media() {
     let src = rt
         .state
         .host
-        .media(&id, include_bytes!("../../../src-tauri/icons/icon.png"))
+        .media(&id, include_bytes!("../../icons/icon.png"))
         .unwrap();
     let marker = format!("![Example]({src})");
     rt.update(|s, tx| {
@@ -913,7 +913,7 @@ fn sidebar_context() {
         s.paste_image(
             s.selected,
             0,
-            include_bytes!("../../../src-tauri/icons/icon.png").to_vec(),
+            include_bytes!("../../icons/icon.png").to_vec(),
             tx,
         );
         items::request_for(s, &last_id, json!({"kind":"archive"}));
@@ -1320,7 +1320,7 @@ fn interactions() {
     );
     println!("PASS older save acknowledgement retains newer typing; newest text reaches disk");
 
-    let png = include_bytes!("../../../src-tauri/icons/icon.png").to_vec();
+    let png = include_bytes!("../../icons/icon.png").to_vec();
     let image = rune::ClipboardImage::from_png(png).unwrap();
     rt.paste_content(rune::ClipboardContent::new("").with_image(image));
     rt.frame(0.016);

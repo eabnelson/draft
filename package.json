@@ -1,6 +1,6 @@
 {
   "name": "draft",
-  "version": "0.3.0-alpha.67",
+  "version": "0.3.0-alpha.71",
   "type": "module",
   "scripts": {
     "native:dev": "bun native/rune-prototype/run.ts",
@@ -9,15 +9,11 @@
     "rune:snap": "bun native/rune-prototype/run.ts --snap native/rune-prototype/artifacts/editor.png --tree native/rune-prototype/artifacts/editor.json",
     "rune:check": "bun native/rune-prototype/run.ts --check",
     "dev": "bun scripts/desktop-dev.ts",
-    "web:dev": "bun desktop/server.ts --dev",
     "build": "tsc -b && vite build",
     "test": "bun test ./tests",
     "test:host": "bun test ./host-tests",
     "desktop:dev": "bun run scripts/desktop-dev.ts",
-    "tauri:dev": "bun scripts/tauri-dev.ts",
     "desktop:build": "bun scripts/package-native.ts --public",
-    "tauri:build": "bun scripts/package-desktop.ts",
-    "source:bundle": "bun run scripts/prepare-resources.ts",
     "release:prepare": "bun run scripts/prepare-release.ts",
     "website:dev": "bun run website:build && bun website/serve.ts",
     "website:build": "bun website/build.ts",
@@ -41,7 +37,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
-    "@tauri-apps/cli": "^2.11.3",
     "@types/bun": "^1.3.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",

@@ -12,13 +12,12 @@ test('main versions advance past reserved and published alpha tags and never cro
  assert.throws(()=>nextPreviewVersion('0.2.0-alpha.20',['v0.2.0']),/next alpha series/);
  assert.throws(()=>nextPreviewVersion('0.2.0',[]),/tagged explicitly/);
 });
-test('a release stamps all six version locations without changing feature dates or other app code',async()=>{
+test('a release stamps all native version locations without changing feature dates or other app code',async()=>{
  const files=await versionContents(root,'0.2.0-alpha.87');
  assert.equal(JSON.parse(files['package.json']).version,'0.2.0-alpha.87');assert.equal(JSON.parse(files['features.json']).appVersion,'0.2.0-alpha.87');
  assert.deepEqual(JSON.parse(files['features.json']).features,JSON.parse(await readFile(join(root,'features.json'),'utf8')).features);
- assert.equal(JSON.parse(files['src-tauri/tauri.conf.json']).version,'0.2.0-alpha.87');
- assert.match(files['src-tauri/Cargo.lock'],/name = "draft-desktop"\nversion = "0.2.0-alpha.87"/);
- assert.match(files['src-tauri/Cargo.toml'],/version = "0.2.0-alpha.87"/);
+ assert.match(files['native/rune-prototype/Cargo.lock'],/name = "draft-rune-prototype"\nversion = "0.2.0-alpha.87"/);
+ assert.match(files['native/rune-prototype/Cargo.toml'],/version = "0.2.0-alpha.87"/);
  assert.equal(files['desktop/updates.ts'].replace("const nativeHostVersion='0.2.0-alpha.87';",''),(await readFile(join(root,'desktop/updates.ts'),'utf8')).replace(/const nativeHostVersion='[^']+';/,''));
  assert.deepEqual(Object.keys(files),[...versionFiles]);
 });

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "appVersion": "0.3.0-alpha.67",
+  "appVersion": "0.3.0-alpha.71",
   "name": "Draft",
   "features": [
     {
@@ -22,7 +22,13 @@
         "src/client.ts",
         "src/editor-spelling.ts",
         "desktop/spelling.ts",
-        "native/Spelling.swift"
+        "native/Spelling.swift",
+        "native/rune-prototype/src/main.rs",
+        "native/rune-prototype/src/history.rs",
+        "native/rune-prototype/src/paste.rs",
+        "native/rune-prototype/src/links.rs",
+        "native/rune-prototype/src/spelling.rs",
+        "native/rune-prototype/src/caret.rs"
       ]
     },
     {
@@ -35,10 +41,13 @@
       "code": [
         "src/model.ts",
         "desktop/documents.ts",
-        "desktop/server.ts",
+        "native/rune-prototype/host.ts",
         "src/App.tsx",
         "src/writing-assistance.ts",
-        "desktop/writing.ts"
+        "desktop/writing.ts",
+        "native/rune-prototype/actions.ts",
+        "native/rune-prototype/src/items.rs",
+        "native/rune-prototype/src/writing.rs"
       ]
     },
     {
@@ -54,6 +63,8 @@
       ],
       "code": [
         "src/Inbox.tsx",
+        "native/rune-prototype/src/ui.rs",
+        "native/rune-prototype/src/keyboard.rs",
         "src/App.tsx",
         "src/model.ts",
         "src/writing.css"
@@ -72,6 +83,7 @@
       "code": [
         "src/images.ts",
         "src/ImageEditor.tsx",
+        "native/rune-prototype/src/attachments.rs",
         "src/Editor.tsx",
         "src/editor-markdown.ts",
         "src/App.tsx",
@@ -79,7 +91,7 @@
         "src/writing.css",
         "desktop/images.ts",
         "desktop/documents.ts",
-        "desktop/server.ts"
+        "native/rune-prototype/host.ts"
       ]
     },
     {
@@ -92,6 +104,8 @@
       "code": [
         "desktop/updates.ts",
         "desktop/handoff.ts",
+        "desktop/native-control.ts",
+        "native/rune-prototype/src/services.rs",
         "src/Features.tsx",
         "src/ModelSettings.tsx",
         "src/FeatureHandoff.tsx",
@@ -115,10 +129,12 @@
       "state": "active",
       "code": [
         "desktop/zo-sync.ts",
+        "native/rune-prototype/src/sync.rs",
+        "native/rune-prototype/src/settings.rs",
         "desktop/zo-auth.ts",
         "src/ZoSync.tsx",
         "src/Features.tsx",
-        "desktop/server.ts"
+        "native/rune-prototype/host.ts"
       ]
     }
   ]

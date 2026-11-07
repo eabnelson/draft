@@ -20,6 +20,7 @@ test('an official update keeps independent custom code and personal removals',as
   await atomicWrite(join(mine,'src/reading.ts'),'export const readingTime = true;\n');
   await atomicWrite(join(mine,'native/rune-prototype/src/reading.rs'),'pub const MINUTES: usize = 3;\n');
   for(const folder of [base,mine])await atomicWrite(join(folder,'native/rune-prototype/src/launcher.rs'),'original protected launcher');
+  for(const folder of [base,mine])await atomicWrite(join(folder,'src-tauri/retired.rs'),'previous desktop controller');
   await atomicWrite(join(next,'native/rune-prototype/src/launcher.rs'),'updated protected launcher');
   const result=await prepareOfficialMerge({base,mine,official:next,destination:candidate});
   assert.equal(result.conflicts.length,0);assert.equal(result.needsAgent,false);
@@ -29,6 +30,7 @@ test('an official update keeps independent custom code and personal removals',as
   assert.equal(result.catalog.appVersion,'1.1.0');
   assert.equal(await readFile(join(candidate,'native/rune-prototype/src/reading.rs'),'utf8'),'pub const MINUTES: usize = 3;\n');
   assert.equal(await readFile(join(candidate,'native/rune-prototype/src/launcher.rs'),'utf8'),'updated protected launcher');
+  await assert.rejects(readFile(join(candidate,'src-tauri/retired.rs')),{code:'ENOENT'});
   await atomicWrite(join(mine,'native/rune-prototype/src/launcher.rs'),'personal launcher replacement');
   await assert.rejects(prepareOfficialMerge({base,mine,official:next,destination:candidate}),/desktop update controls/);
  }finally{await rm(root,{recursive:true,force:true});}

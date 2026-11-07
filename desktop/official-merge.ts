@@ -16,6 +16,7 @@ export async function sourceFiles(root:string,prefix=''):Promise<Map<string,Buff
 }
 const same=(a:Buffer|undefined,b:Buffer|undefined)=>a===undefined?b===undefined:b!==undefined&&a.equals(b);
 const owns=(feature:Feature,path:string)=>feature.code?.some(name=>path===name||path.startsWith(name+'/'))??false;
+// Keep the retired controller protected when merging an older installed source.
 const controller=(path:string)=>!/^native\/rune-prototype\/src\/(?!launcher\.rs$)/.test(path)&&(/^(desktop|scripts|src-tauri|native|host-ui|host-tests)\//.test(path)||path==='update-public-key.pem');
 
 export async function prepareOfficialMerge(input:MergeInput):Promise<MergeResult>{

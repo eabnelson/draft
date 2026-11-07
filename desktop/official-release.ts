@@ -36,7 +36,7 @@ export class ReleaseChannel {
       for(const [artifact,limit] of [...[[value.source,50_000_000],[value.desktop,350_000_000]],...(value.installer?[[value.installer,350_000_000]]:[])] as [ReleaseArtifact,number][]){
         if(!artifact||!/^[a-f0-9]{64}$/.test(artifact.sha256)||!Number.isSafeInteger(artifact.size)||artifact.size<1||artifact.size>limit)throw Error('The update download could not be verified.');this.url(artifact.url);
       }
-      if(value.desktop.bundleId!==(this.options.bundleId??'com.eriknelson.draft')||value.desktop.arch!==(this.options.arch??process.arch)){unsupported=true;continue;}
+      if(value.desktop.bundleId!==(this.options.bundleId??'com.studiofour.draft.native')||value.desktop.arch!==(this.options.arch??process.arch)){unsupported=true;continue;}
       return {...value,envelope,releaseUrl:String(release.html_url)};
     }
     if(unsupported)throw Error('A newer release is available, but its in-app update isn’t ready yet.');
