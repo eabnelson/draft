@@ -27,7 +27,7 @@ if(shortcutCheck){
     {t:0.8,focus:true},{t:0.9,shortcut:'alt+.'},
     {t:1.2,focus:false},{t:1.3,shortcut:'alt+.'},
     {t:2,menu:'new-version'},{t:2.8,menu:'close-tab'},
-    {t:3.5,menu:'settings'},{t:3.8,menu:'close-tab'},
+    {t:3.5,menu:'settings'},{t:3.6,menu:'sidebar'},{t:3.8,menu:'close-tab'},
   ]));
   launchArgs=['--script',script,'--at','4.5','--tree',join(data,'tree.json')];
 }
@@ -46,6 +46,7 @@ try{
     const tree=await Bun.file(join(data,'tree.json')).json() as {elements:{key?:string;role?:string}[]};
     assert.ok(tree.elements.some(e=>e.key==='draft-content'));
     assert.ok(!tree.elements.some(e=>e.key==='settings-page'),'Close Tab returns from Settings');
+    assert.ok(!tree.elements.some(e=>e.key==='sidebar'||e.key==='settings-sidebar'),'the native View menu hides the Settings sidebar and preserves that choice on return');
     assert.equal(tree.elements.filter(e=>e.role==='textbox').length,1,'the blank draft is ready for typing');
     console.log('PASS registered global shortcut dispatch, quick-draft reuse, native menu actions, and Settings return');
   }

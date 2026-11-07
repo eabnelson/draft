@@ -31,6 +31,7 @@ pub fn run() {
     println!(
         "PASS Markdown/Unicode round trip, unknown metadata, and undo retained across equal reload"
     );
+    settings_sidebar_toggle();
     interactions();
     tab_shortcuts();
     tab_layout_stability();
@@ -42,6 +43,106 @@ pub fn run() {
     inline_media();
     live_sync();
     link_editing();
+}
+
+fn settings_sidebar_toggle() {
+    let rect = |rt: &rune::Runtime<State>, key: &str| {
+        rt.elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("Missing {key}"))
+            .rect
+    };
+    for (width, height, zoom, dark, section) in [
+        (1280.0, 820.0, 1.0, false, 0),
+        (780.0, 560.0, 1.0, true, 4),
+        (780.0, 560.0, 1.25, false, 0),
+        (1280.0, 820.0, 1.25, true, 4),
+    ] {
+        let mut rt = keyboard::app().headless_runtime((width, height), rune::Env::new(dark, 1.0));
+        rt.update(|s, _| {
+            s.sidebar = true;
+            s.preferences = false;
+            s.keyboard.zoom = zoom;
+            s.settings.section = section;
+        });
+        rt.frame(0.0);
+        let selected = rt.state.selected;
+        let version = rt.state.active_version();
+        click(&mut rt, "settings");
+        assert!(rt.find("settings-sidebar").is_some());
+        let scroll = format!("settings-scroll-{section}");
+        let shown_width = rect(&rt, &scroll)[2];
+        command(&mut rt, 'b', false);
+        assert!(
+            !rt.state.sidebar,
+            "the sidebar command must toggle its state"
+        );
+        assert!(rt.state.preferences, "toggling must stay in Settings");
+        assert_eq!(rt.state.settings.section, section);
+        assert!(
+            rt.find("settings-sidebar").is_none(),
+            "Toggle Sidebar must remove the Settings navigation sidebar"
+        );
+        assert!(
+            rect(&rt, &scroll)[2] > shown_width + 150.0,
+            "Settings uses the freed width"
+        );
+        assert_eq!(rect(&rt, "settings-header")[0], 0.0);
+        assert!(
+            rect(&rt, "settings-header-tabs")[0] >= 80.0,
+            "the header clears window controls"
+        );
+        let back = rect(&rt, "settings-back");
+        assert!(
+            back[1] >= 0.0 && back[1] + back[3] <= height + 1.0,
+            "Back stays inside the window"
+        );
+        let grid = rect(
+            &rt,
+            if section == 0 {
+                "appearance-choices"
+            } else {
+                "shortcut-grid"
+            },
+        );
+        assert!(
+            grid[0] >= 0.0 && grid[0] + grid[2] <= width + 1.0,
+            "settings cards fit the expanded page"
+        );
+        command(&mut rt, 'b', false);
+        assert!(
+            rt.find("settings-sidebar").is_some(),
+            "the command also reopens Settings navigation"
+        );
+        assert!((rect(&rt, &scroll)[2] - shown_width).abs() < 1.0);
+        command(&mut rt, 'b', false);
+        click(&mut rt, "settings-back");
+        assert!(!rt.state.preferences);
+        assert!(
+            !rt.state.sidebar,
+            "Back preserves the hidden sidebar choice"
+        );
+        assert_eq!(
+            (rt.state.selected, rt.state.active_version()),
+            (selected, version)
+        );
+        command(&mut rt, ',', false);
+        assert!(rt.state.preferences);
+        assert!(
+            rt.find("settings-sidebar").is_none(),
+            "Settings also opens with its sidebar hidden"
+        );
+        command(&mut rt, 'b', false);
+        click(&mut rt, "settings-back");
+        assert!(
+            rt.find("sidebar").is_some(),
+            "the toggle continues to work in the writing view"
+        );
+    }
+    println!(
+        "PASS Settings sidebar hide/reopen, reclaimed width, reachable Back, header clearance, and writing return at narrow/wide sizes and two zoom levels"
+    );
 }
 
 fn link_editing() {

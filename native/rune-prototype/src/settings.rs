@@ -290,7 +290,7 @@ fn sync(s: &State, p: design::Palette) -> El {
     }
     body
 }
-fn header(section: usize, dark: bool, p: design::Palette) -> El {
+fn header(section: usize, sidebar: bool, dark: bool, p: design::Palette) -> El {
     let title = SECTIONS[section];
     let widths = [title.chars().count() as f32 * 6.3 + 26.0, 66.4];
     row()
@@ -303,7 +303,8 @@ fn header(section: usize, dark: bool, p: design::Palette) -> El {
         .window_drag()
         .child(
             row()
-                .absolute(8.0, 6.0)
+                .key("settings-header-tabs")
+                .absolute(if sidebar { 8.0 } else { 84.0 }, 6.0)
                 .h(28.0)
                 .gap(5.25)
                 .child(design::tab_surface(&widths, dark))
@@ -336,6 +337,12 @@ fn page_title(label: &str, p: design::Palette) -> El {
 }
 pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>) -> El {
     let section = s.settings.section;
+    let side = if s.sidebar { side.max(210.0) } else { 0.0 };
+    let [page_width, page_height] = cx
+        .layout_size("draft-root")
+        .unwrap_or([1200.0, 820.0])
+        .map(|size| size / s.keyboard.zoom);
+    let main_width = (page_width - side - if s.sidebar { 1.0 } else { 0.0 }).max(1.0);
     let mut list = col().w_full().px(8.0).gap(4.0);
     for (i, label) in SECTIONS.iter().enumerate() {
         let selected = section == i;
@@ -374,7 +381,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
     }
     let nav = col()
         .key("settings-sidebar")
-        .w(side.max(210.0))
+        .w(side)
         .h_full()
         .min_h(0.0)
         .child(el().h(40.0).w_full().window_drag())
@@ -397,8 +404,6 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
         .child(page_title(SECTIONS[section], p));
     match section {
         0 => {
-            let page_width = cx.layout_size("draft-root").map_or(1200.0, |size| size[0]) / s.keyboard.zoom;
-            let main_width = (page_width - side.max(210.0) - 1.0).max(1.0);
             let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
             body = col().w_full().max_w(960.0).padding(padding).gap(24.0)
                 .child(col().w_full().gap(6.0)
@@ -431,8 +436,6 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
         }
         3 => body = body.child(sync(s, p)),
         4 => {
-            let page_width = cx.layout_size("draft-root").map_or(1200.0, |size| size[0]) / s.keyboard.zoom;
-            let main_width = (page_width - side.max(210.0) - 1.0).max(1.0);
             let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
             body = col().w_full().max_w(1180.0).padding(padding).gap(24.0)
                 .child(col().w_full().gap(6.0)
@@ -443,39 +446,45 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
         }
         _ => body = body.child(services::page(s, p)),
     }
-    row()
-        .key("settings-page")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(nav)
-        .child(el().w(1.0).h_full().fill(p.line))
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .h_full()
-                .min_h(0.0)
-                .child(session::watch(
-                    s,
-                    &format!("settings-scroll-{section}"),
-                    col()
-                        .key(format!("settings-scroll-{section}"))
-                        .w_full()
-                        .h_full()
-                        .min_h(0.0)
-                        .scroll(ScrollSpec {
-                            stick_bottom: false,
-                        })
-                        .clip_fade(0.0, 22.0, 0.0, 0.0)
-                        .child(
-                            col()
-                                .w_full()
-                                .items_center()
-                                .child(el().h(40.0))
-                                .child(body),
-                        ),
-                ))
-                .child(header(section, dark, p)),
-        )
+    let mut page = row().key("settings-page").w_full().h_full().min_h(0.0);
+    if s.sidebar {
+        page = page.child(nav).child(el().w(1.0).h_full().fill(p.line));
+    }
+    page = page.child(
+        col()
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .min_h(0.0)
+            .child(session::watch(
+                s,
+                &format!("settings-scroll-{section}"),
+                col()
+                    .key(format!("settings-scroll-{section}"))
+                    .w_full()
+                    .h_full()
+                    .min_h(0.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .clip_fade(0.0, 22.0, 0.0, 0.0)
+                    .child(
+                        col()
+                            .w_full()
+                            .items_center()
+                            .child(el().h(40.0))
+                            .child(body)
+                            .child(el().h(if s.sidebar { 0.0 } else { 52.0 })),
+                    ),
+            ))
+            .child(header(section, s.sidebar, dark, p)),
+    );
+    if !s.sidebar {
+        page = page.child(
+            ui::footer(s, dark, p)
+                .w(160.0)
+                .absolute(0.0, (page_height - 52.0).max(0.0)),
+        );
+    }
+    page
 }
