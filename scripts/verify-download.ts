@@ -70,7 +70,7 @@ try{
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
  const environment={...process.env,DRAFT_NATIVE_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
  const frame=join(stage,'native-frame.png'),tree=join(stage,'native-frame.json');
- const started=Date.now();child=Bun.spawn([join(app,'Contents/MacOS',executable),'--at','5','--snap',frame,'--tree',tree],{env:environment,stdout:'pipe',stderr:'pipe'});
+ const started=Date.now();child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'pipe',stderr:'pipe'});
  void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  let launched=false;for(let i=0;i<300;i++){
   if(child.exitCode!==null)throw Error('The downloaded app stopped during first launch.');
@@ -81,6 +81,12 @@ try{
  console.log('FIRST_LAUNCH_MS',Date.now()-started);
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
+ const instance=await Bun.file(join(data,'native-instance.json')).json();
+ const quit=await fetch(instance.url+'/desktop/activate',{method:'POST',headers:{authorization:`Bearer ${instance.token}`,'content-type':'application/json'},body:JSON.stringify({action:'quit'})});
+ if(!quit.ok)throw Error('The installed native app could not close cleanly.');
+ if(await Promise.race([child.exited,Bun.sleep(30000).then(()=>{throw Error('The native app did not finish closing.');})]))throw Error('The installed native app failed.');
+ child=Bun.spawn([join(app,'Contents/MacOS',executable),'--at','5','--snap',frame,'--tree',tree],{env:environment,stdout:'pipe',stderr:'pipe'});
+ void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  if(await Promise.race([child.exited,Bun.sleep(30000).then(()=>{throw Error('The native frame did not finish.');})]))throw Error('The installed native renderer failed.');
  const rendered=await Bun.file(tree).json();
  if(!rendered.elements.some((element:any)=>element.key==='draft-content')||!rendered.elements.some((element:any)=>element.role==='textbox')||(await Bun.file(frame).size)<1000)throw Error('The installed native writing interface did not render.');
