@@ -200,7 +200,7 @@ export default function App(){
     removeFromList(d);setArchived(n=>n+1);notice('Draft archived.');
   }
   function askDeleteDraft(d:Draft){
-    setConfirm({title:`Delete “${displayTitle(d)}”?`,detail:syncsWith?`This deletes it from ${syncsWith} and your other Macs too. A copy stays in Draft’s Recovery folder on this Mac.`:`All ${d.versions.length===1?'of its writing':`${d.versions.length} versions`} and its media move to Draft’s Recovery folder on this Mac.`,action:'Delete draft',run:()=>void deleteDraft(d)});
+    setConfirm({title:'Delete this draft?',detail:'',action:'Delete',run:()=>void deleteDraft(d)});
   }
   async function deleteDraft(d:Draft){
     // Stop saving it first, so a pending save cannot bring it back.
@@ -241,6 +241,7 @@ export default function App(){
       ];
     }
     return [
+      {heading:d.title.trim()||'New Draft'},
       {label:'Open',icon:<FileText size={14}/>,onSelect:()=>go()},
       {label:'Rename',icon:<Pencil size={14}/>,onSelect:()=>{if(!inboxOpen)setInboxOpen(true);setRenamingId(d.id);}},
       {label:d.pinned?'Unpin':'Pin',icon:d.pinned?<PinOff size={14}/>:<Pin size={14}/>,onSelect:()=>{const current=draftsRef.current.find(x=>x.id===d.id);if(current)update(setPinned(current,!current.pinned));}},
@@ -402,8 +403,8 @@ export default function App(){
       ...(archived>0?[{label:'Restore last archived draft',icon:<Undo2 size={14}/>,onSelect:()=>void restoreArchived()}]:[]),
     ]}/>}
     {stageMenu&&(()=>{const d=drafts.find(x=>x.id===stageMenu.draftId);return d?<ContextMenu className="stage-menu" x={stageMenu.x} y={stageMenu.y} label="Status" items={stageItems(d)} onClose={()=>setStageMenu(null)}/>:null;})()}
-    {contextMenu&&(()=>{const d=drafts.find(x=>x.id===contextMenu.draftId),v=d&&contextMenu.versionId?versionById(d,contextMenu.versionId):undefined;return d?<ContextMenu x={contextMenu.x} y={contextMenu.y} label={v?`Version ${v.number}`:displayTitle(d)} items={menuItems(d,v)} onClose={()=>setContextMenu(null)}/>:null;})()}
-    {confirm&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setConfirm(null);}}><section className="modal confirm-modal" role="alertdialog" aria-modal="true" aria-label={confirm.title}><h2>{confirm.title}</h2><p>{confirm.detail}</p><div className="confirm-actions"><Button variant="ghost" autoFocus onClick={()=>setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={()=>{const run=confirm.run;setConfirm(null);run();}}>{confirm.action}</Button></div></section></div>}
+    {contextMenu&&(()=>{const d=drafts.find(x=>x.id===contextMenu.draftId),v=d&&contextMenu.versionId?versionById(d,contextMenu.versionId):undefined;return d?<ContextMenu x={contextMenu.x} y={contextMenu.y} label={v?`Version ${v.number}`:d.title.trim()||'New Draft'} items={menuItems(d,v)} onClose={()=>setContextMenu(null)}/>:null;})()}
+    {confirm&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setConfirm(null);}}><section className="modal confirm-modal" role="alertdialog" aria-modal="true" aria-label={confirm.title}><h2>{confirm.title}</h2>{confirm.detail&&<p>{confirm.detail}</p>}<div className="confirm-actions"><Button variant="ghost" autoFocus onClick={()=>setConfirm(null)}>Cancel</Button><Button variant="destructive" onClick={()=>{const run=confirm.run;setConfirm(null);run();}}>{confirm.action}</Button></div></section></div>}
     {message&&<div className="toast" role="status"><span>{message}</span><Button variant="ghost" aria-label="Dismiss notification" onClick={()=>setMessage('')}><X size={14}/></Button></div>}
   </div>{updating&&<div className="restart-overlay" role="status"><LoaderCircle className="spin" size={20}/><span>Restarting Draft…</span></div>}</>;
 }

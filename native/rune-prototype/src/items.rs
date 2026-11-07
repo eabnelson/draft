@@ -267,8 +267,6 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
         Mode::Delete => {
             content = content
                 .child(heading(if version.is_some() { "Delete this version?" } else { "Delete this draft?" }, p))
-                .child(text("Its writing moves to Draft’s Recovery folder.")
-                    .w_full().px(10.0).py(6.0).font(TextStyle::new(12.0, 400.0)).color(p.muted))
                 .child(action_item(s, "item-delete-confirm", "Delete", p, json!({
                     "kind":if version.is_some() { "delete-version" } else { "delete" }, "version":version
                 })))
@@ -278,7 +276,14 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
             let title = version
                 .and_then(|id| d.versions.iter().find(|v| &v.id == id))
                 .map(|v| format!("Version {}", v.number))
-                .unwrap_or_else(|| d.raw["title"].as_str().unwrap_or("Untitled draft").into());
+                .unwrap_or_else(|| {
+                    d.raw["title"]
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|title| !title.is_empty())
+                        .unwrap_or("New Draft")
+                        .into()
+                });
             content = content.child(heading(&title, p));
             if version.is_none() {
                 let id = context.draft.clone();

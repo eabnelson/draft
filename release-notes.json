@@ -1,6 +1,7 @@
 [
-  "Toggle Sidebar now hides and reopens navigation in Settings, just as it does while writing.",
-  "Settings uses the freed space, keeps Back available, and leaves room for the window controls when the sidebar is hidden.",
+  "Draft deletion now asks only “Delete this draft?” with Delete and Cancel.",
+  "Untitled draft context menus now show “New Draft” as their title.",
+  "The Settings sidebar toggle hides and reopens navigation while keeping Back available.",
   "This transition requires one manual installation from draft.studiofour.io. Quit the old Draft before opening the new app. Your writing is copied to the native library on first launch; the original stays intact.",
   "Reconnect cloud sync in Settings → Sync. Earlier editor undo history and personal interface changes remain with the previous app. Native personal feature builds require Rust and its cached dependencies."
 ]
