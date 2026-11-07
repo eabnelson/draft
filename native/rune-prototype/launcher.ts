@@ -27,7 +27,7 @@ catch{
   await rm(lock,{force:true});const file=await open(lock,'wx',0o600);await file.writeFile(String(process.pid));await file.close();
 }
 const token=crypto.randomUUID()+crypto.randomUUID();
-const host=await startPrototypeHost(root,token,{runtime,template:join(runtime,'source-template'),packaged:true});
+const host=await startPrototypeHost(root,token,{runtime,template:join(runtime,'source-template'),packaged:true,examples:process.argv.includes('--verify')});
 const url=`http://127.0.0.1:${host.server.port}`;
 await atomicWrite(instance,JSON.stringify({url,token}));await chmod(instance,0o600);
 if(process.argv.includes('--capture')){const response=await fetch(url+'/new',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:'{}'});if(!response.ok)throw Error('Draft could not prepare a new draft.');}
@@ -56,6 +56,7 @@ try{
     else if(!await exists(executable))executable=bundled;
     child=Bun.spawn([executable,...process.argv.slice(2).filter((arg,index,all)=>arg!=='--capture'&&arg!=='--profile'&&all[index-1]!=='--profile')],{env:{...process.env,DRAFT_PACKAGED:"1",DRAFT_RUNE_HOST:url,DRAFT_RUNE_TOKEN:token,DRAFT_RUNE_DATA_ROOT:root},stdout:'inherit',stderr:'inherit'});
     const code=await child.exited;
+    if(process.argv.includes('--verify')){if(code!==0)throw Error(`Native verification failed (${code}).`);break;}
     if(stopping)break;
     if(host.control.restart){
       host.control.restart=false;

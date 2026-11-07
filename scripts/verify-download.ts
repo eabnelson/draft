@@ -90,7 +90,7 @@ try{
  if(await Promise.race([child.exited,Bun.sleep(30000).then(()=>{throw Error('The native frame did not finish.');})]))throw Error('The installed native renderer failed.');
  const rendered=await Bun.file(tree).json();
  if(!rendered.elements.some((element:any)=>element.key==='draft-content')||!rendered.elements.some((element:any)=>element.role==='textbox')||(await Bun.file(frame).size)<1000)throw Error('The installed native writing interface did not render.');
- child=Bun.spawn([join(app,'Contents/MacOS',executable),'--verify'],{env:environment,stdout:'pipe',stderr:'pipe'});
+ child=Bun.spawn([join(app,'Contents/MacOS',executable),'--profile',join(stage,'interaction-profile'),'--verify'],{env:environment,stdout:'pipe',stderr:'pipe'});
  void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  if(await Promise.race([child.exited,Bun.sleep(60000).then(()=>{throw Error('The installed native interaction checks timed out.');})]))throw Error('The installed native writing checks failed.');
  console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic native download, Apple approval, Gatekeeper, bundled tools, rendered writing interface, Unicode saves, history, shortcuts and settings.`);
