@@ -55,7 +55,7 @@ export async function requireDeveloperIdCode(path:string,team:string){
 }
 export async function verifyMacApp(app:string,team:string,notarized=true){
  await requireDeveloperIdCode(app,team);
- for(const path of await machFiles(join(app,'Contents/Resources/runtime')))await requireDeveloperIdCode(path,team);
+ for(const path of await machFiles(app))await requireDeveloperIdCode(path,team);
  if(notarized){
   await validateStaple(app);
   const assessment=await macCommand(['/usr/sbin/spctl','--assess','--type','execute','--verbose=2',app]);

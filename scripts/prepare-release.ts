@@ -1,4 +1,4 @@
-import {mkdir,readFile,copyFile,stat} from 'node:fs/promises';
+import {mkdir,readFile,stat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createPublicKey,sign} from 'node:crypto';
 import {fileDigest} from '../desktop/native-update';
@@ -12,25 +12,26 @@ if(!createPublicKey(key).export({type:'spki',format:'der'}).equals(createPublicK
 await mkdir(output,{recursive:true});
 async function run(args:string[]){const child=Bun.spawn(args,{stdout:'ignore',stderr:'inherit'});if(await child.exited)throw Error('The release could not be packaged.');}
 const source=join(output,`Draft-${version}-source.tar.gz`),desktop=join(output,`Draft-${version}-macos-${process.arch}.zip`);
-const app=join(root,'src-tauri/target/release/bundle/macos/Draft.app');
+const app=join(root,'native/rune-prototype/artifacts/Draft.app');
 if(!process.env.APPLE_TEAM_ID)throw Error('Set APPLE_TEAM_ID to verify the public distribution signature.');
 await verifyMacApp(app,process.env.APPLE_TEAM_ID);
 const report=await Bun.file(join(output,'distribution-report.json')).json();
 if(report.version!==version||report.team!==process.env.APPLE_TEAM_ID||report.notarized!==true)throw Error('Notarize this version before preparing public downloads.');
-for(const [key,expected] of [['CFBundleIdentifier','com.eriknelson.draft'],['CFBundleShortVersionString',version]]){
+for(const [key,expected] of [['CFBundleIdentifier','com.studiofour.draft.native'],['CFBundleShortVersionString',version]]){
  const child=Bun.spawn(['/usr/libexec/PlistBuddy','-c',`Print :${key}`,join(app,'Contents/Info.plist')],{stdout:'pipe',stderr:'inherit'});
  if(await child.exited||(await new Response(child.stdout).text()).trim()!==expected)throw Error('The packaged app does not match this release.');
 }
-if((await Bun.file(join(root,'resources/source-template/features.json')).json()).appVersion!==version)throw Error('The bundled source does not match this release.');
+const template=join(app,'Contents/Resources/runtime/source-template');
+if((await Bun.file(join(template,'features.json')).json()).appVersion!==version)throw Error('The bundled source does not match this release.');
 await run(['/usr/bin/codesign','--verify','--deep','--strict',app]);
-await run(['/usr/bin/tar','-czf',source,'-C',join(root,'resources/source-template'),'.']);
+await run(['/usr/bin/tar','-czf',source,'-C',template,'.']);
 await run(['/usr/bin/ditto','-c','-k','--keepParent',app,desktop]);
 const notes=await Bun.file(join(root,'release-notes.json')).json() as string[];
 const artifact=async(path:string)=>({url:`${base}/${path.split('/').at(-1)}`,sha256:await fileDigest(path),size:(await stat(path)).size});
-const dmg=join(root,'src-tauri/target/release/bundle/dmg',`Draft_${version}_${process.arch==='arm64'?'aarch64':'x64'}.dmg`);
+const dmg=join(root,`release/Draft-${version}-macos-${process.arch}.dmg`);
 await validateStaple(dmg);
-const installer=join(output,`Draft-${version}-macos-${process.arch}.dmg`);await copyFile(dmg,installer);
-const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.eriknelson.draft',arch:process.arch as 'arm64'|'x64'},installer:await artifact(installer)};
+const installer=dmg;
+const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.studiofour.draft.native',arch:process.arch as 'arm64'|'x64'},installer:await artifact(installer)};
 const payload=JSON.stringify(manifest),signature=sign(null,Buffer.from(payload),key).toString('base64');
 await Bun.write(join(output,'draft-update.json'),JSON.stringify({payload,signature},null,2)+'\n');
 const names=[source,desktop,join(output,`Draft-${version}-macos-${process.arch}.dmg`),join(output,'draft-update.json'),join(output,'distribution-report.json')];

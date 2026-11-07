@@ -13,8 +13,7 @@ for(const artifact of [release.installer,release.desktop]){
  if(!artifact?.url)throw Error('The signed release is missing a download.');const name=new URL(artifact.url).pathname.split('/').at(-1)!;
  if(!/^[-a-zA-Z0-9_.]+$/.test(name)||await fileDigest(join(assets,name))!==artifact.sha256||(await Bun.file(join(assets,name)).size)!==artifact.size)throw Error('The downloaded installer does not match the signed release.');
 }
-// macOS exposes /var as a symlink. Tauri deliberately rejects an executable
-// launched through it; use the canonical installation path, as /Applications does.
+// Use a canonical installation path, as /Applications does.
 const stage=await realpath(await mkdtemp(join(tmpdir(),'draft-download-check-'))),mount=join(stage,'volume');await mkdir(mount);
 const installer=join(assets,new URL(release.installer.url).pathname.split('/').at(-1)!);
 await validateStaple(installer);await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature',installer]);
@@ -51,6 +50,8 @@ try{
  await macCommand(['/usr/bin/ditto',join(mount,'Draft.app'),app]);
  await macCommand(['/usr/bin/xattr','-w','com.apple.quarantine',`0083;${Math.floor(Date.now()/1000).toString(16)};Safari;${crypto.randomUUID()}`,app]);
  await verifyMacApp(app,team);
+ const bundle=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleIdentifier',join(app,'Contents/Info.plist')]);
+ if(bundle.stdout.trim()!=='com.studiofour.draft.native'||release.desktop.bundleId!=='com.studiofour.draft.native')throw Error('The public download must contain the native Draft application.');
  const codeHash=async(path:string)=>(await macCommand(['/usr/bin/codesign','-d','--verbose=4',path])).stderr.match(/^CDHash=(.+)$/m)?.[1];
  if(await codeHash(app)!==await codeHash(join(updater,'Draft.app')))throw Error('The installer and in-app update contain different applications.');
  if(process.env.CI!=='true')throw Error('Run fresh-profile app launch verification on the isolated CI Mac.');
@@ -67,8 +68,9 @@ try{
  console.log('BUNDLED_TOOLS_PASSED: document checks, personal feature builds, official merges and conflict choices using the shipped runtime without Node on PATH.');
  const info=await macCommand(['/usr/libexec/PlistBuddy','-c','Print :CFBundleExecutable',join(app,'Contents/Info.plist')]);
  const executable=info.stdout.trim();if(!/^[a-zA-Z0-9._-]+$/.test(executable))throw Error('Unexpected app executable.');
- const environment={...process.env,DRAFT_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
- const started=Date.now();child=Bun.spawn([join(app,'Contents/MacOS',executable)],{env:environment,stdout:'pipe',stderr:'pipe'});
+ const environment={...process.env,DRAFT_NATIVE_DATA_ROOT:data};for(const key of Object.keys(environment))if(key.startsWith('APPLE_')||key==='GH_TOKEN'||key==='GITHUB_TOKEN')delete environment[key as keyof typeof environment];
+ const frame=join(stage,'native-frame.png'),tree=join(stage,'native-frame.json');
+ const started=Date.now();child=Bun.spawn([join(app,'Contents/MacOS',executable),'--at','5','--snap',frame,'--tree',tree],{env:environment,stdout:'pipe',stderr:'pipe'});
  void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
  let launched=false;for(let i=0;i<300;i++){
   if(child.exitCode!==null)throw Error('The downloaded app stopped during first launch.');
@@ -79,7 +81,13 @@ try{
  console.log('FIRST_LAUNCH_MS',Date.now()-started);
  await new Promise(resolve=>setTimeout(resolve,3000));if(child.exitCode!==null)throw Error('The app stopped after opening.');
  const state=await Bun.file(join(data,'state.json')).json();if(state.versions.find((version:any)=>version.id===state.activeVersion)?.catalog.appVersion!==release.version)throw Error('The fresh installation opened another app version.');
- console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic download, Apple approval, Gatekeeper, installed app, bundled feature tools, first launch, local writing.`);
+ if(await Promise.race([child.exited,Bun.sleep(30000).then(()=>{throw Error('The native frame did not finish.');})]))throw Error('The installed native renderer failed.');
+ const rendered=await Bun.file(tree).json();
+ if(!rendered.elements.some((element:any)=>element.key==='draft-content')||!rendered.elements.some((element:any)=>element.role==='textbox')||(await Bun.file(frame).size)<1000)throw Error('The installed native writing interface did not render.');
+ child=Bun.spawn([join(app,'Contents/MacOS',executable),'--verify'],{env:environment,stdout:'pipe',stderr:'pipe'});
+ void capture(child.stdout as ReadableStream<Uint8Array>);void capture(child.stderr as ReadableStream<Uint8Array>);
+ if(await Promise.race([child.exited,Bun.sleep(60000).then(()=>{throw Error('The installed native interaction checks timed out.');})]))throw Error('The installed native writing checks failed.');
+ console.log(`CLEAN_MAC_INSTALL_PASSED ${release.version}: authentic native download, Apple approval, Gatekeeper, bundled tools, rendered writing interface, Unicode saves, history, shortcuts and settings.`);
 }catch(error){await startupDiagnostics().catch(diagnostic=>console.log('DRAFT_STARTUP_CHECK',String(diagnostic)));throw error;}
 finally{
  const runtime=await Bun.file(join(data,'runtime-info.json')).json().catch(()=>undefined);

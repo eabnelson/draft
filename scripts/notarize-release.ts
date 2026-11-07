@@ -7,7 +7,7 @@ const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'pack
 const team=process.env.APPLE_TEAM_ID,identity=process.env.APPLE_SIGNING_IDENTITY;
 if(!team||!identity||identity==='-')throw Error('A public release requires the Apple distribution signing identity and team.');
 const folder=join(root,'release/notarization');await mkdir(folder,{recursive:true});
-const app=join(root,'src-tauri/target/release/bundle/macos/Draft.app');
+const app=join(root,'native/rune-prototype/artifacts/Draft.app');
 const auth=process.env.APPLE_API_KEY_PATH&&process.env.APPLE_API_KEY?['--key',process.env.APPLE_API_KEY_PATH,'--key-id',process.env.APPLE_API_KEY,...(process.env.APPLE_API_ISSUER?['--issuer',process.env.APPLE_API_ISSUER]:[])]:['--keychain-profile',process.env.DRAFT_NOTARY_PROFILE??'draft-notary'];
 async function notarize(path:string,label:string){
  const recordPath=join(folder,label+'.json'),sha256=await fileDigest(path);
@@ -43,7 +43,7 @@ catch{
  await notarize(zip,'app');await staple(app);
 }
 await verifyMacApp(app,team);
-const dmg=join(root,`src-tauri/target/release/bundle/dmg/Draft_${version}_${process.arch==='arm64'?'aarch64':'x64'}.dmg`);
+const dmg=join(root,`release/Draft-${version}-macos-${process.arch}.dmg`);
 await createMacInstaller(app,dmg,identity);await notarize(dmg,'installer');await staple(dmg);
 await validateStaple(dmg);
 await macCommand(['/usr/sbin/spctl','--assess','--type','open','--context','context:primary-signature','--verbose=2',dmg]);

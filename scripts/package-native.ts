@@ -5,7 +5,7 @@ import {copySource} from '../desktop/files';
 import {signBundledCode,macCommand,createMacInstaller} from './mac-distribution';
 
 const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'package.json')).json()).version;
-const name=process.platform==='darwin'?'Draft Native.app':'Draft-Native';
+const name=process.platform==='darwin'?(process.argv.includes('--public')?'Draft.app':'Draft Native.app'):'Draft-Native';
 const stage=await mkdtemp(join(tmpdir(),'draft-native-package-'));
 const app=join(stage,name),output=join(root,'native/rune-prototype/artifacts',name);
 const bin=process.platform==='darwin'?join(app,'Contents/MacOS'):join(app,'bin');

@@ -4,10 +4,12 @@ import {mkdir,chmod,rm,open} from 'node:fs/promises';
 import {startPrototypeHost} from './host';
 import {atomicWrite,readJSON,exists} from '../../desktop/files';
 import {openExternalLink} from '../../desktop/links';
+import {migrateLegacyLibrary} from '../../desktop/native-migration';
 
 const runtime=resolve(process.env.DRAFT_RUNTIME_ROOT??import.meta.dir);
 const profileAt=process.argv.indexOf('--profile');
 const root=resolve((profileAt>=0?process.argv[profileAt+1]:undefined)??process.env.DRAFT_NATIVE_DATA_ROOT??(process.platform==='darwin'?join(homedir(),'Library/Application Support/Draft Native'):join(process.env.XDG_DATA_HOME??join(homedir(),'.local/share'),'draft-native')));
+if(process.platform==='darwin'&&profileAt<0&&!process.env.DRAFT_NATIVE_DATA_ROOT)await migrateLegacyLibrary(join(homedir(),'Library/Application Support/Draft'),root);
 await mkdir(root,{recursive:true,mode:0o700});
 const instance=join(root,'native-instance.json'),lock=join(root,'native.lock');
 const activate=async()=>{

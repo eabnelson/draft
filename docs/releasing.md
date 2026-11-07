@@ -16,7 +16,9 @@ Keep `release-notes.json` consumer-friendly and current. Main's package version 
 
 ## Build and verify
 
-Use the locked dependencies, run `bun run test`, then `bun run desktop:build`. Verify first launch, local saving, connected-provider discovery, one real feature update, removal, reset, and reopening a saved document. A release must preserve the original transcript and initial specification checksums.
+Use the locked dependencies, run `bun run test`, then `bun run desktop:build`. This now packages the Rune native interface as `native/rune-prototype/artifacts/Draft.app`; `bun run tauri:build` retains the previous frontend for development. Verify first launch, local saving, connected-provider discovery, one real feature update, removal, reset, and reopening a saved document. A release must preserve the original transcript and initial specification checksums.
+
+The native public bundle identity is `com.studiofour.draft.native`, matching the installed native previews. This transition requires one manual installation for users of the previous Tauri app; its updater deliberately refuses a different bundle identity. Quit the previous app before opening the native app. When the default native profile does not yet exist, first launch atomically copies `Drafts`, `Documents`, `Exports`, and `Recovery` from the previous Mac profile. The original profile remains intact. Existing native profiles are never overwritten. Sync needs reconnecting; previous editor undo records and personal application source remain in the original profile. Subsequent native Mac updates use the authenticated native update channel. Public downloads currently support Apple Silicon; Linux has a separately verified portable package and no automatic full-host updater yet.
 
 The current alpha targets Apple Silicon. Intel builds need an x86_64 Bun binary and matching native npm packages in their resources; changing only the Rust target is insufficient.
 
