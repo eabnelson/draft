@@ -1,4 +1,5 @@
 [
+  "Mac login items now explicitly identify Draft, and existing registrations are repaired without changing their launch settings.",
   "Draft’s original menu bar icon is restored for standard and Retina displays.",
   "The app is named Draft in macOS and Linux launchers.",
   "Draft deletion now asks only “Delete this draft?” with Delete and Cancel.",
