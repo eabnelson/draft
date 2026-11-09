@@ -1,4 +1,8 @@
 [
+  "Pasting keeps formatting: Markdown pastes exactly as written, and text from Google Docs and web pages keeps its headings, bold, links, numbered lists and code. Backslash escapes like \\- now read as the character itself.",
+  "Tab now stays in your writing: it nests list items or indents selected lines, and Shift-Tab outdents. It no longer jumps to the sidebar.",
+  "The text right-click menu now works like a Markdown editor’s: Cut, Copy, Paste and Select All with their shortcuts, a row for bold, italic, underline, code and links, and paragraph styles for headings, lists and quotes. Spelling fixes and link actions come first.",
+  "Context menus are easier to read: solid backgrounds, clearer dividers, dimmed unavailable items, checkmarks on the current status and open versions, and Delete shown in red.",
   "Mac login items now explicitly identify Draft, and existing registrations are repaired without changing their launch settings.",
   "Draft’s original menu bar icon is restored for standard and Retina displays.",
   "The app is named Draft in macOS and Linux launchers.",

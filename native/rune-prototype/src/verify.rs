@@ -1397,6 +1397,111 @@ fn interactions() {
     );
     println!("PASS context-menu formatting, atomic undo, and joined-emoji Backspace");
 
+    rt.update(|s, _| {
+        let e = &mut s.docs[di].versions[1].edit;
+        e.replace_text("Title\nfirst\nsecond");
+        e.anchor = 2;
+        e.focus = 2;
+        s.context = Some([300.0, 200.0]);
+    });
+    rt.frame(0.016);
+    let disabled = |rt: &rune::Runtime<State>, key: &str| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("Missing {key}"))
+            .focusable
+            .then_some(())
+            .is_none()
+    };
+    assert!(
+        disabled(&rt, "cut") && disabled(&rt, "copy"),
+        "nothing selected to cut or copy"
+    );
+    assert!(!disabled(&rt, "paste") && !disabled(&rt, "select-all"));
+    click(&mut rt, "heading-1");
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.text,
+        "# Title\nfirst\nsecond"
+    );
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.focus, 4,
+        "the caret stays in the word"
+    );
+    assert!(
+        rt.state.context.is_none(),
+        "choosing a style closes the menu"
+    );
+    rt.update(|s, _| {
+        let e = &mut s.docs[di].versions[1].edit;
+        e.anchor = "# Title\n".len();
+        e.focus = e.text.len();
+        s.context = Some([300.0, 200.0]);
+    });
+    rt.frame(0.016);
+    click(&mut rt, "list-numbered");
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.text,
+        "# Title\n1. first\n2. second"
+    );
+    key(&mut rt, Key::Command('z'));
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.text, "# Title\nfirst\nsecond",
+        "a paragraph style is one undo step"
+    );
+    rt.update(|s, _| s.context = Some([300.0, 200.0]));
+    rt.frame(0.016);
+    click(&mut rt, "select-all");
+    let e = &rt.state.docs[di].versions[1].edit;
+    assert_eq!(e.range(), (0, e.text.len()));
+    rt.update(|s, _| s.context = Some([300.0, 200.0]));
+    rt.frame(0.016);
+    assert!(!disabled(&rt, "cut"));
+    click(&mut rt, "cut");
+    assert!(
+        rt.state.docs[di].versions[1].edit.text.is_empty(),
+        "Cut removes the selection"
+    );
+    key(&mut rt, Key::Command('z'));
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.text,
+        "# Title\nfirst\nsecond"
+    );
+    println!("PASS text menu clipboard state, select all, cut, headings, numbered lists, and undo");
+
+    rt.update(|s, _| {
+        s.focus(1);
+        let e = &mut s.docs[di].versions[1].edit;
+        e.replace_text("- one\n- two");
+        e.anchor = e.text.len();
+        e.focus = e.text.len();
+    });
+    rt.frame(0.016);
+    key(&mut rt, Key::Tab);
+    assert_eq!(rt.state.docs[di].versions[1].edit.text, "- one\n    - two");
+    let focused = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key)
+        .unwrap_or_default();
+    assert!(
+        focused.starts_with("editor-"),
+        "Tab keeps typing in the editor instead of moving to the sidebar: {focused}"
+    );
+    rt.key(KeyEvent {
+        key: Key::Tab,
+        mods: rune::Mods {
+            shift: true,
+            ..Default::default()
+        },
+    });
+    rt.frame(0.016);
+    assert_eq!(rt.state.docs[di].versions[1].edit.text, "- one\n- two");
+    key(&mut rt, Key::Text("!".into()));
+    assert!(rt.state.docs[di].versions[1].edit.text.ends_with("two!"));
+    println!("PASS Tab and Shift+Tab nest list items and keep focus in the editor");
+
     key(&mut rt, Key::Text("Before save".into()));
     rt.update(|s, _| s.save());
     rt.frame(0.016);
@@ -1442,6 +1547,39 @@ fn interactions() {
         "one undo removes the image paste"
     );
     println!("PASS image paste through the real host, native decode, and one-step undo");
+
+    // A .md file copied from a code editor carries the editor's HTML beside its Markdown text.
+    let markdown = "**Marketing**  \n- youtube \\- keep updated\n- $5/mo";
+    rt.paste_content(
+        rune::ClipboardContent::new(markdown)
+            .with_html("<div><span>**Marketing**</span><br><span>- youtube</span></div>"),
+    );
+    rt.frame(0.016);
+    assert!(
+        rt.state.docs[di].versions[1].edit.text.contains(markdown),
+        "Markdown text pastes as written, with no escaped syntax"
+    );
+    key(&mut rt, Key::Command('z'));
+    assert_eq!(rt.state.docs[di].versions[1].edit.text, latest);
+    rt.paste_content(
+        rune::ClipboardContent::new("Plan\nGoals\nOne\nTwo").with_html(
+            "<b style=\"font-weight:normal\" id=\"docs-internal-guid-1\"><h2>Plan</h2><p><span style=\"font-weight:700\">Goals</span></p><ol><li>One</li><li>Two</li></ol></b>",
+        ),
+    );
+    rt.frame(0.016);
+    assert!(
+        rt.state.docs[di].versions[1]
+            .edit
+            .text
+            .contains("## Plan\n**Goals**\n1. One\n2. Two"),
+        "a document's headings, bold and numbering come through"
+    );
+    key(&mut rt, Key::Command('z'));
+    assert_eq!(
+        rt.state.docs[di].versions[1].edit.text, latest,
+        "one undo removes a formatted paste"
+    );
+    println!("PASS Markdown text pastes as written; document formatting becomes Markdown");
 
     let tree = rt.accessibility_json().to_string();
     assert!(

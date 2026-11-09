@@ -150,21 +150,26 @@ pub(super) fn prepared(s: &mut State, id: &str, action: Value) {
         s.notice = "Draft change could not start; keep this window open".into();
     }
 }
-fn action_item(s: &State, key: &str, label: &str, p: design::Palette, action: Value) -> El {
+fn action(s: &State, key: &str, label: &str) -> ui::Entry {
     let context = s.item_menu.as_ref().unwrap();
     let pending = s
         .docs
         .iter()
         .find(|d| d.id() == context.draft)
         .is_none_or(|d| d.pending_action);
-    ui::menu_item(key, label, p, move |s, tx| request(s, action.clone(), tx)).disabled(pending)
+    ui::entry(key, label).enabled(!pending)
+}
+fn action_item(s: &State, key: &str, label: &str, p: design::Palette, action: Value) -> El {
+    self::action(s, key, label).build(p, move |s, tx| request(s, action.clone(), tx))
 }
 fn heading(label: &str, p: design::Palette) -> El {
     text(label)
-        .font(TextStyle::new(11.0, 500.0))
+        .truncate()
+        .font(TextStyle::new(11.5, 600.0))
         .color(p.muted)
         .px(10.0)
-        .py(6.0)
+        .pt(6.0)
+        .pb(3.0)
 }
 fn begin_rename(s: &mut State) {
     let Some(context) = &mut s.item_menu else {
@@ -259,18 +264,29 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
                             false
                         }),
                 )
-                .child(ui::menu_item("item-name-save", "Save name", p, rename))
-                .child(ui::menu_item("item-cancel", "Cancel", p, |s, _| {
-                    s.item_menu = None
-                }));
+                .child(
+                    ui::entry("item-name-save", "Save Name")
+                        .hint("↩")
+                        .build(p, rename),
+                )
+                .child(
+                    ui::entry("item-cancel", "Cancel")
+                        .hint("esc")
+                        .build(p, |s, _| s.item_menu = None),
+                );
         }
         Mode::Delete => {
             content = content
                 .child(heading(if version.is_some() { "Delete this version?" } else { "Delete this draft?" }, p))
-                .child(action_item(s, "item-delete-confirm", "Delete", p, json!({
-                    "kind":if version.is_some() { "delete-version" } else { "delete" }, "version":version
-                })))
-                .child(ui::menu_item("item-cancel", "Cancel", p, |s, _| s.item_menu = None));
+                .child({
+                    let action = json!({
+                        "kind":if version.is_some() { "delete-version" } else { "delete" }, "version":version
+                    });
+                    self::action(s, "item-delete-confirm", "Delete")
+                        .color(p.danger)
+                        .build(p, move |s, tx| request(s, action.clone(), tx))
+                })
+                .child(ui::entry("item-cancel", "Cancel").hint("esc").build(p, |s, _| s.item_menu = None));
         }
         Mode::Actions => {
             let title = version
@@ -287,7 +303,7 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
             content = content.child(heading(&title, p));
             if version.is_none() {
                 let id = context.draft.clone();
-                content = content.child(ui::menu_item("draft-open", "Open", p, move |s, tx| {
+                content = content.child(ui::entry("draft-open", "Open").build(p, move |s, tx| {
                     if let Some(di) = s.docs.iter().position(|d| d.id() == id) {
                         s.selected = di;
                         s.expanded = true;
@@ -300,13 +316,14 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
             }
             content = content
                 .child(
-                    ui::menu_item("item-rename", "Rename", p, |s, _| begin_rename(s))
-                        .disabled(d.pending_action),
+                    ui::entry("item-rename", "Rename…")
+                        .enabled(!d.pending_action)
+                        .build(p, |s, _| begin_rename(s)),
                 )
                 .child(action_item(
                     s,
                     "item-new-version",
-                    "New version",
+                    "New Version",
                     p,
                     json!({"kind":"new-version","version":version.cloned().unwrap_or_else(|| {
                         let vi = if s.docs[s.selected].id() == d.id() { s.active_version() } else { d.open_versions()[0] };
@@ -316,15 +333,13 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
             if let Some(id) = version {
                 let open = d.open_versions();
                 let is_open = open.iter().any(|&vi| &d.versions[vi].id == id);
+                let close = json!({"kind":"close-version","version":id});
+                let pending = d.pending_action;
                 content = content.child(
-                    action_item(
-                        s,
-                        "version-close",
-                        "Close tab",
-                        p,
-                        json!({"kind":"close-version","version":id}),
-                    )
-                    .disabled(!is_open || open.len() < 2),
+                    ui::entry("version-close", "Close Tab")
+                        .hint(ui::keys(false, 'w'))
+                        .enabled(is_open && open.len() > 1 && !pending)
+                        .build(p, move |s, tx| request(s, close.clone(), tx)),
                 );
             } else {
                 content = content.child(action_item(
@@ -339,37 +354,38 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
                     json!({"kind":"pin"}),
                 ));
                 if d.versions.len() > 1 {
-                    content = content.child(heading("Versions", p));
+                    let open = d.open_versions();
+                    content = content
+                        .child(ui::separator(p))
+                        .child(heading("Versions", p));
                     for (vi, v) in d.versions.iter().enumerate() {
-                        content = content.child(action_item(
-                            s,
-                            &format!("open-version-{}", v.id),
-                            &d.version_title(vi),
-                            p,
-                            json!({"kind":"open-version","version":v.id}),
-                        ));
+                        let pick = json!({"kind":"open-version","version":v.id});
+                        content = content.child(
+                            action(s, &format!("open-version-{}", v.id), &d.version_title(vi))
+                                .checked(open.contains(&vi))
+                                .build(p, move |s, tx| request(s, pick.clone(), tx)),
+                        );
                     }
                 }
-                content = content
-                    .child(el().w_full().h(1.0).fill(p.line))
-                    .child(heading("Status", p));
-                for (stage, label) in [
+                content = content.child(ui::separator(p)).child(heading("Status", p));
+                let current = stage(d);
+                for (value, label) in [
                     ("idea", "Idea"),
                     ("drafting", "Drafting"),
                     ("ready", "Ready"),
                     ("live", "Live"),
                 ] {
-                    content = content.child(action_item(
-                        s,
-                        &format!("stage-{stage}"),
-                        label,
-                        p,
-                        json!({"kind":"stage","value":stage}),
-                    ));
+                    let pick = json!({"kind":"stage","value":value});
+                    content = content.child(
+                        action(s, &format!("stage-{value}"), label)
+                            .color(p.stage(s.dark, label))
+                            .checked(current == label)
+                            .build(p, move |s, tx| request(s, pick.clone(), tx)),
+                    );
                 }
                 content = content
-                    .child(el().w_full().h(1.0).fill(p.line))
-                    .child(ui::menu_item("draft-export", "Export…", p, |s, tx| {
+                    .child(ui::separator(p))
+                    .child(ui::entry("draft-export", "Export…").build(p, |s, tx| {
                         let id = s.item_menu.take().unwrap().draft;
                         tx.open_folder(
                             rune::FileDialogOptions {
@@ -399,22 +415,22 @@ pub(super) fn menu(s: &State, surface: El, p: design::Palette) -> El {
                         .as_array()
                         .is_some_and(|ps| ps.iter().any(|p| p["versionId"].as_str() == Some(id)))
             });
-            content = content.child(el().w_full().h(1.0).fill(p.line)).child(
-                ui::menu_item(
+            content = content.child(ui::separator(p)).child(
+                ui::entry(
                     "item-delete",
                     if version.is_some() {
-                        "Delete version…"
+                        "Delete Version…"
                     } else {
-                        "Delete draft…"
-                    },
-                    p,
-                    |s, _| {
-                        if let Some(context) = &mut s.item_menu {
-                            context.mode = Mode::Delete;
-                        }
+                        "Delete Draft…"
                     },
                 )
-                .disabled(protected || d.pending_action),
+                .color(p.danger)
+                .enabled(!protected && !d.pending_action)
+                .build(p, |s, _| {
+                    if let Some(context) = &mut s.item_menu {
+                        context.mode = Mode::Delete;
+                    }
+                }),
             );
         }
     }

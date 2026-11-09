@@ -127,48 +127,48 @@ fn apply(s: &mut State, unlink: bool, tx: &mut Tx) {
     s.edited(s.selected, vi, tx);
     s.context = None;
 }
-pub fn menu(s: &State, mut menu: El, p: design::Palette) -> El {
-    if let Some(dialog) = &s.link {
-        return col()
-            .key("editor-menu")
-            .w(238.0)
-            .padding(6.0)
-            .radius(16.0)
-            .continuous_corners()
-            .gap(8.0)
-            .child(settings::copy("Link address", p))
-            .child(
-                text_input(&dialog.url, TextStyle::new(13.0, 400.0))
-                    .key("link-address")
-                    .role("textbox")
-                    .label("Link address")
-                    .single_line()
-                    .w_full()
-                    .h(36.0)
-                    .padding(8.0)
-                    .radius(8.0)
-                    .fill(p.glass)
-                    .color(p.text)
-                    .on_edit(|s: &mut State| &mut s.link.as_mut().unwrap().url),
-            )
-            .child(ui::menu_item("link-save", "Save link", p, |s, tx| {
-                apply(s, false, tx)
-            }))
-            .child(ui::menu_item("link-remove", "Remove link", p, |s, tx| {
-                apply(s, true, tx)
-            }));
-    }
-    menu = menu.child(ui::menu_item(
-        "link-edit",
-        "Add or edit link…",
-        p,
-        |s, _| open(s),
-    ));
-    if let Some(link) = at(&s.docs[s.selected].versions[s.active_version()].edit) {
-        menu = menu.child(ui::menu_item("link-open", "Open link", p, move |s, _| {
-            services::request(s, "/links/open", Some(json!({"url":link.url})));
+/// The link editor that takes the text menu's place after choosing the link button.
+pub fn dialog(s: &State, p: design::Palette) -> El {
+    let dialog = s.link.as_ref().unwrap();
+    col()
+        .key("editor-menu")
+        .w(238.0)
+        .padding(6.0)
+        .radius(16.0)
+        .continuous_corners()
+        .gap(8.0)
+        .child(settings::copy("Link address", p))
+        .child(
+            text_input(&dialog.url, TextStyle::new(13.0, 400.0))
+                .key("link-address")
+                .role("textbox")
+                .label("Link address")
+                .single_line()
+                .w_full()
+                .h(36.0)
+                .padding(8.0)
+                .radius(8.0)
+                .fill(p.glass)
+                .color(p.text)
+                .on_edit(|s: &mut State| &mut s.link.as_mut().unwrap().url),
+        )
+        .child(ui::entry("link-save", "Save link").build(p, |s, tx| apply(s, false, tx)))
+        .child(ui::entry("link-remove", "Remove link").build(p, |s, tx| apply(s, true, tx)))
+}
+/// With the caret on a link: open it, or copy its address.
+pub fn items(s: &State, p: design::Palette) -> Vec<El> {
+    let Some(link) = at(&s.docs[s.selected].versions[s.active_version()].edit) else {
+        return Vec::new();
+    };
+    let url = link.url.clone();
+    vec![
+        ui::entry("link-open", "Open Link").build(p, move |s, _| {
+            services::request(s, "/links/open", Some(json!({"url":url})));
             s.context = None;
-        }));
-    }
-    menu
+        }),
+        ui::entry("link-copy", "Copy Link Address").build(p, move |s, tx| {
+            tx.copy(link.url.clone());
+            s.context = None;
+        }),
+    ]
 }

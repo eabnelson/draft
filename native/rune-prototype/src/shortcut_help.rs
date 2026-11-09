@@ -93,6 +93,12 @@ const SHORTCUTS: &[Shortcut] = &[
         chords: &[&[Command, Character("I")], &[Command, Character("U")]],
     },
     Shortcut {
+        id: "indent",
+        title: "Indent and outdent",
+        detail: "Nest a list item or indent the selected lines. Tab stays in your writing.",
+        chords: &[&[Tab], &[Shift, Tab]],
+    },
+    Shortcut {
         id: "settings",
         title: "Settings",
         detail: "Open your preferences.",

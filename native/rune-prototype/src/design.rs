@@ -11,6 +11,8 @@ pub struct Palette {
     pub glass: Color,
     pub line: Color,
     pub menu: Color,
+    /// Destructive menu actions, such as Delete.
+    pub danger: Color,
 }
 fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -31,6 +33,7 @@ impl Palette {
                 glass: Color::WHITE.alpha(0.05),
                 line: Color::WHITE.alpha(0.045),
                 menu: rgb(31, 31, 31),
+                danger: rgb(240, 128, 128),
             }
         } else {
             Self {
@@ -41,6 +44,7 @@ impl Palette {
                 glass: Color::BLACK.alpha(0.035),
                 line: Color::BLACK.alpha(0.045),
                 menu: Color::WHITE,
+                danger: rgb(196, 52, 52),
             }
         }
     }
@@ -223,6 +227,16 @@ pub fn concealed(source: &str) -> Vec<Span> {
             Event::InlineHtml(t) if t.as_ref() == "<u>" || t.as_ref() == "</u>" => {
                 hide(r.start, r.end)
             }
+            // `\-` reads as `-`: the backslash only keeps the character from being formatting.
+            Event::Text(t)
+                if r.start > 0
+                    && source.as_bytes()[r.start - 1] == b'\\'
+                    && t.starts_with(|c: char| c.is_ascii_punctuation())
+                    && raw.starts_with(|c: char| c.is_ascii_punctuation()) =>
+            {
+                hide(r.start - 1, r.start)
+            }
+            Event::HardBreak if raw.starts_with('\\') => hide(r.start, r.start + 1),
             _ => {}
         }
     }
@@ -363,3 +377,39 @@ pub static CLOUD: rune::Icon = rune::Icon {
     view: 24.0,
     body: r#"<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>"#,
 };
+pub static LINK: rune::Icon = rune::Icon {
+    name: "link",
+    view: 24.0,
+    body: r#"<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>"#,
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn escapes_read_as_the_characters_they_protect() {
+        let source = "a \\- b \\$5 c\\\\d `e \\-`\nline\\\nnext";
+        let hidden: Vec<_> = concealed(source)
+            .iter()
+            .map(|span| {
+                (
+                    span.start as usize,
+                    &source[span.start as usize..span.end as usize],
+                )
+            })
+            .collect();
+        let at = |s: &str| source.find(s).unwrap();
+        assert_eq!(
+            hidden,
+            [
+                (at("\\-"), "\\"),
+                (at("\\$"), "\\"),
+                (at("\\\\"), "\\"),
+                (at("`"), "`"),
+                (source.rfind('`').unwrap(), "`"),
+                (at("\\\n"), "\\"),
+            ],
+            "escapes and the hard break's backslash hide; a backslash in code stays"
+        );
+    }
+}

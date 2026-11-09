@@ -40,7 +40,11 @@ commands remain available for existing scripts.
   `bun run rune:dev --release --hidden` starts it in the background.
 - Cmd/Ctrl-plus (or equals), minus, and zero zoom in, out, and reset the whole
   interface. The zoom level is saved under the prototype's own data root.
-- Right-click selected text for Bold, Italic, Code, Undo, or Redo. Cmd/Ctrl-I
+- Right-click in the text for spelling fixes, link actions, Cut, Copy, Paste,
+  Select All, a bold/italic/underline/code/link row, paragraph styles (Text,
+  H1–H3, bulleted and numbered lists, quote), Undo, and Redo. Tab nests a list
+  item or indents the selected lines, Shift-Tab outdents, and Tab elsewhere inserts
+  spaces instead of leaving the editor. Cmd/Ctrl-I
   formats italic; Cmd/Ctrl-U toggles underline. Cmd/Ctrl-Z undoes, and
   Cmd/Ctrl-Shift-Z or Cmd/Ctrl-Y redoes in the active version. Cmd/Ctrl-B toggles
   the sidebar, as in Draft. Cmd/Ctrl-S saves, including from the sidebar.

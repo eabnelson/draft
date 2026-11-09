@@ -127,35 +127,44 @@ pub fn suggest(s: &State) {
         let _ = jobs.send(Task::Suggest(word.word));
     }
 }
-pub fn menu(s: &State, mut menu: El, p: design::Palette) -> El {
-    if let Some(word) = selected(s)
-        && let Some(suggestions) = s.spelling.suggestions.get(&word.word)
-    {
-        for (i, suggestion) in suggestions.iter().enumerate() {
+/// Corrections for the misspelled word under the caret, first in the text menu as on a Mac.
+pub fn items(s: &State, p: design::Palette) -> Vec<El> {
+    let Some(word) = selected(s) else {
+        return Vec::new();
+    };
+    let Some(suggestions) = s.spelling.suggestions.get(&word.word) else {
+        return Vec::new();
+    };
+    if suggestions.is_empty() {
+        return vec![
+            ui::entry("spelling-none", "No Guesses Found")
+                .enabled(false)
+                .build(p, |_, _| {}),
+        ];
+    }
+    suggestions
+        .iter()
+        .take(5)
+        .enumerate()
+        .map(|(i, suggestion)| {
             let word = word.clone();
             let suggestion = suggestion.clone();
-            menu = menu.child(ui::menu_item(
-                &format!("spelling-{i}"),
-                &suggestion.clone(),
-                p,
-                move |s, tx| {
-                    let di = s.selected;
-                    let vi = s.active_version();
-                    let edit = &mut s.docs[di].versions[vi].edit;
-                    if edit.text.get(word.from..word.to) == Some(word.word.as_str()) {
-                        edit.anchor = word.from;
-                        edit.focus = word.to;
-                        edit.break_history_group();
-                        edit.insert(&suggestion);
-                        edit.break_history_group();
-                        s.edited(di, vi, tx);
-                    }
-                    s.context = None;
-                },
-            ));
-        }
-    }
-    menu
+            ui::entry(&format!("spelling-{i}"), &suggestion).build(p, move |s, tx| {
+                let di = s.selected;
+                let vi = s.active_version();
+                let edit = &mut s.docs[di].versions[vi].edit;
+                if edit.text.get(word.from..word.to) == Some(word.word.as_str()) {
+                    edit.anchor = word.from;
+                    edit.focus = word.to;
+                    edit.break_history_group();
+                    edit.insert(&suggestion);
+                    edit.break_history_group();
+                    s.edited(di, vi, tx);
+                }
+                s.context = None;
+            })
+        })
+        .collect()
 }
 pub fn spans(s: &State, vi: usize) -> Vec<Span> {
     let v = &s.docs[s.selected].versions[vi];

@@ -262,6 +262,11 @@ fn input_key(s: &mut State, di: usize, vi: usize, key: &KeyEvent, tx: &mut Tx) -
     if global_key(s, key, tx) {
         return true;
     }
+    if key.key == Key::Tab && !key.mods.cmd && !key.mods.ctrl && !key.mods.alt {
+        blocks::tab(&mut s.docs[di].versions[vi].edit, key.mods.shift);
+        s.edited(di, vi, tx);
+        return true;
+    }
     if key.is_command('i') {
         s.format("*", tx);
         return true;
@@ -315,56 +320,446 @@ pub(super) fn menu_item(
         )
         .on_press_tx(f)
 }
-fn menu(s: &State, dark: bool, p: design::Palette) -> El {
-    let mut menu = col()
-        .key("editor-menu")
-        .w(238.0)
-        .padding(6.0)
-        .radius(16.0)
-        .continuous_corners();
-    if s.item_menu.is_some() {
-        menu = items::menu(s, menu, p);
+/// Images, files and formatted text from the clipboard. Plain text is left to the editor.
+fn paste_rich(
+    s: &mut State,
+    di: usize,
+    vi: usize,
+    data: &rune::ClipboardContent,
+    tx: &mut Tx,
+) -> bool {
+    if s.docs[di].pending_removal {
+        return true;
+    }
+    if let Some(image) = data.image() {
+        s.paste_image(di, vi, image.png().to_vec(), tx);
+        true
+    } else if !data.files().is_empty() {
+        attachments::files(s, di, vi, data.files());
+        true
+    } else if let Some(markdown) = paste::from_clipboard(data.text(), data.html()) {
+        let edit = &mut s.docs[di].versions[vi].edit;
+        edit.break_history_group();
+        edit.insert(&markdown);
+        edit.break_history_group();
+        s.edited(di, vi, tx);
+        true
     } else {
-        menu = menu
-            .child(menu_item("bold", "Bold", p, |s, tx| {
+        false
+    }
+}
+/// A shortcut as the platform writes it in menus: ⇧⌘Z on a Mac, Ctrl+Shift+Z elsewhere.
+pub(super) fn keys(shift: bool, key: char) -> String {
+    let key = key.to_ascii_uppercase();
+    match (cfg!(target_os = "macos"), shift) {
+        (true, true) => format!("⇧⌘{key}"),
+        (true, false) => format!("⌘{key}"),
+        (false, true) => format!("Ctrl+Shift+{key}"),
+        (false, false) => format!("Ctrl+{key}"),
+    }
+}
+/// One row of a context menu: a label, an optional shortcut or checkmark on the right, and a
+/// dimmed, inert look when it can't be used.
+pub(super) struct Entry {
+    key: String,
+    label: String,
+    hint: String,
+    enabled: bool,
+    checked: bool,
+    color: Option<Color>,
+}
+pub(super) fn entry(key: &str, label: &str) -> Entry {
+    Entry {
+        key: key.into(),
+        label: label.into(),
+        hint: String::new(),
+        enabled: true,
+        checked: false,
+        color: None,
+    }
+}
+impl Entry {
+    pub(super) fn hint(mut self, hint: impl Into<String>) -> Self {
+        self.hint = hint.into();
+        self
+    }
+    pub(super) fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+    pub(super) fn checked(mut self, checked: bool) -> Self {
+        self.checked = checked;
+        self
+    }
+    pub(super) fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
+        self
+    }
+    pub(super) fn build(self, p: design::Palette, f: impl Fn(&mut State, &mut Tx) + 'static) -> El {
+        let color = if self.enabled {
+            self.color.unwrap_or(p.text)
+        } else {
+            p.muted.alpha(0.55)
+        };
+        let trailing = if self.checked {
+            "✓".to_owned()
+        } else {
+            self.hint
+        };
+        let mut row = row()
+            .key(&self.key)
+            .role("button")
+            .label(&self.label)
+            .w_full()
+            .h(28.0)
+            .min_h(28.0)
+            .px(10.0)
+            .gap(16.0)
+            .radius(7.0)
+            .continuous_corners()
+            .center_y()
+            .child(
+                text(&self.label)
+                    .min_w(0.0)
+                    .grow(1.0)
+                    .truncate()
+                    .font(TextStyle::new(13.0, 400.0))
+                    .color(color),
+            );
+        if self.checked {
+            row = row.checked(true);
+        }
+        if !trailing.is_empty() {
+            row = row.child(
+                text(trailing)
+                    .font(TextStyle::new(
+                        12.5,
+                        if self.checked { 600.0 } else { 400.0 },
+                    ))
+                    .color(if self.enabled && self.checked {
+                        color
+                    } else {
+                        p.muted.alpha(if self.enabled { 1.0 } else { 0.55 })
+                    }),
+            );
+        }
+        if self.enabled {
+            row.focusable(true).hover(p.selected).on_press_tx(f)
+        } else {
+            row.disabled(true)
+        }
+    }
+}
+/// A thin rule between groups of menu rows.
+pub(super) fn separator(p: design::Palette) -> El {
+    el().w_full()
+        .py(4.0)
+        .px(10.0)
+        .child(el().w_full().h(1.0).fill(p.text.alpha(0.1)))
+}
+/// A compact button in a row of formatting or paragraph-style choices.
+fn chip(
+    key: &str,
+    face: El,
+    name: &str,
+    help: &str,
+    active: bool,
+    p: design::Palette,
+    f: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    row()
+        .key(key)
+        .role("button")
+        .label(name)
+        .help(help)
+        .focusable(true)
+        .w(1.0)
+        .grow(1.0)
+        .h(30.0)
+        .radius(7.0)
+        .continuous_corners()
+        .center()
+        .fill(if active {
+            p.selected
+        } else {
+            Color::TRANSPARENT
+        })
+        .hover(p.selected)
+        .checked(active)
+        .child(face)
+        .on_press_tx(f)
+}
+fn chips(children: impl IntoIterator<Item = El>) -> El {
+    let mut r = row().w_full().gap(2.0);
+    for c in children {
+        r = r.child(c);
+    }
+    r
+}
+fn glyph(label: &str, style: TextStyle, p: design::Palette) -> El {
+    text(label).font(style).color(p.text)
+}
+fn paragraph(s: &mut State, style: blocks::Style, tx: &mut Tx) {
+    s.context = None;
+    let (di, vi) = (s.selected, s.active_version());
+    blocks::apply(&mut s.docs[di].versions[vi].edit, style);
+    s.focus(vi);
+    s.edited(di, vi, tx);
+}
+fn text_menu(s: &State, mut menu: El, p: design::Palette) -> El {
+    let di = s.selected;
+    let vi = s.active_version();
+    let edit = &s.docs[di].versions[vi].edit;
+    let selection = !edit.selected().is_empty();
+    let writable = !s.docs[di].pending_removal;
+    let fixes = spelling::items(s, p);
+    let link = links::items(s, p);
+    let top = !fixes.is_empty() || !link.is_empty();
+    for item in fixes.into_iter().chain(link) {
+        menu = menu.child(item);
+    }
+    if top {
+        menu = menu.child(separator(p));
+    }
+    menu = menu
+        .child(
+            entry("cut", "Cut")
+                .hint(keys(false, 'x'))
+                .enabled(selection && writable)
+                .build(p, |s, tx| {
+                    s.context = None;
+                    let (di, vi) = (s.selected, s.active_version());
+                    let edit = &mut s.docs[di].versions[vi].edit;
+                    tx.copy(edit.selected());
+                    edit.break_history_group();
+                    edit.insert("");
+                    edit.break_history_group();
+                    s.focus(vi);
+                    s.edited(di, vi, tx);
+                }),
+        )
+        .child(
+            entry("copy", "Copy")
+                .hint(keys(false, 'c'))
+                .enabled(selection)
+                .build(p, |s, tx| {
+                    s.context = None;
+                    let vi = s.active_version();
+                    tx.copy(s.docs[s.selected].versions[vi].edit.selected());
+                    s.focus(vi);
+                }),
+        )
+        .child(
+            entry("paste", "Paste")
+                .hint(keys(false, 'v'))
+                .enabled(writable)
+                .build(p, |s, tx| {
+                    s.context = None;
+                    let (di, vi) = (s.selected, s.active_version());
+                    s.focus(vi);
+                    tx.read_clipboard(move |s: &mut State, data, tx| {
+                        if di >= s.docs.len() || vi >= s.docs[di].versions.len() {
+                            return;
+                        }
+                        if !paste_rich(s, di, vi, data, tx) && !data.text().is_empty() {
+                            let edit = &mut s.docs[di].versions[vi].edit;
+                            edit.break_history_group();
+                            edit.insert(data.text());
+                            edit.break_history_group();
+                            s.edited(di, vi, tx);
+                        }
+                    });
+                }),
+        )
+        .child(
+            entry("select-all", "Select All")
+                .hint(keys(false, 'a'))
+                .enabled(!edit.text.is_empty())
+                .build(p, |s, _| {
+                    s.context = None;
+                    let vi = s.active_version();
+                    let edit = &mut s.docs[s.selected].versions[vi].edit;
+                    edit.anchor = 0;
+                    edit.focus = edit.text.len();
+                    s.focus(vi);
+                }),
+        )
+        .child(separator(p));
+    let underline = glyph("U", TextStyle::new(13.5, 500.0), p);
+    let underline_spans = vec![rune::Span::new(0, 1).underline(p.text)];
+    menu = menu.child(chips([
+        chip(
+            "bold",
+            glyph("B", TextStyle::new(13.5, 700.0), p),
+            "Bold",
+            "Bold",
+            false,
+            p,
+            |s, tx| {
                 s.context = None;
                 s.format("**", tx);
-            }))
-            .child(menu_item("italic", "Italic", p, |s, tx| {
+            },
+        ),
+        chip(
+            "italic",
+            glyph("I", TextStyle::new(13.5, 400.0).italic(), p),
+            "Italic",
+            &format!("Italic  {}", keys(false, 'i')),
+            false,
+            p,
+            |s, tx| {
                 s.context = None;
                 s.format("*", tx);
-            }))
-            .child(menu_item("code", "Code", p, |s, tx| {
+            },
+        ),
+        chip(
+            "underline",
+            underline.decorations(underline_spans),
+            "Underline",
+            &format!("Underline  {}", keys(false, 'u')),
+            false,
+            p,
+            |s, tx| {
+                s.context = None;
+                s.format_pair("<u>", "</u>", tx);
+            },
+        ),
+        chip(
+            "code",
+            glyph("</>", TextStyle::new(12.0, 500.0).mono(), p),
+            "Inline code",
+            "Inline code",
+            false,
+            p,
+            |s, tx| {
                 s.context = None;
                 s.format("`", tx);
-            }))
-            .child(el().w_full().h(1.0).fill(p.line))
-            .child(menu_item("undo", "Undo", p, |s, tx| {
-                s.context = None;
-                let vi = s.active_version();
-                s.docs[s.selected].versions[vi].edit.undo();
-                s.focus(vi);
-                s.edited(s.selected, vi, tx);
-            }))
-            .child(menu_item("redo", "Redo", p, |s, tx| {
-                s.context = None;
-                let vi = s.active_version();
-                s.docs[s.selected].versions[vi].edit.redo();
-                s.focus(vi);
-                s.edited(s.selected, vi, tx);
-            }));
-    }
-    if s.item_menu.is_none() {
-        menu = spelling::menu(s, menu, p);
-        menu = links::menu(s, menu, p);
-    }
+            },
+        ),
+        chip(
+            "link-edit",
+            rune::icon(&design::LINK, 15.0).color(p.text),
+            "Link",
+            "Add or edit link",
+            false,
+            p,
+            |s, _| links::open(s),
+        ),
+    ]));
+    let current = blocks::current(edit);
+    let style = |key: &'static str,
+                 face: &str,
+                 name: &'static str,
+                 value: blocks::Style,
+                 font: TextStyle| {
+        chip(
+            key,
+            glyph(face, font, p),
+            name,
+            name,
+            current == value,
+            p,
+            move |s, tx| paragraph(s, value, tx),
+        )
+    };
+    let label = TextStyle::new(12.5, 500.0);
+    menu = menu
+        .child(chips([
+            style(
+                "paragraph-text",
+                "Text",
+                "Body text",
+                blocks::Style::Text,
+                label,
+            ),
+            style(
+                "heading-1",
+                "H1",
+                "Heading 1",
+                blocks::Style::Heading(1),
+                TextStyle::new(13.0, 700.0),
+            ),
+            style(
+                "heading-2",
+                "H2",
+                "Heading 2",
+                blocks::Style::Heading(2),
+                TextStyle::new(12.5, 650.0),
+            ),
+            style(
+                "heading-3",
+                "H3",
+                "Heading 3",
+                blocks::Style::Heading(3),
+                TextStyle::new(12.0, 600.0),
+            ),
+        ]))
+        .child(chips([
+            style(
+                "list-bullet",
+                "• List",
+                "Bulleted list",
+                blocks::Style::Bullet,
+                label,
+            ),
+            style(
+                "list-numbered",
+                "1. List",
+                "Numbered list",
+                blocks::Style::Numbered,
+                label,
+            ),
+            style("quote", "“ Quote", "Quote", blocks::Style::Quote, label),
+        ]))
+        .child(separator(p))
+        .child(
+            entry("undo", "Undo")
+                .hint(keys(false, 'z'))
+                .enabled(writable)
+                .build(p, |s, tx| {
+                    s.context = None;
+                    let vi = s.active_version();
+                    s.docs[s.selected].versions[vi].edit.undo();
+                    s.focus(vi);
+                    s.edited(s.selected, vi, tx);
+                }),
+        )
+        .child(
+            entry("redo", "Redo")
+                .hint(keys(true, 'z'))
+                .enabled(writable)
+                .build(p, |s, tx| {
+                    s.context = None;
+                    let vi = s.active_version();
+                    s.docs[s.selected].versions[vi].edit.redo();
+                    s.focus(vi);
+                    s.edited(s.selected, vi, tx);
+                }),
+        );
+    menu
+}
+fn menu(s: &State, dark: bool, p: design::Palette) -> El {
+    let menu = col()
+        .key("editor-menu")
+        .w(238.0)
+        .padding(5.0)
+        .radius(14.0)
+        .continuous_corners();
+    let menu = if s.item_menu.is_some() {
+        items::menu(s, menu, p)
+    } else if s.link.is_some() {
+        links::dialog(s, p)
+    } else {
+        text_menu(s, menu, p)
+    };
+    // Nearly opaque, so writing behind the menu never competes with its labels.
     design::glass_surface(menu, dark)
-        .fill(p.menu.alpha(0.84))
+        .fill(p.menu.alpha(if dark { 0.97 } else { 0.98 }))
         .backdrop_blur(22.0)
         .shadow(
-            8.0,
-            24.0,
-            Color::BLACK.alpha(if dark { 0.18 } else { 0.10 }),
+            10.0,
+            28.0,
+            Color::BLACK.alpha(if dark { 0.32 } else { 0.16 }),
         )
 }
 fn tab(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette) -> El {
@@ -472,25 +867,7 @@ fn column(s: &State, vi: usize, width: f32, dark: bool, p: design::Palette, cx: 
             s.context = Some([point.x, point.y]);
             spelling::suggest(s);
         })
-        .on_input_paste(move |s: &mut State, data, tx| {
-            if s.docs[di].pending_removal {
-                return true;
-            }
-            if let Some(image) = data.image() {
-                s.paste_image(di, vi, image.png().to_vec(), tx);
-                true
-            } else if !data.files().is_empty() {
-                attachments::files(s, di, vi, data.files());
-                true
-            } else if let Some(html) = data.html() {
-                let markdown = paste::markdown(html);
-                s.docs[di].versions[vi].edit.insert(&markdown);
-                s.edited(di, vi, tx);
-                true
-            } else {
-                false
-            }
-        })
+        .on_input_paste(move |s: &mut State, data, tx| paste_rich(s, di, vi, data, tx))
         .on_drop_files(move |s: &mut State, files, _| attachments::files(s, di, vi, files))
         .accepts_extensions(&["png", "jpg", "jpeg", "webp", "gif"]);
     if d.pending_removal {

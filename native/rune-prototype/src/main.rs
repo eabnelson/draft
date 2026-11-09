@@ -620,6 +620,7 @@ impl State {
 
 mod appearance;
 mod attachments;
+mod blocks;
 mod caret;
 mod design;
 mod desktop;
