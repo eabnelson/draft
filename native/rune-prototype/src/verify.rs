@@ -1093,13 +1093,15 @@ fn menu_click(rt: &mut rune::Runtime<State>, key: &str) {
 }
 
 fn popover_placement() {
+    // Where each element settles. A menu can still be growing into place on the frame after
+    // it opens, which made the edge checks depend on the runner's timing.
     let rect = |rt: &rune::Runtime<State>, key: &str| {
         let [x, y, w, h] = rt
             .elements()
             .into_iter()
             .find(|e| e.key.as_deref() == Some(key))
             .unwrap_or_else(|| panic!("Missing {key}"))
-            .rect;
+            .target;
         [x, y, x + w, y + h]
     };
     for (width, height) in [(1280.0, 820.0), (780.0, 560.0)] {
