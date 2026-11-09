@@ -374,6 +374,13 @@ export class Updates {
   }
   private async finishOfficial(update:Update,signal:AbortSignal){
     const preparation=update.official!,workspace=join(this.builds,update.id,'source');
+    // Nothing personal to carry over: the signed release, built and checked before publication, is
+    // the update as is. No merge, local Rust toolchain or build sandbox, which most computers lack.
+    if(preparation.currentSourceHash===preparation.baseSourceHash){
+      update.versionId=(await this.storeOfficial(update)).id;
+      update.checks=[{name:'Signed official release, built and checked before publication',passed:true}];
+      await this.progress(update,'ready','Your update is ready');return;
+    }
     const merged=await prepareOfficialMerge({base:this.official.source,mine:this.active.source,official:preparation.source,destination:workspace,choices:preparation.choices});
     preparation.conflicts=merged.conflicts;preparation.expected=merged;
     if(merged.conflicts.some(conflict=>!preparation.choices[conflict.id])){await this.progress(update,'needs-attention','A few choices for your update');return;}
@@ -400,12 +407,17 @@ export class Updates {
         update.checks=await this.buildCandidate(workspace,signal,preparation.source);break;
       }catch(error){if(attempt===2)throw Error('Draft couldn’t keep all of these changes together. Your current app is unchanged.');needsAgent=true;feedback=`Independent checks failed: ${String(error).slice(-10000)}`;}
     }
-    const incoming=validateCatalog(await readJSON<Catalog>(join(preparation.source,'features.json'))),officialId=`official-${incoming.appVersion}`;
-    if(!this.state.versions.some(version=>version.id===officialId)){
-      const folder=join(this.root,'versions',officialId),source=join(folder,'source'),dist=join(folder,'dist');await copySource(preparation.source,source);await cp(join(preparation.source,'dist'),dist,{recursive:true});
-      this.state.versions.push({id:officialId,label:`Draft ${incoming.appVersion}`,createdAt:new Date().toISOString(),source,dist,catalog:incoming,officialId,hostVersion:update.native?preparation.release!.nativeHostVersion:this.hostVersion,sourceHash:await sourceHash(source),artifactHash:await sourceHash(dist)});
-    }
+    const officialId=(await this.storeOfficial(update)).id;
     const candidate=await this.storeCandidate(update,workspace);candidate.officialId=officialId;candidate.hostVersion=update.native?preparation.release!.nativeHostVersion:this.hostVersion;
     await this.progress(update,'ready','Your update is ready');
+  }
+  /// The incoming official release as an app version, stored once.
+  private async storeOfficial(update:Update){
+    const preparation=update.official!;
+    const incoming=validateCatalog(await readJSON<Catalog>(join(preparation.source,'features.json'))),officialId=`official-${incoming.appVersion}`;
+    const existing=this.state.versions.find(version=>version.id===officialId);if(existing)return existing;
+    const folder=join(this.root,'versions',officialId),source=join(folder,'source'),dist=join(folder,'dist');await copySource(preparation.source,source);await cp(join(preparation.source,'dist'),dist,{recursive:true});
+    const version:Version={id:officialId,label:`Draft ${incoming.appVersion}`,createdAt:new Date().toISOString(),source,dist,catalog:incoming,officialId,hostVersion:update.native?preparation.release!.nativeHostVersion:this.hostVersion,sourceHash:await sourceHash(source),artifactHash:await sourceHash(dist)};
+    this.state.versions.push(version);return version;
   }
 }

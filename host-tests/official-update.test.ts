@@ -81,3 +81,21 @@ test('an interrupted native installation on the old host restores its source poi
   assert.equal(reopened.active.id,'personal-start');assert.equal(reopened.state.pendingActivation,undefined);assert.equal(reopened.view().updates[0].state,'failed');assert.equal((await f.docs.load()).drafts[0].versions[0].text,'My writing stays on this Mac.');
  }finally{await f.close();}
 });
+
+test('without personal changes, the signed release installs as is, with no local build tools',{timeout:30000},async()=>{
+ const f=await officialFixture({personal:false});try{
+  // A native build here would need Rust and the build sandbox, which this fixture leaves out on purpose.
+  f.host.options.nativeRenderer=true;
+  const original=f.host.view().activeVersion;
+  const request=await f.host.request('official','Bring in the latest Draft.');
+  const ready=await settled(f.host,request.id);assert.equal(ready.state,'ready',ready.error);
+  assert.deepEqual(ready.checks?.map(check=>check.name),['Signed official release, built and checked before publication']);
+  assert.equal(ready.versionId,'official-1.1.0');
+  await f.host.apply(ready.id);await f.host.confirm(f.host.view().activeVersion);
+  assert.equal(f.host.view().activeVersion,'official-1.1.0');assert.equal(f.host.view().current.appVersion,'1.1.0');
+  assert.equal(await readFile(join(f.host.active.dist,'index.html'),'utf8'),'<main>Official update</main>');
+  assert.equal((await f.docs.load()).drafts[0].versions[0].text,'My writing stays on this Mac.');
+  await f.host.abortActivation();
+  assert.notEqual(original,'official-1.1.0');
+ }finally{await f.close();}
+});

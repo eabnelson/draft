@@ -2,7 +2,7 @@ import {mkdir,readFile,stat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {createPublicKey,sign} from 'node:crypto';
 import {fileDigest} from '../desktop/native-update';
-import type {ReleaseManifest} from '../desktop/official-release';
+import type {ReleaseManifest,LinuxBuild} from '../desktop/official-release';
 import {verifyMacApp,macCommand,validateStaple} from './mac-distribution';
 const root=resolve(import.meta.dir,'..'),version=(await Bun.file(join(root,'package.json')).json()).version;
 const output=join(root,'release'),tag=`v${version}`,base=`https://github.com/eabnelson/draft/releases/download/${tag}`;
@@ -31,9 +31,18 @@ const artifact=async(path:string)=>({url:`${base}/${path.split('/').at(-1)}`,sha
 const dmg=join(root,`release/Draft-${version}-macos-${process.arch}.dmg`);
 await validateStaple(dmg);
 const installer=dmg;
-const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.studiofour.draft.native',arch:process.arch as 'arm64'|'x64'},installer:await artifact(installer)};
+// Linux builds come from their own runners into release/. The workflow names the ones it requires.
+const linuxArches=(process.env.DRAFT_LINUX_ARCHES??'').split(',').map(arch=>arch.trim()).filter(Boolean);
+const linux:LinuxBuild[]=[];
+for(const arch of linuxArches){
+ if(arch!=='x64'&&arch!=='arm64')throw Error(`Unknown Linux architecture: ${arch}`);
+ const build=join(output,`Draft-${version}-linux-${arch}.tar.gz`),buildSource=join(output,`Draft-${version}-linux-${arch}-source.tar.gz`);
+ if(!await Bun.file(build).exists()||!await Bun.file(buildSource).exists())throw Error(`The Linux ${arch} build is missing from release/.`);
+ linux.push({arch,bundleId:'com.studiofour.draft.native',desktop:await artifact(build),source:await artifact(buildSource)});
+}
+const manifest:ReleaseManifest={schemaVersion:2,version,publishedAt:new Date().toISOString(),notes,nativeHostVersion:version,source:await artifact(source),desktop:{...await artifact(desktop),bundleId:'com.studiofour.draft.native',arch:process.arch as 'arm64'|'x64'},installer:await artifact(installer),...(linux.length?{linux}:{})};
 const payload=JSON.stringify(manifest),signature=sign(null,Buffer.from(payload),key).toString('base64');
 await Bun.write(join(output,'draft-update.json'),JSON.stringify({payload,signature},null,2)+'\n');
-const names=[source,desktop,join(output,`Draft-${version}-macos-${process.arch}.dmg`),join(output,'draft-update.json'),join(output,'distribution-report.json')];
+const names=[source,desktop,join(output,`Draft-${version}-macos-${process.arch}.dmg`),...linuxArches.flatMap(arch=>[join(output,`Draft-${version}-linux-${arch}.tar.gz`),join(output,`Draft-${version}-linux-${arch}-source.tar.gz`)]),join(output,'draft-update.json'),join(output,'distribution-report.json')];
 await Bun.write(join(output,'SHA256SUMS'),(await Promise.all(names.map(async path=>`${await fileDigest(path)}  ${path.split('/').at(-1)}`))).join('\n')+'\n');
 console.log(`Signed desktop and matching source prepared for ${tag}.`);

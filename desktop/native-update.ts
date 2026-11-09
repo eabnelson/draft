@@ -8,12 +8,31 @@ import type {NativePackage,Version,Update} from './types';
 
 async function command(args:string[]){const child=Bun.spawn(args,{stdout:'pipe',stderr:'pipe'});const [output,error]=await Promise.all([new Response(child.stdout).text(),new Response(child.stderr).text()]);if(await child.exited)throw Error(error||'The desktop update could not be checked.');return output.trim();}
 export async function fileDigest(path:string){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
+/// Where the installer keeps the app it replaced, beside the app, for Undo.
+export const previousAppName=(id:string,platform:NodeJS.Platform=process.platform)=>`.Draft-previous-${id}${platform==='darwin'?'.app':''}`;
+/// A Linux build's identity, written by the packager in place of a Mac Info.plist.
+export async function linuxAppInfo(app:string){
+ const info=await readJSON<{bundleId?:unknown;version?:unknown}>(join(app,'lib/draft/app.json')).catch(()=>({}) as {bundleId?:unknown;version?:unknown});
+ if(typeof info.bundleId!=='string'||typeof info.version!=='string')throw Error('The desktop download is incomplete.');
+ await access(join(app,'bin/draft'),constants.X_OK).catch(()=>{throw Error('The desktop download is incomplete.');});
+ return {bundleId:info.bundleId,version:info.version};
+}
 export class NativeUpdates {
- constructor(readonly root:string,readonly appPath:string,readonly channel:ReleaseChannel,readonly parentPid=process.ppid){}
+ constructor(readonly root:string,readonly appPath:string,readonly channel:ReleaseChannel,readonly parentPid=process.ppid,readonly platform:NodeJS.Platform=process.platform){}
  async stage(id:string,release:SignedRelease,signal:AbortSignal,onProgress?:(received:number,total:number)=>void):Promise<NativePackage>{
-  try{await access(dirname(this.appPath),constants.W_OK);}catch{throw Error('Move Draft to Applications before installing this update.');}
-  const folder=join(this.root,'NativeUpdates',id),archive=join(folder,'desktop.zip'),expanded=join(folder,'check');
+  const linux=this.platform==='linux';
+  try{await access(dirname(this.appPath),constants.W_OK);}catch{throw Error(linux?'Move the Draft folder somewhere you can change, such as ~/Applications, before installing this update.':'Move Draft to Applications before installing this update.');}
+  const folder=join(this.root,'NativeUpdates',id),archive=join(folder,linux?'desktop.tar.gz':'desktop.zip'),expanded=join(folder,'check');
   await this.channel.download(release.desktop,archive,signal,onProgress);
+  if(linux){
+   try{
+    await mkdir(expanded,{recursive:true});await command(['tar','-xzf',archive,'-C',expanded,'--no-same-owner']);
+    const apps=await readdir(expanded);if(apps.length!==1||apps[0]!=='Draft')throw Error('The desktop download is incomplete.');
+    const info=await linuxAppInfo(join(expanded,'Draft'));
+    if(info.bundleId!==release.desktop.bundleId||info.version!==release.nativeHostVersion)throw Error('The desktop download does not match this update.');
+   }finally{await rm(expanded,{recursive:true,force:true});}
+   return {archive,release};
+  }
   try{
    await mkdir(expanded,{recursive:true});await command(['/usr/bin/ditto','-x','-k',archive,expanded]);
    const apps=(await readdir(expanded)).filter(name=>name.endsWith('.app'));if(apps.length!==1)throw Error('The desktop download is incomplete.');
@@ -30,7 +49,7 @@ export class NativeUpdates {
  }
  async rollbackPlan(update:Update,target:Version,previous:Version){
   const backup=await readJSON<{path:string;version:string}>(join(this.root,'NativeUpdates','previous.json')).catch(()=>undefined);
-  if(!backup||backup.version!==target.hostVersion||!await exists(backup.path))throw Error('The previous desktop version is not available on this Mac.');
+  if(!backup||backup.version!==target.hostVersion||!await exists(backup.path))throw Error(`The previous desktop version is not available on this ${this.platform==='darwin'?'Mac':'computer'}.`);
   return this.writePlan(update,target,previous,{action:'rollback',backup:backup.path});
  }
  private async writePlan(update:Update,target:Version,previous:Version,operation:object){
@@ -44,7 +63,7 @@ export class NativeUpdates {
 export async function rememberPreviousApp(root:string,planPath:string,helperStopped=false){
  const plan=await readJSON<{appPath:string;updateId:string;previousHost:string}>(planPath);
  if(!plan.appPath||!plan.updateId||!plan.previousHost||!/^[a-f0-9-]{36}$/i.test(plan.updateId))return;
- const backup=join(dirname(plan.appPath),`.Draft-previous-${plan.updateId}.app`);
+ const backup=join(dirname(plan.appPath),previousAppName(plan.updateId));
  if(!await exists(backup)&&helperStopped){
   const status=await readJSON<{recovery?:string}>(join(dirname(planPath),'status.json')).catch(()=>undefined);
   const recovery=status?.recovery;

@@ -20,3 +20,23 @@ test('a newer signed preview release is offered, while forged metadata and older
     tamper=false;version='0.2.0-alpha.17';assert.equal(await channel.latest('0.2.0-alpha.18'),undefined);
   }finally{server.stop(true);}
 });
+
+test('Linux computers take their own build from a signed release, and Macs keep theirs',async()=>{
+  const keys=generateKeyPairSync('ed25519'),version='0.3.0-alpha.80',bundleId='com.studiofour.draft.native';
+  const artifact=(name:string,size=1000)=>({url:`ORIGIN/${name}`,sha256:'c'.repeat(64),size});
+  const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch(request){
+    const origin=new URL(request.url).origin;
+    if(new URL(request.url).pathname==='/releases')return Response.json([{tag_name:'v'+version,draft:false,prerelease:true,html_url:'https://github.com/eabnelson/draft/releases/tag/v'+version,assets:[{name:'draft-update.json',browser_download_url:origin+'/manifest'}]}]);
+    const payload=JSON.stringify({schemaVersion:2,version,publishedAt:'2026-11-09T00:00:00Z',notes:['Linux updates.'],nativeHostVersion:version,source:artifact('mac-source.tar.gz'),desktop:{...artifact('mac.zip'),bundleId,arch:'arm64'},installer:artifact('mac.dmg'),linux:[{arch:'x64',bundleId,desktop:artifact('linux-x64.tar.gz'),source:artifact('linux-x64-source.tar.gz')}]}).replaceAll('ORIGIN',origin);
+    return Response.json({payload,signature:sign(null,Buffer.from(payload),keys.privateKey).toString('base64')});
+  }});
+  const channel=(platform:NodeJS.Platform,arch:string)=>new ReleaseChannel({feed:`http://127.0.0.1:${server.port}/releases`,publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString(),allowLocal:true,platform,arch});
+  try{
+    const linux=await channel('linux','x64').latest('0.3.0-alpha.79');
+    assert.ok(linux?.desktop.url.endsWith('/linux-x64.tar.gz')&&linux.source.url.endsWith('/linux-x64-source.tar.gz')&&!linux.installer);
+    assert.equal(linux?.desktop.arch,'x64');
+    const mac=await channel('darwin','arm64').latest('0.3.0-alpha.79');
+    assert.ok(mac?.desktop.url.endsWith('/mac.zip')&&mac.source.url.endsWith('/mac-source.tar.gz'));
+    await assert.rejects(channel('linux','arm64').latest('0.3.0-alpha.79'),/in-app update/);
+  }finally{server.stop(true);}
+});

@@ -4,9 +4,12 @@ import {join,dirname} from 'node:path';
 import {atomicWrite,within} from './files';
 
 export type ReleaseArtifact={url:string;sha256:string;size:number};
-export type ReleaseManifest={schemaVersion:2;version:string;publishedAt:string;notes:string[];nativeHostVersion:string;source:ReleaseArtifact;desktop:ReleaseArtifact&{bundleId:string;arch:'arm64'|'x64'};installer?:ReleaseArtifact};
+// `desktop`, `source` and `installer` are the Mac build, as every earlier Mac app reads them.
+// Linux builds ride beside them, each with the source its own native renderer was built from.
+export type LinuxBuild={arch:'arm64'|'x64';bundleId:string;desktop:ReleaseArtifact;source:ReleaseArtifact};
+export type ReleaseManifest={schemaVersion:2;version:string;publishedAt:string;notes:string[];nativeHostVersion:string;source:ReleaseArtifact;desktop:ReleaseArtifact&{bundleId:string;arch:'arm64'|'x64'};installer?:ReleaseArtifact;linux?:LinuxBuild[]};
 export type SignedRelease=ReleaseManifest&{envelope:{payload:string;signature:string};releaseUrl:string};
-type ChannelOptions={feed?:string;publicKey:string;allowLocal?:boolean;bundleId?:string;arch?:string};
+type ChannelOptions={feed?:string;publicKey:string;allowLocal?:boolean;bundleId?:string;arch?:string;platform?:NodeJS.Platform};
 const defaultFeed='https://api.github.com/repos/eabnelson/draft/releases?per_page=20';
 
 export class ReleaseChannel {
@@ -33,10 +36,18 @@ export class ReleaseChannel {
       const value=JSON.parse(envelope.payload) as ReleaseManifest;
       if(value.schemaVersion!==2||value.version!==String(release.tag_name).replace(/^v/,'')||!Number.isFinite(Date.parse(value.publishedAt))||!Array.isArray(value.notes)||value.notes.length>12||value.notes.some(note=>typeof note!=='string'||note.length>300))throw Error('The update information is incomplete.');
       Bun.semver.order(value.nativeHostVersion,value.nativeHostVersion);
-      for(const [artifact,limit] of [...[[value.source,50_000_000],[value.desktop,350_000_000]],...(value.installer?[[value.installer,350_000_000]]:[])] as [ReleaseArtifact,number][]){
+      if(value.linux!==undefined&&(!Array.isArray(value.linux)||value.linux.length>4))throw Error('The update information is incomplete.');
+      const linux=value.linux??[];
+      for(const [artifact,limit] of [...[[value.source,50_000_000],[value.desktop,350_000_000]],...(value.installer?[[value.installer,350_000_000]]:[]),...linux.flatMap(build=>[[build?.source,50_000_000],[build?.desktop,350_000_000]])] as [ReleaseArtifact,number][]){
         if(!artifact||!/^[a-f0-9]{64}$/.test(artifact.sha256)||!Number.isSafeInteger(artifact.size)||artifact.size<1||artifact.size>limit)throw Error('The update download could not be verified.');this.url(artifact.url);
       }
-      if(value.desktop.bundleId!==(this.options.bundleId??'com.studiofour.draft.native')||value.desktop.arch!==(this.options.arch??process.arch)){unsupported=true;continue;}
+      const bundleId=this.options.bundleId??'com.studiofour.draft.native',arch=this.options.arch??process.arch;
+      if((this.options.platform??process.platform)==='linux'){
+        const build=linux.find(build=>build.bundleId===bundleId&&build.arch===arch);if(!build){unsupported=true;continue;}
+        // Everything after this reads the build for this computer from `desktop` and `source`.
+        return {...value,desktop:{...build.desktop,bundleId:build.bundleId,arch:build.arch},source:build.source,installer:undefined,envelope,releaseUrl:String(release.html_url)};
+      }
+      if(value.desktop.bundleId!==bundleId||value.desktop.arch!==arch){unsupported=true;continue;}
       return {...value,envelope,releaseUrl:String(release.html_url)};
     }
     if(unsupported)throw Error('A newer release is available, but its in-app update isn’t ready yet.');

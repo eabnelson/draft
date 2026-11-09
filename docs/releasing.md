@@ -18,9 +18,17 @@ Keep `release-notes.json` consumer-friendly and current. Main's package version 
 
 Use the locked dependencies, run `bun run test`, then `bun run desktop:build`. This packages the Rune native interface as `native/rune-prototype/artifacts/Draft.app`. The previous desktop shell and its build tooling have been removed. Verify first launch, local saving, connected-provider discovery, one real feature update, removal, reset, and reopening a saved document. A release must preserve the original transcript and initial specification checksums.
 
-The native public bundle identity is `com.studiofour.draft.native`, matching the installed native previews. This transition requires one manual installation for users of the previous Tauri app; its updater deliberately refuses a different bundle identity. Quit the previous app before opening the native app. When the default native profile does not yet exist, first launch atomically copies `Drafts`, `Documents`, `Exports`, and `Recovery` from the previous Mac profile. The original profile remains intact. Existing native profiles are never overwritten. Sync needs reconnecting; previous editor undo records and personal application source remain in the original profile. Subsequent native Mac updates use the authenticated native update channel. Public downloads currently support Apple Silicon; Linux has a separately verified portable package and no automatic full-host updater yet.
+The native public bundle identity is `com.studiofour.draft.native`, matching the installed native previews. This transition requires one manual installation for users of the previous Tauri app; its updater deliberately refuses a different bundle identity. Quit the previous app before opening the native app. When the default native profile does not yet exist, first launch atomically copies `Drafts`, `Documents`, `Exports`, and `Recovery` from the previous Mac profile. The original profile remains intact. Existing native profiles are never overwritten. Sync needs reconnecting; previous editor undo records and personal application source remain in the original profile. Subsequent native Mac updates use the authenticated native update channel. Public downloads support Apple Silicon Macs and Linux on x64 and ARM64.
 
 The current alpha targets Apple Silicon. Intel builds need an x86_64 Bun binary and matching native npm packages in their resources; changing only the Rust target is insufficient.
+
+## Linux distribution
+
+Each release builds Linux on GitHub's Ubuntu 22.04 x64 and ARM64 runners, so the glibc floor is 2.35. Each build produces `Draft-<version>-linux-<arch>.tar.gz`, a portable `Draft` folder with `bin/draft`, `install-desktop` and the bundled runtime. It also produces `Draft-<version>-linux-<arch>-source.tar.gz`, the editable source with that build's own renderer. Linux has no platform signing. The authenticated update manifest is the trust root: the Mac release job signs it with both Linux builds' digests and sizes under `linux`, beside the Mac `desktop`, `source` and `installer` that earlier Mac apps read.
+
+Before publication, a fresh Ubuntu 24.04 runner for each architecture runs `scripts/verify-linux-download.ts`. It verifies the signed manifest and hashes, unpacks the folder, checks its identity and version (`lib/draft/app.json`) and source version, and installs the desktop shortcut. It then runs the document, official-merge and Linux-installer checks with the shipped Bun and no Node on PATH. Finally it renders the writing interface and runs the interaction checks headlessly with software Vulkan. Publishing waits for both clean-Mac and both clean-Linux checks.
+
+In-app updates on Linux use `lib/draft/draft-install`, which runs `native/rune-prototype/install-update.ts` with the bundled Bun. It mirrors the Mac helper. It waits for Draft to save and exit, re-verifies the signed manifest and archive, and unpacks beside the app. It exchanges the folders in one step (`renameat2` with `RENAME_EXCHANGE`, falling back to two renames), launches the new app, and restores the previous folder if the new one doesn't confirm startup. The replaced folder stays beside the app as `.Draft-previous-<id>` for Undo. The app's parent folder must be writable; Draft says so before downloading otherwise. `host-tests/linux-installer.test.ts` runs in Check on Linux.
 
 ## macOS distribution
 
@@ -45,7 +53,7 @@ If only the verification harness needs repair after a candidate has already been
 
 The website resolves the newest published Apple Silicon installer when it builds, ignoring private drafts and unexpected download addresses. If the release API is unavailable, it keeps a known download rather than constructing a link for a version that may not exist. The known fallback is the verified native alpha.71 installer. Advance it after publishing later verified releases.
 
-The supported public target is Apple Silicon. Intel requires its own Bun executable, matching native dependencies, signed package, and clean-runner test.
+The supported public Mac target is Apple Silicon. Intel Macs require their own Bun executable, matching native dependencies, signed package, and clean-runner test.
 
 ## Official app updates
 

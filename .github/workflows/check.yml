@@ -44,6 +44,9 @@ jobs:
       - run: cargo test --manifest-path native/rune-prototype/Cargo.toml --locked
       - run: bun run native:check
       - run: bun run native:build --skip-checks
+      - name: Verify the Linux in-app update installer
+        if: runner.os == 'Linux'
+        run: bun test ./host-tests/linux-installer.test.ts
       - name: Verify relocated Linux desktop shortcut
         if: runner.os == 'Linux'
         run: dbus-run-session -- bun native/rune-prototype/checks/linux-desktop.ts native/rune-prototype/artifacts/Draft

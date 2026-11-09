@@ -9,7 +9,7 @@ import {DraftStore} from '../../desktop/documents';
 import {fresh,editVersion} from '../../src/model';
 import type {Catalog,Version} from '../../desktop/types';
 
-export async function officialFixture(options:{conflict?:boolean;agent?:AgentConnection['run'];login?:AgentConnection['login'];noModel?:boolean}={}){
+export async function officialFixture(options:{conflict?:boolean;agent?:AgentConnection['run'];login?:AgentConnection['login'];noModel?:boolean;personal?:boolean}={}){
  const root=await mkdtemp(join(tmpdir(),'draft-official-flow-')),template=join(root,'template'),incoming=join(root,'release'),data=join(root,'data'),keys=generateKeyPairSync('ed25519');
  const catalog:Catalog={schemaVersion:1,name:'Draft',appVersion:'1.0.0',features:[{id:'writing',title:'Writing',description:'Write locally.',origin:'official',state:'active',updatedAt:'2026-10-24T00:00:00Z',code:['src/writing.ts']}]};
  const files:Record<string,string>={
@@ -33,18 +33,21 @@ export async function officialFixture(options:{conflict?:boolean;agent?:AgentCon
  const archive=await new Bun.Archive(archiveFiles).bytes(),digest=createHash('sha256').update(archive).digest('hex');
  const server=Bun.serve({hostname:'127.0.0.1',port:0,fetch(request){const origin=new URL(request.url).origin,path=new URL(request.url).pathname;
   if(path==='/source')return new Response(archive);
-  if(path==='/manifest'){const payload=JSON.stringify({schemaVersion:2,version:'1.1.0',publishedAt:'2026-10-27T16:00:00Z',notes:['Spelling help is now included.'],nativeHostVersion:'1.1.0',source:{url:origin+'/source',size:archive.length,sha256:digest},desktop:{url:origin+'/desktop.zip',size:1,sha256:'b'.repeat(64),arch:process.arch,bundleId:'com.studiofour.draft.native'}});return Response.json({payload,signature:sign(null,Buffer.from(payload),keys.privateKey).toString('base64')});}
+  if(path==='/manifest'){const payload=JSON.stringify({schemaVersion:2,version:'1.1.0',publishedAt:'2026-10-27T16:00:00Z',notes:['Spelling help is now included.'],nativeHostVersion:'1.1.0',source:{url:origin+'/source',size:archive.length,sha256:digest},desktop:{url:origin+'/desktop.zip',size:1,sha256:'b'.repeat(64),arch:process.arch,bundleId:'com.studiofour.draft.native'},linux:[{arch:process.arch,bundleId:'com.studiofour.draft.native',desktop:{url:origin+'/desktop.tar.gz',size:1,sha256:'b'.repeat(64)},source:{url:origin+'/source',size:archive.length,sha256:digest}}]});return Response.json({payload,signature:sign(null,Buffer.from(payload),keys.privateKey).toString('base64')});}
   return Response.json([{tag_name:'v1.1.0',draft:false,prerelease:false,html_url:'https://github.com/eabnelson/draft/releases/tag/v1.1.0',assets:[{name:'draft-update.json',browser_download_url:origin+'/manifest'}]}]);
  }});
  const agents:AgentConnection={discover:async()=>[],login:options.login??(async()=>[]),select:async()=>options.noModel?undefined:{provider:'claude',model:'fixture'},run:options.agent??(async()=>{throw Error('The independent merge should not need a model.');})};
  const dependencies=resolve(import.meta.dir,'../../node_modules');
  const host=new Updates(data,template,dependencies,process.execPath,{feed:`http://127.0.0.1:${server.port}/releases`,allowLocal:true,builds:join(root,'builds'),hostVersion:'1.1.0',agents});await host.initialize();
+ // Without personal changes, the writer runs official Draft as installed.
+ if(options.personal!==false){
  const customSource=join(root,'personal/source'),customDist=join(root,'personal/dist');await copySource(host.active.source,customSource);await cp(host.active.dist,customDist,{recursive:true});
  const personal={...structuredClone(catalog),features:[...catalog.features,{id:'appearance',title:'My theme',description:'Keep my dark appearance.',origin:'personal' as const,state:'active' as const,updatedAt:'2026-10-26T00:00:00Z',code:['src/main.ts','src/appearance.ts','tests/appearance.test.ts']},{id:'reading',title:'Reading time',description:'Show reading time.',origin:'personal' as const,state:'active' as const,updatedAt:'2026-10-26T00:00:00Z',code:['src/reading.ts','tests/reading.test.ts']}]};
  await atomicWrite(join(customSource,'features.json'),JSON.stringify(personal));await atomicWrite(join(customSource,'src/appearance.ts'),'export const appearance = "dark";');await atomicWrite(join(customSource,'src/reading.ts'),'export const minutes = 3;');
  await atomicWrite(join(customSource,'src/main.ts'),'import {writing} from "./writing";\ndocument.querySelector("#app")!.textContent=writing;\nimport {appearance} from "./appearance";document.body.dataset.appearance=appearance;\n');
  for(const [name,text] of [['appearance','import {appearance} from "../src/appearance";test("personal dark appearance remains",()=>expect(appearance).toBe("dark"));'],['reading','import {minutes} from "../src/reading";test("personal reading time remains",()=>expect(minutes).toBe(3));']])await atomicWrite(join(customSource,`tests/${name}.test.ts`),'import {test,expect} from "bun:test";'+text);
  const version:Version={...host.active,id:'personal-start',source:customSource,dist:customDist,catalog:personal,sourceHash:await sourceHash(customSource),artifactHash:await sourceHash(customDist),parentId:host.active.id,hostVersion:'1.1.0'};host.state.versions.push(version);host.state.activeVersion=version.id;
+ }
  const docs=new DraftStore(join(data,'Drafts'));const draft=fresh();await docs.save(editVersion(draft,draft.versions[0].id,'My writing stays on this Mac.'));
  return {root,host,docs,template,incoming,data,server,async close(){host.stopAutomaticChecks();server.stop(true);await idle(host);await rm(root,{recursive:true,force:true});}};
 }

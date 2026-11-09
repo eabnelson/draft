@@ -14,10 +14,13 @@ fn main() {
     command.args(std::env::args_os().skip(1));
     command.env("DRAFT_RUNTIME_ROOT", &runtime);
     command.env("DRAFT_NATIVE_EXECUTABLE", folder.join("draft-native"));
-    if cfg!(target_os = "macos") {
-        let app: PathBuf = folder.join("../..");
-        command.env("DRAFT_APP_PATH", app.canonicalize().unwrap());
-    }
+    // The folder an update replaces: Draft.app on a Mac, the unpacked Draft folder on Linux.
+    let app: PathBuf = if cfg!(target_os = "macos") {
+        folder.join("../..")
+    } else {
+        folder.join("..")
+    };
+    command.env("DRAFT_APP_PATH", app.canonicalize().unwrap());
     command.env("DRAFT_LAUNCHER_EXECUTABLE", &executable);
     command.env("DRAFT_BUNDLE_ID", "com.studiofour.draft.native");
     #[cfg(unix)]

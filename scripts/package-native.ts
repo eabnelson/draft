@@ -45,7 +45,13 @@ if(process.platform==='darwin'){
   await cp(join(root,'native/icons/icon.png'),join(icon,'com.studiofour.draft.native.png'));
   const installer=await Bun.build({entrypoints:[join(root,'native/rune-prototype/install-desktop.ts')],target:'bun',outdir:runtime,naming:'install-desktop.js'});if(!installer.success)throw Error(installer.logs.join('\n'));
   await writeFile(join(app,'install-desktop'),'#!/bin/sh\nset -eu\napp_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$app_dir/lib/draft/bun" "$app_dir/lib/draft/install-desktop.js" "$@"\n',{mode:0o755});
+  // In-app updates: the identity a Mac reads from Info.plist, and the helper that swaps the folder.
+  await writeFile(join(runtime,'app.json'),JSON.stringify({bundleId:'com.studiofour.draft.native',version})+'\n');
+  const updater=await Bun.build({entrypoints:[join(root,'native/rune-prototype/install-update.ts')],target:'bun',outdir:runtime,naming:'install-update.js',external:['bun:ffi']});if(!updater.success)throw Error(updater.logs.join('\n'));
+  await writeFile(join(runtime,'draft-install'),'#!/bin/sh\nset -eu\nruntime=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexec "$runtime/bun" "$runtime/install-update.js" "$@"\n',{mode:0o755});
   await mkdir(join(root,'release'),{recursive:true});await run(['tar','-czf',join(root,`release/Draft-${version}-linux-${process.arch}.tar.gz`),'-C',resolve(app,'..'),'Draft']);
+  // Official updates rebuild from this source; it carries this build's own Linux renderer.
+  await run(['tar','-czf',join(root,`release/Draft-${version}-linux-${process.arch}-source.tar.gz`),'-C',join(runtime,'source-template'),'.']);
 }
 await mkdir(resolve(output,'..'),{recursive:true});
 await rm(output,{recursive:true,force:true});await cp(app,output,{recursive:true,verbatimSymlinks:true});

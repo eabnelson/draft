@@ -12,6 +12,8 @@ Draft is a Mac app for writing drafts for social. Open a new draft from anywhere
 
 Use **Download for Mac** on [the website](https://draft.studiofour.io/), open the disk image, and drag Draft to Applications. Apple Silicon and macOS 13 or later are required. Public releases must pass Developer ID signing, Apple notarization, and a fresh-Mac installation check before publication. Older alpha downloads remain in the release history. Building from source is supported below.
 
+On Linux, use **Draft for Linux** at the bottom of [the website](https://draft.studiofour.io/) and download the `x64` or `arm64` build. Unpack it somewhere you own, such as `~/Applications`, and run `Draft/install-desktop` to add Draft to your app launcher. Builds target Ubuntu 22.04 or later, or another distribution with glibc 2.35 or later. Draft updates itself in that folder, so keep it somewhere you can write to.
+
 Writing works without an AI connection. For assistance and personal updates, install and sign in to [Claude Code](https://claude.com/product/claude-code) or [Codex](https://developers.openai.com/codex/cli). Draft discovers those installations and their available models. It reuses their normal login flow and does not copy tokens into its settings. When available, Claude Opus 5.5 is the default. Model settings lets you change it.
 
 Your provider processes the writing context or feature request you submit. Provider subscriptions, access, limits, and usage charges still apply. Draft runs its document store, editor, build tools, and app versions on your Mac.
@@ -26,7 +28,7 @@ If Claude needs you to sign in again, the update card explains what happened and
 
 Removing a feature and returning to official Draft use the same prepare → update flow. Draft checks for official updates on opening, periodically while running, and when you return to the app. An update appears in the header and Preferences. **Draft → Check for Updates…** is always available, including with an older personal interface.
 
-Every successful change on `main` prepares a versioned Mac release automatically. Signing, Apple notarization, and a fresh-Mac installation must pass before users can download it. Users choose when to install.
+Every successful change on `main` prepares a versioned release for Mac and Linux automatically. Signing, Apple notarization, and fresh Mac and Linux installations must pass before users can download it. Users choose when to install.
 
 **Download update** brings in the matching signed app and source. Independent changes combine automatically. If changes overlap, choose **Keep mine**, **Use Draft’s**, or **Combine both** for each high-level feature. Draft uses your connected model when integration needs work, then checks the result before offering **Restart to update**. Personal features and features you turned off remain recorded; only changes you explicitly replace are dropped. Missing model access, interrupted downloads, or unresolved checks keep the current app running.
 
