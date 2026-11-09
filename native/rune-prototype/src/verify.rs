@@ -1316,7 +1316,9 @@ fn updates_page() {
             "updateCheck":{"at":"2026-11-09T03:37:56Z","when":"just now"},"updates":updates})
     };
     rt.update(|s, _| {
-        // Hold the host's own answers so the page shows exactly this state.
+        // Drop the host's own answers, including any already on their way, so the page
+        // shows exactly this state.
+        s.replies = None;
         let later = Instant::now() + Duration::from_secs(3600);
         s.services.next_refresh = Some(later);
         s.services.next_background = Some(later);
