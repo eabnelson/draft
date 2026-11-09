@@ -17,6 +17,16 @@ const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['impl
 export type AgentConnection=Pick<Agents,'discover'|'login'|'select'|'run'>;
 export type ReconnectResult={update?:Update;message:string};
 export function parseAgentResult(text:string){let value;try{value=JSON.parse(text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw Error('The coding agent did not return a valid completion result.');}if(!['implemented','already_exists','failed'].includes(value.outcome)||typeof value.title!=='string'||typeof value.summary!=='string'||typeof value.featureId!=='string')throw Error('The coding agent returned an incomplete result.');return value as {outcome:'implemented'|'already_exists'|'failed';title:string;summary:string;featureId:string};}
+/// How Settings names a moment: "just now", "5 minutes ago", "today at 3:12 PM", "Nov 7 at 5:21 PM".
+export function moment(iso:string,now=new Date()){
+  const date=new Date(iso),minutes=Math.floor((now.getTime()-date.getTime())/60000);
+  if(Number.isNaN(minutes))return '';
+  if(minutes<1)return 'just now';
+  if(minutes<60)return `${minutes} ${minutes===1?'minute':'minutes'} ago`;
+  const time=date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if(date.toDateString()===now.toDateString())return `today at ${time}`;
+  return `${date.toLocaleDateString('en-US',{month:'short',day:'numeric',...(date.getFullYear()===now.getFullYear()?{}:{year:'numeric'})})} at ${time}`;
+}
 export class Updates {
   state!:HostState;private controller?:AbortController;private runningId?:string;private preparation?:Promise<void>;private saving:Promise<unknown>=Promise.resolve();
   private reconnecting?:{id:string;promise:Promise<ReconnectResult>};
@@ -57,7 +67,7 @@ export class Updates {
   get active(){return this.state.versions.find(v=>v.id===this.state.activeVersion)!;}
   get official(){return this.state.versions.find(v=>v.id===this.state.officialVersion)!;}
   private save():Promise<void>{const value=JSON.stringify(this.state,null,2)+'\n';const next=this.saving.then(()=>atomicWrite(this.statePath,value));this.saving=next.catch(()=>{});return next;}
-  view():FeaturesState{const bundled=this.state.versions.find(v=>v.id===this.state.bundledOfficialVersion&&Bun.semver.order(v.catalog.appVersion,this.official.catalog.appVersion)>0);return {official:this.official.catalog,current:this.active.catalog,activeVersion:this.active.id,updates:this.state.updates.slice(-30).reverse(),featureQueue:this.state.featureQueue??[],handoffs:(this.state.handoffs??[]).filter(h=>h.baseVersion===this.active.id),selection:this.state.selection,sourcePath:this.active.source,documentsPath:join(this.root,'Documents'),appVersion:this.active.catalog.appVersion,nativeHostVersion:this.hostVersion,canUndo:!!this.state.previousVersion&&this.state.previousVersion!==this.active.id,checkingUpdates:!!this.checking,...(this.state.latestOfficial?{latestOfficial:{tag:`v${this.state.latestOfficial.version}`,url:this.state.latestOfficial.releaseUrl,notes:this.state.latestOfficial.notes}}:bundled?{latestOfficial:{tag:`v${bundled.catalog.appVersion}`,url:'https://github.com/eabnelson/draft/releases'}}:{})};}
+  view():FeaturesState{const bundled=this.state.versions.find(v=>v.id===this.state.bundledOfficialVersion&&Bun.semver.order(v.catalog.appVersion,this.official.catalog.appVersion)>0);return {official:this.official.catalog,current:this.active.catalog,activeVersion:this.active.id,updates:this.state.updates.slice(-30).reverse().map(update=>({...update,version:this.state.versions.find(version=>version.id===update.versionId)?.catalog.appVersion??update.official?.release?.version,when:moment(update.updatedAt)})),featureQueue:this.state.featureQueue??[],handoffs:(this.state.handoffs??[]).filter(h=>h.baseVersion===this.active.id),selection:this.state.selection,sourcePath:this.active.source,documentsPath:join(this.root,'Documents'),appVersion:this.active.catalog.appVersion,nativeHostVersion:this.hostVersion,canUndo:!!this.state.previousVersion&&this.state.previousVersion!==this.active.id,previousAppVersion:this.state.versions.find(version=>version.id===this.state.previousVersion)?.catalog.appVersion,personal:this.state.activeVersion!==this.state.officialVersion,checkingUpdates:!!this.checking,updateCheck:this.state.updateCheck&&{...this.state.updateCheck,when:moment(this.state.updateCheck.at)},...(this.state.latestOfficial?{latestOfficial:{tag:`v${this.state.latestOfficial.version}`,url:this.state.latestOfficial.releaseUrl,notes:this.state.latestOfficial.notes}}:bundled?{latestOfficial:{tag:`v${bundled.catalog.appVersion}`,url:'https://github.com/eabnelson/draft/releases'}}:{})};}
   async queue(input:{action:'add'|'remove'|'select'|'move';id?:string;kind?:'add'|'remove';request?:string;featureId?:string;selected?:boolean;direction?:number}){
     const queue=this.state.featureQueue??=[];
     if(input.action==='add'){
@@ -101,7 +111,7 @@ export class Updates {
     if(requests)request=requests.map((r,i)=>`${i+1}. ${r.request}`).join('\n');
     if(kind==='add'&&(!request?.trim()||request.length>8000))throw Error('Describe the feature you want to add.');
     if(kind==='remove'&&!this.active.catalog.features.some(f=>f.id===featureId&&f.state==='active'))throw Error('That feature is not currently installed.');
-    const now=new Date().toISOString();const update:Update={id:crypto.randomUUID(),kind,request:request.trim(),featureId,title:kind==='reset'?'Return to official Draft':kind==='official'?'Update official Draft':kind==='remove'?`Remove ${this.active.catalog.features.find(f=>f.id===featureId)?.title}`:'Your new feature',state:'checking',stage:'Checking request',createdAt:now,updatedAt:now,baseVersion:this.active.id};
+    const now=new Date().toISOString();const update:Update={id:crypto.randomUUID(),kind,request:request.trim(),featureId,title:kind==='reset'?'Return to official Draft':kind==='official'?(this.state.latestOfficial?`Draft ${this.state.latestOfficial.version}`:'A new version of Draft'):kind==='remove'?`Remove ${this.active.catalog.features.find(f=>f.id===featureId)?.title}`:'Your new feature',state:'checking',stage:'Checking request',createdAt:now,updatedAt:now,baseVersion:this.active.id};
     if(requests){update.requests=requests;update.title=`${requests.length} ${requests.length===1?'change':'changes'} for your Draft`;update.estimatedSeconds=estimateSeconds(this.state.updates,requests.length);}
     this.state.updates.push(update);this.controller=new AbortController();this.runningId=update.id;await this.save();
     this.preparation=this.prepare(update,this.controller.signal).finally(()=>{this.controller=undefined;this.runningId=undefined;});return update;
@@ -185,7 +195,7 @@ export class Updates {
     this.state.bundledOfficialVersion=newer?id:this.official.id;
     const unchanged=this.active.id===this.official.id&&this.active.sourceHash&&await sourceHash(this.active.source)===this.active.sourceHash;
     if(newer&&id!==this.active.id&&unchanged&&!this.state.updates.some(u=>['checking','preparing','building','ready','applying','needs-attention'].includes(u.state))&&!this.state.updates.some(u=>u.kind==='official'&&u.versionId===id)){
-      const now=new Date().toISOString();this.state.updates.push({id:crypto.randomUUID(),kind:'official',request:'Update Draft.',title:'A new version of Draft',state:'ready',stage:'Update ready',createdAt:now,updatedAt:now,baseVersion:this.active.id,versionId:id});
+      const now=new Date().toISOString();this.state.updates.push({id:crypto.randomUUID(),kind:'official',request:'Update Draft.',title:`Draft ${catalog.appVersion}`,state:'ready',stage:'Update ready',createdAt:now,updatedAt:now,baseVersion:this.active.id,versionId:id});
     }
   }
   private async syncControllerSources(workspace:string){
@@ -331,7 +341,7 @@ export class Updates {
   stopAutomaticChecks(){if(this.automatic)clearInterval(this.automatic);this.automatic=undefined;}
   async checkOfficial(force=true):Promise<{available:boolean;message:string}>{
     if(this.checking)return this.checking;
-    if(!force&&this.state.updateCheck&&Date.now()-Date.parse(this.state.updateCheck.at)<10*60000)return {available:!!this.state.latestOfficial,message:this.state.latestOfficial?'A new Draft update is available.':'Draft checked recently.'};
+    if(!force&&this.state.updateCheck&&Date.now()-Date.parse(this.state.updateCheck.at)<10*60000){await this.prepareLatest();return {available:!!this.state.latestOfficial,message:this.state.latestOfficial?'A new Draft update is available.':'Draft checked recently.'};}
     this.checking=(async()=>{
       try{
         this.channel??=new ReleaseChannel({feed:this.options.feed,allowLocal:this.options.allowLocal,bundleId:this.options.bundleId,publicKey:await readFile(join(this.template,'update-public-key.pem'),'utf8')});
@@ -339,9 +349,18 @@ export class Updates {
         this.state.updateCheck={at:new Date().toISOString()};
         if(release)this.state.latestOfficial=release;
         else if(this.state.latestOfficial&&Bun.semver.order(this.state.latestOfficial.version,this.official.catalog.appVersion)<=0)delete this.state.latestOfficial;
-        await this.save();return {available:!!release,message:release?'A new Draft update is available.':'You’re up to date.'};
+        await this.save();await this.prepareLatest();return {available:!!release,message:release?'A new Draft update is available.':'You’re up to date.'};
       }catch(error){this.state.updateCheck={at:new Date().toISOString(),error:error instanceof Error?error.message:'Draft couldn’t look for updates.'};await this.save();throw error;}
     })();try{return await this.checking;}finally{this.checking=undefined;}
+  }
+  /// An unmodified Draft gets each new release ready in the background, once per release, and
+  /// still asks before restarting. Personal versions wait for the writer, since merging uses their model.
+  private async prepareLatest(){
+    const latest=this.state.latestOfficial?.version;
+    if(!latest||this.state.autoPrepared===latest||this.state.activeVersion!==this.state.officialVersion||this.controller||this.state.pendingActivation)return;
+    if(this.state.updates.some(update=>['checking','preparing','building','ready','applying','needs-attention'].includes(update.state)))return;
+    this.state.autoPrepared=latest;await this.save();
+    await this.request('official','Update Draft.').catch(()=>{});
   }
   private async prepareOfficial(update:Update,signal:AbortSignal):Promise<void>{
     const bundled=this.state.versions.find(version=>version.id===this.state.bundledOfficialVersion&&Bun.semver.order(version.catalog.appVersion,this.official.catalog.appVersion)>0);
@@ -352,7 +371,7 @@ export class Updates {
     const incoming=validateCatalog(await readJSON<Catalog>(join(source,'features.json')));
     if(release&&incoming.appVersion!==release.version)throw Error('The downloaded source does not match this update.');
     const preparation={release,source,baseSourceHash:await sourceHash(this.official.source),currentSourceHash:await sourceHash(this.active.source),conflicts:[],choices:{}};
-    update.title='A new version of Draft';update.summary=release?.notes.join(' ')??'The latest Draft, with your changes kept.';
+    update.title=`Draft ${incoming.appVersion}`;update.summary=release?.notes.join(' ')??'The latest Draft, with your changes kept.';
     if(release&&Bun.semver.order(release.nativeHostVersion,this.hostVersion)>0){
       if(!this.options.appPath)throw Error('Open the desktop app to install this update.');
       await this.progress(update,'preparing','Downloading the app');

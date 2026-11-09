@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {validateCatalog,differences,likelyMatch} from '../desktop/catalog';
 import {readJSON,atomicWrite,sourceHash,safeId,within,copySource,exists} from '../desktop/files';
 import {sourceFiles} from '../desktop/official-merge';
-import {Updates,parseAgentResult} from '../desktop/updates';
+import {Updates,parseAgentResult,moment} from '../desktop/updates';
 import type {Catalog,HostState,Version} from '../desktop/types';
 const catalog=await readJSON<Catalog>(join(import.meta.dir,'../features.json'));
 
@@ -93,4 +93,16 @@ test('generated native build files do not invalidate a clean working copy',async
   await copySource(source,copy);
   expect(await sourceHash(join(source,'native'))).toBe(await sourceHash(join(copy,'native')));
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('Updates names moments the way people say them',()=>{
+ const now=new Date(2026,10,8,15,30);
+ const at=(minutes:number)=>new Date(now.getTime()-minutes*60000).toISOString();
+ expect(moment(at(0),now)).toBe('just now');
+ expect(moment(at(1),now)).toBe('1 minute ago');
+ expect(moment(at(45),now)).toBe('45 minutes ago');
+ expect(moment(at(120),now)).toBe('today at 1:30 PM');
+ expect(moment(new Date(2026,10,7,17,21).toISOString(),now)).toBe('Nov 7 at 5:21 PM');
+ expect(moment(new Date(2025,0,2,9,5).toISOString(),now)).toBe('Jan 2, 2025 at 9:05 AM');
+ expect(moment('not a date',now)).toBe('');
 });

@@ -377,6 +377,11 @@ pub static CLOUD: rune::Icon = rune::Icon {
     view: 24.0,
     body: r#"<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>"#,
 };
+pub static UPDATE: rune::Icon = rune::Icon {
+    name: "circle-arrow-up",
+    view: 24.0,
+    body: r#"<circle fill="none" stroke="currentColor" stroke-width="2" cx="12" cy="12" r="10"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m16 12-4-4-4 4"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V8"/>"#,
+};
 pub static LINK: rune::Icon = rune::Icon {
     name: "link",
     view: 24.0,

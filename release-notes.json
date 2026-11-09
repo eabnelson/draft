@@ -1,4 +1,5 @@
 [
+  "Settings › Updates now shows which version of Draft you have, what’s new, and when it last checked. New releases get ready in the background, and an arrow button appears beside Settings when one is ready to restart.",
   "Draft is now available for Linux on x64 and ARM64. Download it from the website, unpack it, and run install-desktop. It updates itself like the Mac app, and asks before restarting.",
   "Pasting keeps formatting: Markdown pastes exactly as written, and text from Google Docs and web pages keeps its headings, bold, links, numbered lists and code. Backslash escapes like \\- now read as the character itself.",
   "Tab now stays in your writing: it nests list items or indents selected lines, and Shift-Tab outdents. It no longer jumps to the sidebar.",

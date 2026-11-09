@@ -10,7 +10,8 @@ pub struct Services {
     pub prompt: TextEdit,
     pub message: String,
     pub busy: bool,
-    next_refresh: Option<Instant>,
+    pub(crate) next_refresh: Option<Instant>,
+    pub(crate) next_background: Option<Instant>,
     confirmed: bool,
 }
 pub struct Update(String, Result<Value, String>);
@@ -90,7 +91,25 @@ pub fn poll(s: &mut State, tx: &mut Tx) {
         request(s, "/api/health", None);
         return;
     }
-    if !s.preferences || s.settings.section < 5 || s.services.busy {
+    if s.services.busy {
+        return;
+    }
+    if !s.preferences || s.settings.section < 5 {
+        // Outside Settings, look in on updates now and then so a ready one shows in the footer.
+        if s.services.jobs.is_none() {
+            return;
+        }
+        let due = s
+            .services
+            .next_background
+            .get_or_insert_with(|| Instant::now() + Duration::from_secs(5));
+        if *due <= Instant::now() {
+            s.services.next_background = Some(Instant::now() + Duration::from_secs(60));
+            request(s, "/api/features", None);
+            s.services.message.clear();
+        } else {
+            tx.wake_after(due.saturating_duration_since(Instant::now()));
+        }
         return;
     }
     let due = s.services.next_refresh.get_or_insert_with(Instant::now);
@@ -107,6 +126,129 @@ pub fn poll(s: &mut State, tx: &mut Tx) {
 }
 fn label(value: &Value, key: &str, fallback: &str) -> String {
     value[key].as_str().unwrap_or(fallback).into()
+}
+/// "Draft 0.3.0-alpha.78" for official releases, which older records call "A new version of Draft".
+fn update_title(update: &Value) -> String {
+    match update["version"].as_str() {
+        Some(version) if update["kind"] == "official" => format!("Draft {version}"),
+        _ => label(update, "title", "Update"),
+    }
+}
+/// An update that is being prepared or is waiting for a restart.
+pub fn pending_update(features: &Value) -> Option<&Value> {
+    features["updates"].as_array()?.iter().find(|update| {
+        matches!(
+            update["state"].as_str(),
+            Some("checking" | "preparing" | "building" | "ready" | "needs-attention" | "applying")
+        )
+    })
+}
+/// What the footer's update button says, and whether the update is ready to restart into.
+/// It shows from the moment a newer Draft is found until it is installed.
+pub fn update_hint(features: &Value) -> Option<(String, bool)> {
+    if let Some(update) = pending_update(features) {
+        let title = update_title(update);
+        return Some(match update["state"].as_str() {
+            Some("ready") => (format!("{title} is ready. Open Updates to restart"), true),
+            Some("needs-attention") => {
+                (format!("{title} needs your attention. Open Updates"), false)
+            }
+            _ => (format!("Getting {title} ready. Open Updates"), false),
+        });
+    }
+    let latest = features["latestOfficial"]["tag"]
+        .as_str()?
+        .trim_start_matches('v');
+    Some((format!("Draft {latest} is available. Open Updates"), false))
+}
+/// Which Draft is running, whether a newer one exists, and what you can do about it.
+fn updates(s: &State, p: design::Palette, mut body: El) -> El {
+    let f = &s.services.features;
+    let Some(version) = f["appVersion"].as_str() else {
+        return body.child(settings::copy("Loading…", p));
+    };
+    let latest = f["latestOfficial"]["tag"]
+        .as_str()
+        .map(|tag| tag.trim_start_matches('v').to_string());
+    let pending = pending_update(f);
+    let status = if let Some(update) = pending {
+        let title = update_title(update);
+        match update["state"].as_str() {
+            Some("ready") => format!("{title} is ready. Restart Draft to finish updating."),
+            Some("needs-attention") => format!("{title} needs your attention."),
+            Some("applying") => format!("Installing {title}…"),
+            _ => format!("Getting {title} ready. You can keep writing."),
+        }
+    } else if f["checkingUpdates"] == true {
+        "Checking for updates…".into()
+    } else if let Some(latest) = &latest {
+        format!("Draft {latest} is available.")
+    } else if let Some(error) = f["updateCheck"]["error"].as_str() {
+        format!(
+            "Draft couldn’t check for updates {}. {error}",
+            f["updateCheck"]["when"].as_str().unwrap_or_default()
+        )
+    } else if let Some(when) = f["updateCheck"]["when"].as_str() {
+        format!("You’re up to date. Checked {when}.")
+    } else {
+        "Draft checks for updates when it opens and every few hours.".into()
+    };
+    body = body
+        .child(
+            text(format!(
+                "Draft {version}{}",
+                if f["personal"] == true {
+                    " with your changes"
+                } else {
+                    ""
+                }
+            ))
+            .key("current-version")
+            .font(TextStyle::new(18.0, 550.0))
+            .color(p.text),
+        )
+        .child(settings::copy(status, p).key("update-status").wrap());
+    if pending.is_none()
+        && let Some(latest) = latest
+    {
+        if let Some(notes) = f["latestOfficial"]["notes"].as_array() {
+            for note in notes.iter().filter_map(Value::as_str) {
+                body = body.child(settings::copy(format!("•  {note}"), p).wrap());
+            }
+        }
+        body = body.child(settings::button(
+            "install-update",
+            &format!("Update to Draft {latest}"),
+            p,
+            |s, _| {
+                request(
+                    s,
+                    "/api/updates/request",
+                    Some(json!({"kind":"official","request":"Update Draft."})),
+                )
+            },
+        ));
+    }
+    body = body.child(settings::button(
+        "check-updates",
+        "Check for updates",
+        p,
+        |s, _| request(s, "/api/updates/check", Some(json!({}))),
+    ));
+    if f["canUndo"] == true {
+        let previous = f["previousAppVersion"]
+            .as_str()
+            .map(|v| format!("Go back to Draft {v}"))
+            .unwrap_or_else(|| "Undo last update".into());
+        body = body.child(settings::button("undo-update", &previous, p, |s, _| {
+            request(
+                s,
+                "/api/updates/request",
+                Some(json!({"kind":"rollback","request":"Undo last update"})),
+            )
+        }));
+    }
+    body
 }
 pub fn page(s: &State, p: design::Palette) -> El {
     let mut body = col().w_full().gap(12.0);
@@ -184,31 +326,35 @@ pub fn page(s: &State, p: design::Palette) -> El {
             }
         }
     } else {
-        body = body
-            .child(settings::button(
-                "check-updates",
-                "Check for updates",
-                p,
-                |s, _| request(s, "/api/updates/check", Some(json!({}))),
-            ))
-            .child(settings::button(
-                "undo-update",
-                "Undo last update",
-                p,
-                |s, _| {
-                    request(
-                        s,
-                        "/api/updates/request",
-                        Some(json!({"kind":"rollback","request":"Undo last update"})),
-                    )
-                },
-            ));
+        body = updates(s, p, body);
     }
     if s.settings.section >= 6
         && let Some(updates) = s.services.features["updates"].as_array()
     {
-        for update in updates.iter().take(10) {
+        let mut history = false;
+        for (n, update) in updates.iter().take(10).enumerate() {
+            let current = !matches!(
+                update["state"].as_str(),
+                Some("applied" | "failed" | "cancelled")
+            );
+            // Old discarded attempts say nothing about what you have now.
+            if update["state"] == "cancelled" && n > 0 {
+                continue;
+            }
+            if !current && !history && s.settings.section == 7 {
+                history = true;
+                body = body.child(
+                    text("History")
+                        .font(TextStyle::new(15.0, 600.0))
+                        .color(p.text)
+                        .pt(8.0),
+                );
+            }
             let id = update["id"].clone();
+            let mut heading = vec![update_title(update), label(update, "stage", "")];
+            if let Some(when) = update["when"].as_str().filter(|w| !w.is_empty()) {
+                heading.push(when.into());
+            }
             let mut card = col()
                 .w_full()
                 .padding(12.0)
@@ -217,22 +363,25 @@ pub fn page(s: &State, p: design::Palette) -> El {
                 .gap(8.0)
                 .child(
                     settings::copy(
-                        format!(
-                            "{} · {}",
-                            label(update, "title", "Update"),
-                            label(update, "stage", "")
-                        ),
+                        heading
+                            .into_iter()
+                            .filter(|part| !part.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · "),
                         p,
                     )
                     .wrap(),
                 );
+            if current && let Some(summary) = update["summary"].as_str().filter(|s| !s.is_empty()) {
+                card = card.child(settings::copy(summary, p).wrap());
+            }
             if let Some(error) = update["error"].as_str() {
                 card = card.child(settings::copy(error, p).wrap());
             }
             if update["state"] == "ready" {
                 let apply = id.clone();
                 card = card.child(settings::button(
-                    &format!("apply-{id}"),
+                    &format!("apply-{}", label(update, "id", "")),
                     "Apply and restart",
                     p,
                     move |s, tx| match s.flush(tx) {
@@ -246,7 +395,7 @@ pub fn page(s: &State, p: design::Palette) -> El {
                 Some("preparing" | "building" | "ready" | "needs-attention")
             ) {
                 card = card.child(settings::button(
-                    &format!("discard-{id}"),
+                    &format!("discard-{}", label(update, "id", "")),
                     "Discard",
                     p,
                     move |s, _| request(s, "/api/updates/discard", Some(json!({"id":id}))),

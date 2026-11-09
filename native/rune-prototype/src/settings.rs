@@ -199,6 +199,12 @@ pub fn open_sync(s: &mut State) {
     s.context = None;
     s.item_menu = None;
 }
+pub fn open_updates(s: &mut State) {
+    s.preferences = true;
+    s.settings.section = 7;
+    s.context = None;
+    s.item_menu = None;
+}
 pub fn copy(label: impl Into<String>, p: design::Palette) -> El {
     text(label.into())
         .w_full()

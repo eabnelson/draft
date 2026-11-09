@@ -64,6 +64,6 @@ export async function idle(host:Updates){
 }
 
 export async function settled(host:Updates,id:string){
- for(let i=0;i<400;i++){const update=host.view().updates.find(update=>update.id===id)!;if(['ready','needs-attention','failed','cancelled','applied'].includes(update.state))return update;await new Promise(resolve=>setTimeout(resolve,25));}
+ for(let i=0;i<400;i++){const update=host.state.updates.find(update=>update.id===id)!;if(['ready','needs-attention','failed','cancelled','applied'].includes(update.state))return update;await new Promise(resolve=>setTimeout(resolve,25));}
  throw Error('The update did not finish preparing.');
 }

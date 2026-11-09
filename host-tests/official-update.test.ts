@@ -82,6 +82,23 @@ test('an interrupted native installation on the old host restores its source poi
  }finally{await f.close();}
 });
 
+test('an unmodified Draft gets a found release ready once and still waits to restart; a personal Draft waits to be asked',{timeout:30000},async()=>{
+ const f=await officialFixture({personal:false});try{
+  f.host.options.nativeRenderer=true;
+  await f.host.checkOfficial();
+  const prepared=f.host.state.updates.find(update=>update.kind==='official');assert.ok(prepared,'A found release starts preparing on its own.');
+  const ready=await settled(f.host,prepared.id);assert.equal(ready.state,'ready',ready.error);assert.equal(ready.title,'Draft 1.1.0');
+  assert.notEqual(f.host.view().activeVersion,'official-1.1.0','Nothing restarts or switches without the writer.');
+  const shown=f.host.view();assert.equal(shown.updates[0].version,'1.1.0');assert.equal(shown.updateCheck?.when,'just now');
+  await f.host.discard(ready.id);await f.host.checkOfficial();
+  assert.equal(f.host.state.updates.filter(update=>update.kind==='official').length,1,'A discarded release is not prepared again.');
+ }finally{await f.close();}
+ const personal=await officialFixture();try{
+  await personal.host.checkOfficial();
+  assert.equal(personal.host.view().latestOfficial?.tag,'v1.1.0');assert.equal(personal.host.state.updates.filter(update=>update.kind==='official').length,0);
+ }finally{await personal.close();}
+});
+
 test('without personal changes, the signed release installs as is, with no local build tools',{timeout:30000},async()=>{
  const f=await officialFixture({personal:false});try{
   // A native build here would need Rust and the build sandbox, which this fixture leaves out on purpose.

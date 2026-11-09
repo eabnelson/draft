@@ -1125,6 +1125,10 @@ pub(super) fn footer(s: &State, dark: bool, p: design::Palette) -> El {
     if sync_error {
         widths.push(32.0);
     }
+    let update = services::update_hint(&s.services.features);
+    if update.is_some() {
+        widths.push(32.0);
+    }
     let mut toggle = row()
         .key(if back { "settings-back" } else { "settings" })
         .size(if back { 83.25 } else { 32.0 }, 28.0)
@@ -1189,6 +1193,23 @@ pub(super) fn footer(s: &State, dark: bool, p: design::Palette) -> El {
                 .focusable(true)
                 .child(rune::icon(&design::CLOUD, 14.0).color(p.stage(dark, "Drafting")))
                 .on_press(settings::open_sync),
+        );
+    }
+    if let Some((hint, ready)) = update {
+        controls = controls.child(
+            row()
+                .key("update")
+                .size(32.0, 28.0)
+                .center()
+                .role("button")
+                .label(hint.as_str())
+                .help(hint.as_str())
+                .focusable(true)
+                .child(
+                    rune::icon(&design::UPDATE, 14.0)
+                        .color(p.stage(dark, if ready { "Ready" } else { "Drafting" })),
+                )
+                .on_press(settings::open_updates),
         );
     }
     row().w_full().h(52.0).px(12.0).center_y().child(controls)

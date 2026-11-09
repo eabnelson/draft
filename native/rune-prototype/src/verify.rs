@@ -37,6 +37,7 @@ pub fn run() {
     tab_layout_stability();
     caret_blink();
     popover_placement();
+    updates_page();
     sidebar_context();
     shortcut_parity();
     durability();
@@ -1297,6 +1298,103 @@ fn key(rt: &mut rune::Runtime<State>, key: Key) {
         mods: Default::default(),
     });
     rt.frame(0.016);
+}
+/// Updates says which Draft is running, offers a found release, and a ready one shows in the footer.
+fn updates_page() {
+    let mut rt = keyboard::app().headless_runtime((1280.0, 820.0), rune::Env::new(true, 1.0));
+    let shown = |rt: &rune::Runtime<State>| {
+        rt.elements()
+            .iter()
+            .filter_map(|e| e.text.clone().or_else(|| e.label.clone()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let applied = json!({"id":"old","kind":"official","title":"A new version of Draft","state":"applied","stage":"Updated","version":"0.3.0-alpha.76","when":"Nov 7 at 5:21 PM"});
+    let features = |updates: Value| {
+        json!({"appVersion":"0.3.0-alpha.76","canUndo":true,"previousAppVersion":"0.3.0-alpha.75",
+            "latestOfficial":{"tag":"v0.3.0-alpha.78","notes":["Draft is now available for Linux."]},
+            "updateCheck":{"at":"2026-11-09T03:37:56Z","when":"just now"},"updates":updates})
+    };
+    rt.update(|s, _| {
+        // Hold the host's own answers so the page shows exactly this state.
+        let later = Instant::now() + Duration::from_secs(3600);
+        s.services.next_refresh = Some(later);
+        s.services.next_background = Some(later);
+        s.services.busy = false;
+        s.sidebar = true;
+        s.preferences = true;
+        s.settings.section = 7;
+        s.services.features = features(json!([applied]));
+    });
+    rt.frame(0.016);
+    rt.frame(0.016);
+    let page = shown(&rt);
+    for expected in [
+        "Draft 0.3.0-alpha.76",
+        "Draft 0.3.0-alpha.78 is available.",
+        "Draft is now available for Linux.",
+        "Update to Draft 0.3.0-alpha.78",
+        "Go back to Draft 0.3.0-alpha.75",
+        "Draft 0.3.0-alpha.76 · Updated · Nov 7 at 5:21 PM",
+    ] {
+        assert!(
+            page.contains(expected),
+            "Updates shows {expected:?}:\n{page}"
+        );
+    }
+    assert!(!page.contains("A new version of Draft"), "{page}");
+    assert!(rt.find("install-update").is_some());
+    let label = |rt: &rune::Runtime<State>| {
+        rt.elements()
+            .iter()
+            .find(|e| e.key.as_deref() == Some("update") && !e.exiting)
+            .and_then(|e| e.label.clone())
+    };
+    // A found release shows beside Settings, like the sync cloud, and opens Updates.
+    rt.update(|s, _| s.preferences = false);
+    rt.frame(0.016);
+    rt.frame(0.016);
+    assert_eq!(
+        label(&rt).as_deref(),
+        Some("Draft 0.3.0-alpha.78 is available. Open Updates")
+    );
+    click(&mut rt, "update");
+    assert!(rt.state.preferences);
+    assert_eq!(
+        rt.state.settings.section, 7,
+        "the update button opens Updates"
+    );
+    // Up to date: no button.
+    rt.update(|s, _| {
+        s.services.features = json!({"appVersion":"0.3.0-alpha.78","updates":[applied]});
+        s.preferences = false;
+    });
+    rt.frame(0.016);
+    rt.frame(0.016);
+    assert!(
+        label(&rt).is_none(),
+        "an up-to-date Draft shows no update button"
+    );
+    let ready = json!({"id":"new","kind":"official","title":"Draft 0.3.0-alpha.78","state":"ready","stage":"Update ready","version":"0.3.0-alpha.78","summary":"Draft is now available for Linux.","when":"just now"});
+    rt.update(|s, _| s.services.features = features(json!([ready, applied])));
+    rt.frame(0.016);
+    rt.frame(0.016);
+    assert_eq!(
+        label(&rt).as_deref(),
+        Some("Draft 0.3.0-alpha.78 is ready. Open Updates to restart")
+    );
+    click(&mut rt, "update");
+    assert_eq!(rt.state.settings.section, 7);
+    let page = shown(&rt);
+    assert!(
+        page.contains("Draft 0.3.0-alpha.78 is ready. Restart Draft to finish updating."),
+        "{page}"
+    );
+    assert!(rt.find("apply-new").is_some());
+    assert!(rt.find("install-update").is_none(), "one update at a time");
+    println!(
+        "PASS Updates names the running and available versions; an available or ready update shows beside Settings"
+    );
 }
 fn click(rt: &mut rune::Runtime<State>, name: &str) {
     let (x, y) = rt.find(name).unwrap_or_else(|| panic!("Missing {name}"));
