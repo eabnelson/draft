@@ -39,6 +39,7 @@ pub fn run() {
     popover_placement();
     updates_page();
     sync_page();
+    model_page();
     sidebar_context();
     shortcut_parity();
     durability();
@@ -1299,6 +1300,105 @@ fn key(rt: &mut rune::Runtime<State>, key: Key) {
         mods: Default::default(),
     });
     rt.frame(0.016);
+}
+/// Model shows what Draft uses, moves the check at once, and refreshes never block the page.
+fn model_page() {
+    let mut rt = keyboard::app().headless_runtime((1280.0, 820.0), rune::Env::new(true, 1.0));
+    let model = |id: &str, name: &str| json!({"id":id,"name":name});
+    rt.update(|s, _| {
+        s.replies = None;
+        let later = Instant::now() + Duration::from_secs(3600);
+        s.services.next_refresh = Some(later);
+        s.services.next_background = Some(later);
+        s.services.busy = false;
+        s.services.message.clear();
+        s.services.providers = json!({
+            "providers":[
+                {"id":"claude","name":"Claude Code","installed":true,"ready":true,"models":[{"id":"opus","name":"Default (recommended)","isDefault":true},model("opus","Opus 5.5"),model("sonnet","Sonnet 5.5")]},
+                {"id":"codex","name":"Codex","installed":true,"ready":true,"models":[model("sol","GPT-6.1-Sol")]}
+            ],
+            "selection":{"provider":"claude","model":"opus"}
+        });
+        s.preferences = true;
+        s.settings.section = 5;
+    });
+    rt.frame(0.016);
+    rt.frame(0.016);
+    let label = |rt: &rune::Runtime<State>, key: &str| {
+        rt.elements()
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key) && !e.exiting)
+            .and_then(|e| e.label.clone())
+    };
+    assert_eq!(
+        label(&rt, "model-current").as_deref(),
+        Some("Using Opus 5.5 with Claude Code")
+    );
+    assert_eq!(
+        label(&rt, "model-claude-opus").as_deref(),
+        Some("Opus 5.5, selected")
+    );
+    assert_eq!(
+        rt.elements()
+            .iter()
+            .filter(|e| e.key.as_deref() == Some("model-claude-opus") && !e.exiting)
+            .count(),
+        1,
+        "a model listed twice shows once"
+    );
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| !e.exiting && e.text.as_deref() == Some("Recommended")),
+        "the default alias becomes a Recommended tag"
+    );
+    assert!(
+        rt.find("model-codex-sol").is_none(),
+        "only the provider in use starts open"
+    );
+    click(&mut rt, "model-claude-sonnet");
+    assert_eq!(
+        label(&rt, "model-current").as_deref(),
+        Some("Using Sonnet 5.5 with Claude Code"),
+        "the choice shows before the host answers"
+    );
+    // Stand in for the host's answer, which this check holds back.
+    rt.update(|s, _| {
+        s.services.busy = false;
+        s.services.message.clear();
+    });
+    rt.frame(0.016);
+    click(&mut rt, "provider-codex");
+    assert!(
+        rt.find("model-codex-sol").is_some(),
+        "another provider opens to show its models"
+    );
+    // A refresh on its way leaves the page usable and still.
+    rt.update(|s, _| {
+        s.services.refreshing = true;
+        s.settings.section = 6;
+    });
+    rt.frame(0.016);
+    rt.frame(0.016);
+    let input = rt
+        .elements()
+        .iter()
+        .find(|e| e.key.as_deref() == Some("feature-request") && !e.exiting)
+        .map(|e| e.inert);
+    assert_eq!(
+        input,
+        Some(false),
+        "a refresh never blocks typing a feature"
+    );
+    assert!(
+        !rt.elements()
+            .iter()
+            .any(|e| !e.exiting && e.text.as_deref() == Some("Working…")),
+        "a refresh shows no Working…"
+    );
+    println!(
+        "PASS Model shows what Draft uses and moves the check at once; refreshes never block typing"
+    );
 }
 /// Sync leads with a plain status and says where drafts live on both ends.
 fn sync_page() {

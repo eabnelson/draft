@@ -591,7 +591,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 .child(shortcut_help::grid(cx, (main_width.min(1180.0) - padding * 2.0).max(1.0), dark, p));
             if let Some(error) = &s.keyboard.shortcut_error { body = body.child(copy(error, p)); }
         }
-        _ => body = body.child(services::page(s, p)),
+        _ => body = body.child(services::page(s, dark, p)),
     }
     let mut page = row().key("settings-page").w_full().h_full().min_h(0.0);
     if s.sidebar {
