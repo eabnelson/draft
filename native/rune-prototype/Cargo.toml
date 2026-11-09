@@ -1,6 +1,6 @@
 [package]
 name = "draft-rune-prototype"
-version = "0.3.0-alpha.71"
+version = "0.3.0-alpha.79"
 edition = "2024"
 publish = false
 
