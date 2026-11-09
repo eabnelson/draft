@@ -38,6 +38,7 @@ pub fn run() {
     caret_blink();
     popover_placement();
     updates_page();
+    sync_page();
     sidebar_context();
     shortcut_parity();
     durability();
@@ -1298,6 +1299,84 @@ fn key(rt: &mut rune::Runtime<State>, key: Key) {
         mods: Default::default(),
     });
     rt.frame(0.016);
+}
+/// Sync leads with a plain status and says where drafts live on both ends.
+fn sync_page() {
+    let mut rt = keyboard::app().headless_runtime((1280.0, 820.0), rune::Env::new(true, 1.0));
+    let show = |rt: &mut rune::Runtime<State>, status: Value| {
+        rt.update(|s, _| {
+            // Control the status here without a real account.
+            s.replies = None;
+            s.settings.issue = None;
+            s.settings.busy = false;
+            s.settings.status = serde_json::from_value(status).unwrap();
+            s.preferences = true;
+            s.settings.section = 3;
+        });
+        rt.frame(0.016);
+        rt.frame(0.016);
+        let elements = rt.elements();
+        let label = elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some("sync-status") && !e.exiting)
+            .and_then(|e| e.label.clone())
+            .unwrap_or_default();
+        let page = elements
+            .iter()
+            .filter(|e| !e.exiting)
+            .filter_map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        (label, page)
+    };
+    let home = std::env::var("HOME").unwrap_or_default();
+    let (status, page) = show(
+        &mut rt,
+        json!({"state":"synced","workspace":"MyCloud","folder":"/workspace/Draft","lastSynced":"2 minutes ago","local":format!("{home}/Library/Application Support/Draft Native/Drafts")}),
+    );
+    assert_eq!(
+        status,
+        "Sync is on. Everything is up to date. Last synced 2 minutes ago."
+    );
+    for expected in [
+        "Where your drafts are",
+        "/workspace/Draft in the MyCloud workspace",
+        "~/Library/Application Support/Draft Native/Drafts",
+        "Sync now",
+        "Stop syncing",
+    ] {
+        assert!(page.contains(expected), "Sync shows {expected:?}:\n{page}");
+    }
+    let (status, page) = show(
+        &mut rt,
+        json!({"state":"needs-credentials","workspace":"MyCloud","folder":"/workspace/Draft","message":"Your Zo sign-in ended. Connect to Zo again."}),
+    );
+    assert!(
+        status.starts_with("Reconnect to keep syncing. Your Zo sign-in ended."),
+        "{status}"
+    );
+    assert!(page.contains("Reconnect to Zo"), "{page}");
+    assert!(
+        !page.contains("up to date"),
+        "a broken sync never says it is up to date"
+    );
+    let (status, _) = show(
+        &mut rt,
+        json!({"state":"syncing","pending":3,"lastSynced":"just now"}),
+    );
+    assert_eq!(
+        status,
+        "Syncing. Sending 3 changes to Zo. Last synced just now."
+    );
+    let (status, page) = show(&mut rt, json!({"state":"off"}));
+    assert!(status.starts_with("Sync is off."), "{status}");
+    assert!(
+        page.contains("Sign in to Zo") && !page.contains("Stop syncing"),
+        "{page}"
+    );
+    println!(
+        "PASS Sync states its status plainly, asks to reconnect when needed, and names where drafts live"
+    );
 }
 /// Updates says which Draft is running, offers a found release, and a ready one shows in the footer.
 fn updates_page() {

@@ -10,6 +10,8 @@ import {batchResultSchema,parseBatchResult,validateFeatureResults,estimateSecond
 import {ReleaseChannel,type SignedRelease} from './official-release';
 import {prepareOfficialMerge,verifyPreservedFeatures,sourceFiles,type ConflictChoice} from './official-merge';
 import {NativeUpdates,rememberPreviousApp} from './native-update';
+import {moment} from './time';
+export {moment};
 import type {HostState,Version,Update,UpdateKind,FeaturesState,AgentSelection,Provider,Catalog,Handoff,HandoffPrompt,QueuedFeature} from './types';
 
 const nativeHostVersion='0.3.0-alpha.71';
@@ -17,16 +19,6 @@ const resultSchema={type:'object',properties:{outcome:{type:'string',enum:['impl
 export type AgentConnection=Pick<Agents,'discover'|'login'|'select'|'run'>;
 export type ReconnectResult={update?:Update;message:string};
 export function parseAgentResult(text:string){let value;try{value=JSON.parse(text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));}catch{throw Error('The coding agent did not return a valid completion result.');}if(!['implemented','already_exists','failed'].includes(value.outcome)||typeof value.title!=='string'||typeof value.summary!=='string'||typeof value.featureId!=='string')throw Error('The coding agent returned an incomplete result.');return value as {outcome:'implemented'|'already_exists'|'failed';title:string;summary:string;featureId:string};}
-/// How Settings names a moment: "just now", "5 minutes ago", "today at 3:12 PM", "Nov 7 at 5:21 PM".
-export function moment(iso:string,now=new Date()){
-  const date=new Date(iso),minutes=Math.floor((now.getTime()-date.getTime())/60000);
-  if(Number.isNaN(minutes))return '';
-  if(minutes<1)return 'just now';
-  if(minutes<60)return `${minutes} ${minutes===1?'minute':'minutes'} ago`;
-  const time=date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  if(date.toDateString()===now.toDateString())return `today at ${time}`;
-  return `${date.toLocaleDateString('en-US',{month:'short',day:'numeric',...(date.getFullYear()===now.getFullYear()?{}:{year:'numeric'})})} at ${time}`;
-}
 export class Updates {
   state!:HostState;private controller?:AbortController;private runningId?:string;private preparation?:Promise<void>;private saving:Promise<unknown>=Promise.resolve();
   private reconnecting?:{id:string;promise:Promise<ReconnectResult>};

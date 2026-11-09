@@ -28,6 +28,10 @@ pub struct SyncStatus {
     pub message: Option<String>,
     workspace: Option<String>,
     folder: Option<String>,
+    pending: Option<u64>,
+    #[serde(rename = "lastSynced")]
+    last_synced: Option<String>,
+    local: Option<String>,
 }
 impl SyncStatus {
     pub fn needs_attention(&self) -> bool {
@@ -222,32 +226,155 @@ pub fn button(
 ) -> El {
     ui::menu_item(key, label, p, action).w_full().h(38.0)
 }
-fn sync(s: &State, p: design::Palette) -> El {
+/// How sync is doing, said plainly: a colored status, what it means, and where drafts live.
+fn sync(s: &State, dark: bool, p: design::Palette) -> El {
     let status = &s.settings.status;
-    let message = match status.state.as_str() {
-        "off" => "Sync is off. Your drafts are saved on this computer.",
-        "signing-in" => "Finish signing in in your browser.",
-        "choose-workspace" => "Choose the workspace for these drafts.",
-        "choose-folder" => "Choose a folder in Zo for these drafts.",
-        "waiting" => "Waiting to sync your latest changes.",
-        "syncing" => "Syncing your drafts…",
-        "synced" => "Your drafts are up to date.",
-        "needs-credentials" => "Sign in again to resume syncing.",
-        _ => "Sync needs your attention.",
+    let issue = s.settings.issue.as_deref().or(status.message.as_deref());
+    let last = status
+        .last_synced
+        .as_deref()
+        .map(|when| format!(" Last synced {when}."))
+        .unwrap_or_default();
+    let safe = "Your drafts are safe on this computer, and changes will sync once this is fixed.";
+    let (color, headline, detail) = match status.state.as_str() {
+        "off" => (
+            p.muted,
+            "Sync is off".to_string(),
+            "Your drafts are saved only on this computer. Sign in to Zo to back them up and open them on your other devices.".to_string(),
+        ),
+        "signing-in" => (
+            p.stage(dark, "Drafting"),
+            "Finish signing in".into(),
+            "Zo opened in your browser. Approve Draft there, then come back.".into(),
+        ),
+        "choose-workspace" => (
+            p.stage(dark, "Drafting"),
+            "Choose a workspace".into(),
+            "Pick the Zo workspace these drafts sync to.".into(),
+        ),
+        "choose-folder" => (
+            p.stage(dark, "Drafting"),
+            "Choose a folder".into(),
+            "Pick the folder in Zo these drafts sync to.".into(),
+        ),
+        "waiting" | "syncing" => (
+            p.stage(dark, "Drafting"),
+            "Syncing…".into(),
+            match status.pending {
+                Some(1) => format!("Sending 1 change to Zo.{last}"),
+                Some(n) => format!("Sending {n} changes to Zo.{last}"),
+                None => format!("Checking Zo for changes.{last}"),
+            },
+        ),
+        "synced" if issue.is_none() => (
+            p.stage(dark, "Ready"),
+            "Sync is on".into(),
+            format!("Everything is up to date.{last}"),
+        ),
+        "needs-credentials" => (
+            design::caution(dark),
+            "Reconnect to keep syncing".into(),
+            format!(
+                "{} {safe}",
+                issue.unwrap_or("Your Zo sign-in ended.")
+            ),
+        ),
+        _ => (
+            design::caution(dark),
+            "Sync needs attention".into(),
+            format!(
+                "{} {safe}",
+                issue.unwrap_or("Draft couldn’t reach Zo.")
+            ),
+        ),
     };
-    let mut body = col().w_full().gap(12.0).child(copy(message, p));
-    if let Some(message) = s.settings.issue.as_ref().or(status.message.as_ref()) {
-        body = body.child(copy(message, p));
+    let summary = col()
+        .key("sync-status")
+        .role("status")
+        .label(format!("{}. {detail}", headline.trim_end_matches('…')))
+        .w_full()
+        .padding(16.0)
+        .radius(12.0)
+        .fill(p.glass)
+        .gap(6.0)
+        .child(
+            row()
+                .gap(10.0)
+                .center_y()
+                .child(el().size(10.0, 10.0).radius(5.0).fill(color))
+                .child(
+                    text(headline)
+                        .font(TextStyle::new(17.0, 600.0))
+                        .color(p.text),
+                ),
+        )
+        .child(copy(detail, p).wrap());
+    let mut body = col().w_full().gap(12.0).child(summary);
+
+    // Where the writing is, on both ends.
+    let place = |label: &str, value: String| {
+        row()
+            .w_full()
+            .gap(12.0)
+            .child(
+                text(label.to_string())
+                    .w(130.0)
+                    .font(TextStyle::new(13.0, 500.0))
+                    .color(p.muted),
+            )
+            .child(
+                text(value)
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .wrap()
+                    .font(TextStyle::new(14.0, 400.0))
+                    .color(p.text),
+            )
+    };
+    let count = s.docs.len();
+    let mut places = col()
+        .key("sync-places")
+        .w_full()
+        .padding(16.0)
+        .radius(12.0)
+        .fill(p.glass)
+        .gap(10.0)
+        .child(
+            text("Where your drafts are")
+                .font(TextStyle::new(15.0, 600.0))
+                .color(p.text),
+        )
+        .child(place(
+            "This computer",
+            match &status.local {
+                Some(local) => format!(
+                    "{} {} in {}",
+                    count,
+                    if count == 1 { "draft" } else { "drafts" },
+                    home_relative(local)
+                ),
+                None => format!("{count} {}", if count == 1 { "draft" } else { "drafts" }),
+            },
+        ));
+    if status.state != "off" {
+        let zo = match (&status.workspace, &status.folder) {
+            (Some(workspace), Some(folder)) => format!("{folder} in the {workspace} workspace"),
+            (Some(workspace), None) => format!("{workspace} workspace, no folder chosen yet"),
+            (None, Some(folder)) => folder.clone(),
+            (None, None) => "Not chosen yet".into(),
+        };
+        places = places.child(place("Zo", zo));
     }
-    if let Some(workspace) = &status.workspace {
-        body = body.child(copy(format!("Workspace: {workspace}"), p));
-    }
-    if let Some(folder) = &status.folder {
-        body = body.child(copy(format!("Folder: {folder}"), p));
-    }
+    body = body.child(places);
+
     match status.state.as_str() {
-        "off" | "needs-credentials" => {
+        "off" => {
             body = body.child(button("sync-sign-in", "Sign in to Zo", p, |s, _| {
+                s.settings.request("/sync/sign-in", json!({}))
+            }));
+        }
+        "needs-credentials" => {
+            body = body.child(button("sync-sign-in", "Reconnect to Zo", p, |s, _| {
                 s.settings.request("/sync/sign-in", json!({}))
             }));
         }
@@ -280,14 +407,19 @@ fn sync(s: &State, p: design::Palette) -> El {
                 .child(button("sync-choose-folder", "Use this folder", p, |s, _| s.settings.request("/sync/folder", json!({"path":s.settings.folder.text}))));
         }
         "signing-in" => {}
-        _ => {
-            body = body.child(button("sync-retry", "Try syncing again", p, |s, _| {
+        state => {
+            let label = if state == "synced" && issue.is_none() {
+                "Sync now"
+            } else {
+                "Try syncing again"
+            };
+            body = body.child(button("sync-retry", label, p, |s, _| {
                 s.settings.request("/sync/now", json!({}))
             }))
         }
     }
     if status.state != "off" {
-        body = body.child(button("sync-disconnect", "Disconnect", p, |s, _| {
+        body = body.child(button("sync-disconnect", "Stop syncing", p, |s, _| {
             s.settings.request("/sync/disconnect", json!({}))
         }));
     }
@@ -295,6 +427,15 @@ fn sync(s: &State, p: design::Palette) -> El {
         body = body.inert().child(copy("Working…", p));
     }
     body
+}
+/// "~/Library/…" reads better than the full home folder path.
+fn home_relative(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_string(),
+    }
 }
 fn header(section: usize, sidebar: bool, dark: bool, p: design::Palette) -> El {
     let title = SECTIONS[section];
@@ -440,7 +581,7 @@ pub fn page(s: &State, dark: bool, side: f32, p: design::Palette, cx: &Cx<State>
                 }));
             }
         }
-        3 => body = body.child(sync(s, p)),
+        3 => body = body.child(sync(s, dark, p)),
         4 => {
             let padding = if main_width < 600.0 { 24.0 } else { 32.0 };
             body = col().w_full().max_w(1180.0).padding(padding).gap(24.0)

@@ -14,6 +14,14 @@ pub struct Palette {
     /// Destructive menu actions, such as Delete.
     pub danger: Color,
 }
+/// Something needs the writer, without the alarm of a destructive red.
+pub fn caution(dark: bool) -> Color {
+    if dark {
+        rgb(228, 178, 96)
+    } else {
+        rgb(158, 104, 22)
+    }
+}
 fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color {
         r: rune::color::srgb_decode(r as f32 / 255.0),

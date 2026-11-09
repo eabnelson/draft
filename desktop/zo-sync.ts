@@ -8,6 +8,7 @@
 // written through the draft store, behind your own saves, and the window takes them in when it can
 // without moving anything under your cursor. Deletes are recoverable: Zo's trash on one side, the
 // Recovery folder on the other.
+import {moment} from './time';
 import {basename,dirname,join} from 'node:path';
 import {readdir,readFile,stat} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
@@ -93,6 +94,8 @@ type KnowledgeEntry={kind:string;path:string;folder?:{name:string};file?:{id:str
 export type SyncStatus={
   state:'off'|'signing-in'|'choose-workspace'|'choose-folder'|'waiting'|'syncing'|'synced'|'needs-credentials'|'error';
   workspace?:string;folder?:string;lastSyncedAt?:string;pending?:number;message?:string;
+  /// Where drafts live on this computer, and the last sync in words ("2 minutes ago").
+  local?:string;lastSynced?:string;
 };
 type LocalFile={rel:string;path:string;size:number;mtime:number};
 type RemoteFile={id:string;revision:number};
@@ -155,7 +158,7 @@ export class ZoSync{
   }
   status():SyncStatus{
     const s=this.state;
-    return {state:this.phase,workspace:s?.workspaceName,folder:s?.base,lastSyncedAt:s?.lastSyncedAt,pending:this.pending||undefined,message:this.message??this.notice};
+    return {state:this.phase,workspace:s?.workspaceName,folder:s?.base,lastSyncedAt:s?.lastSyncedAt,lastSynced:s?.lastSyncedAt?moment(s.lastSyncedAt):undefined,local:this.store.root,pending:this.pending||undefined,message:this.message??this.notice};
   }
   // Called after any save. It only notes the change; the upload happens later, off the save path.
   changed(){
