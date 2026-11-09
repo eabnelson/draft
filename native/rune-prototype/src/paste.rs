@@ -149,10 +149,12 @@ fn needs_escape(line: &str, i: usize, c: char) -> bool {
 /// Nesting one list level deeper, the same four spaces Tab adds.
 const LEVEL: &str = "    ";
 
-/// Formatted HTML as Markdown, and whether it had any formatting to keep.
-pub fn markdown(html: &str) -> String {
+/// Formatted HTML as Markdown.
+#[cfg(test)]
+fn markdown(html: &str) -> String {
     convert(html).0
 }
+/// Formatted HTML as Markdown, and whether it had any formatting to keep.
 fn convert(html: &str) -> (String, bool) {
     let edit = TextEdit::from_html(&mark_headings(html));
     let blocks = edit.blocks();
