@@ -17,7 +17,7 @@ pub struct Services {
     pub(crate) expanded: Option<String>,
     pub(crate) next_refresh: Option<Instant>,
     pub(crate) next_background: Option<Instant>,
-    confirmed: bool,
+    pub(crate) confirmed: bool,
 }
 type Job = (String, Option<Value>, bool);
 pub struct Update(String, Result<Value, String>, bool);

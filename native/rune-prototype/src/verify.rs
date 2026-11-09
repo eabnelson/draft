@@ -1310,6 +1310,8 @@ fn model_page() {
         let later = Instant::now() + Duration::from_secs(3600);
         s.services.next_refresh = Some(later);
         s.services.next_background = Some(later);
+        // The packaged app's startup check would hold the page busy with its answer held back.
+        s.services.confirmed = true;
         s.services.busy = false;
         s.services.message.clear();
         s.services.providers = json!({
@@ -1501,6 +1503,8 @@ fn updates_page() {
         let later = Instant::now() + Duration::from_secs(3600);
         s.services.next_refresh = Some(later);
         s.services.next_background = Some(later);
+        // The packaged app's startup check would hold the page busy with its answer held back.
+        s.services.confirmed = true;
         s.services.busy = false;
         s.sidebar = true;
         s.preferences = true;
