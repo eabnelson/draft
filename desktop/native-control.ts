@@ -12,7 +12,8 @@ export class NativeControl {
   private recoveryTimer?:ReturnType<typeof setInterval>;
   restart=false;
   constructor(readonly root:string,readonly runtime:string,readonly template:string,readonly packaged=false){}
-  ready(){return this.loading??=this.initialize();}
+  // A failed start (such as a missing build) answers that request with its error and is retried next time.
+  ready(){return this.loading??=this.initialize().catch(error=>{this.loading=undefined;throw error;});}
   private async initialize(){
     const updates=new Updates(this.root,this.template,join(this.runtime,'node_modules'),process.execPath,{
       appPath:process.env.DRAFT_APP_PATH,bundleId:process.env.DRAFT_BUNDLE_ID??'com.studiofour.draft.native',hostVersion:process.env.DRAFT_HOST_VERSION,nativeRenderer:true,
@@ -22,7 +23,7 @@ export class NativeControl {
     if(this.packaged)updates.startAutomaticChecks();
     return updates;
   }
-  async close(){if(this.recoveryTimer)clearInterval(this.recoveryTimer);if(this.loading)(await this.loading).stopAutomaticChecks();}
+  async close(){if(this.recoveryTimer)clearInterval(this.recoveryTimer);(await this.loading?.catch(()=>undefined))?.stopAutomaticChecks();}
   async handle(request:Request):Promise<Response|null>{
     const url=new URL(request.url),path=url.pathname;
     if(!path.startsWith('/api/')&&path!=='/updates'&&!path.startsWith('/host-ui/')&&path!=='/host-updates.js')return null;
