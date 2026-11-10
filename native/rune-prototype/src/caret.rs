@@ -39,8 +39,12 @@ pub fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     } else if let Some(menu) = &s.item_menu {
         menu.rename_edit().map(|edit| ("item-name", edit))
     } else if s.preferences {
-        (s.settings.section == 3 && s.settings.status.state == "choose-folder")
-            .then_some(("sync-folder", &s.settings.folder))
+        match s.settings.section {
+            3 => (s.settings.status.state == "choose-folder")
+                .then_some(("sync-folder", &s.settings.folder)),
+            6 => Some(("feature-request", &s.services.prompt)),
+            _ => None,
+        }
     } else if s.context.is_none() {
         s.docs[s.selected]
             .versions

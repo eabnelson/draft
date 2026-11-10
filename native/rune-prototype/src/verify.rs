@@ -36,6 +36,7 @@ pub fn run() {
     tab_shortcuts();
     tab_layout_stability();
     caret_blink();
+    feature_caret();
     popover_placement();
     updates_page();
     sync_page();
@@ -351,6 +352,58 @@ fn durability() {
     );
 }
 
+/// The personal feature box shows a blinking caret once you click into it.
+fn feature_caret() {
+    let mut rt = keyboard::app().headless_runtime((1280.0, 820.0), rune::Env::new(false, 1.0));
+    rt.window_focus(true);
+    rt.update(|s, _| {
+        s.replies = None;
+        let later = Instant::now() + Duration::from_secs(3600);
+        s.services.next_refresh = Some(later);
+        s.services.next_background = Some(later);
+        s.services.confirmed = true;
+        s.services.busy = false;
+        s.services.message.clear();
+        s.preferences = true;
+        s.settings.section = 6;
+    });
+    rt.frame(0.016);
+    rt.frame(0.016);
+    click(&mut rt, "feature-request");
+    assert!(
+        rt.state.services.prompt.focused,
+        "clicking focuses the feature box"
+    );
+    let text = design::Palette::new(false).text;
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "the feature box shows its caret"
+    );
+    rt.frame(0.51);
+    assert_eq!(
+        rt.state.caret.color(text).a,
+        0.0,
+        "the feature caret blinks off"
+    );
+    rt.frame(0.5);
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "the feature caret blinks on"
+    );
+    key(&mut rt, Key::Text("x".into()));
+    assert_eq!(
+        rt.state.services.prompt.text, "x",
+        "typing reaches the feature box"
+    );
+    assert_eq!(
+        rt.state.caret.color(text),
+        text,
+        "typing keeps the caret visible"
+    );
+    println!("PASS the personal feature box focuses, blinks its caret, and takes typing");
+}
 fn caret_blink() {
     let mut rt = keyboard::app().headless_runtime((1200.0, 820.0), rune::Env::new(false, 1.0));
     rt.window_focus(true);
