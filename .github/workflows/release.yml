@@ -185,7 +185,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          bun -e 'for (const note of await Bun.file("release-notes.json").json()) console.log("- " + note)' > "$RUNNER_TEMP/draft-release-notes.md"
+          bun -e 'for (const note of await Bun.file("release-notes.json").json()) console.log("- " + note.title + (note.details ? "\n\n  " + note.details : ""))' > "$RUNNER_TEMP/draft-release-notes.md"
           if gh release view "$DRAFT_RELEASE_TAG" > /dev/null 2>&1; then
             test "$(gh release view "$DRAFT_RELEASE_TAG" --json isDraft --jq .isDraft)" = true
             gh release upload "$DRAFT_RELEASE_TAG" release/Draft-* release/draft-update.json release/SHA256SUMS release/distribution-report.json --clobber

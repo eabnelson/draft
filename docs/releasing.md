@@ -12,7 +12,7 @@ The signing, notarization, authenticated manifest, and separate clean-Mac instal
 
 `main` currently follows the alpha channel. Stable releases remain explicit version tags. Before beginning a new release series after a stable version, advance main's package baseline to that series with `bun scripts/release-version.ts 0.3.0-alpha.1` (substitute the intended version). Automatic preparation refuses to issue a version below a later stable tag.
 
-Keep `release-notes.json` consumer-friendly and current. Main's package version is a baseline, while each generated release tag contains the exact shipped version.
+Keep `release-notes.json` short and current. Each entry has a `title`, one plain line of at most 70 characters saying what changed for the person using Draft, and optional `details` for anything an agent or developer needs. Installed apps show only titles, and only those the running release didn't already list; details appear on the GitHub release page. Once a note has shipped, it can be removed. Main's package version is a baseline, while each generated release tag contains the exact shipped version.
 
 ## Build and verify
 

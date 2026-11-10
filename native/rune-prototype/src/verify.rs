@@ -1615,7 +1615,7 @@ fn updates_page() {
         label(&rt).is_none(),
         "an up-to-date Draft shows no update button"
     );
-    let ready = json!({"id":"new","kind":"official","title":"Draft 0.3.0-alpha.78","state":"ready","stage":"Update ready","version":"0.3.0-alpha.78","summary":"Draft is now available for Linux.","when":"just now"});
+    let ready = json!({"id":"new","kind":"official","title":"Draft 0.3.0-alpha.78","state":"ready","stage":"Update ready","version":"0.3.0-alpha.78","summary":"Draft is now available for Linux. Tab stays in your writing.","notes":["Draft is now available for Linux","Tab stays in your writing"],"when":"just now"});
     rt.update(|s, _| s.services.features = features(json!([ready, applied])));
     rt.frame(0.016);
     rt.frame(0.016);
@@ -1629,6 +1629,14 @@ fn updates_page() {
     assert!(
         page.contains("Draft 0.3.0-alpha.78 is ready. Restart Draft to finish updating."),
         "{page}"
+    );
+    assert!(
+        page.contains("•  Draft is now available for Linux\n•  Tab stays in your writing"),
+        "a ready update lists what's new one line each: {page}"
+    );
+    assert!(
+        !page.contains("Tab stays in your writing."),
+        "the joined summary isn't shown beside its list: {page}"
     );
     assert!(rt.find("apply-new").is_some());
     assert!(rt.find("install-update").is_none(), "one update at a time");

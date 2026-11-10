@@ -26,7 +26,8 @@ if((await Bun.file(join(template,'features.json')).json()).appVersion!==version)
 await run(['/usr/bin/codesign','--verify','--deep','--strict',app]);
 await run(['/usr/bin/tar','-czf',source,'-C',template,'.']);
 await run(['/usr/bin/ditto','-c','-k','--keepParent',app,desktop]);
-const notes=await Bun.file(join(root,'release-notes.json')).json() as string[];
+// Installed apps show only the titles; details are for the GitHub release page.
+const notes=(await Bun.file(join(root,'release-notes.json')).json() as {title:string}[]).map(note=>note.title);
 const artifact=async(path:string)=>({url:`${base}/${path.split('/').at(-1)}`,sha256:await fileDigest(path),size:(await stat(path)).size});
 const dmg=join(root,`release/Draft-${version}-macos-${process.arch}.dmg`);
 await validateStaple(dmg);

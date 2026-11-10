@@ -116,3 +116,13 @@ test('without personal changes, the signed release installs as is, with no local
   assert.notEqual(original,'official-1.1.0');
  }finally{await f.close();}
 });
+
+test('a new release lists only the notes the running release didn’t already have',async()=>{
+ const f=await officialFixture();try{
+  const version=f.host.view().official.appVersion,now=new Date().toISOString();
+  f.host.state.updates.push({id:'earlier',kind:'official',request:'',title:`Draft ${version}`,state:'applied',stage:'Updated',createdAt:now,updatedAt:now,baseVersion:'personal-start',official:{release:{version,notes:['Linux builds','Tab stays in your writing']} as never,source:'',baseSourceHash:'',currentSourceHash:'',conflicts:[],choices:{}}});
+  const news=(notes:string[])=>(f.host as unknown as {news(notes:string[]):string[]}).news(notes);
+  assert.deepEqual(news(['Linux builds','A blinking cursor in Features']),['A blinking cursor in Features']);
+  assert.deepEqual(news(['Linux builds']),[],'a release with nothing new lists nothing');
+ }finally{await f.close();}
+});

@@ -1,14 +1,10 @@
 [
-  "Settings › Updates now shows which version of Draft you have, what’s new, and when it last checked. New releases get ready in the background, and an arrow button appears beside Settings when one is ready to restart.",
-  "Draft is now available for Linux on x64 and ARM64. Download it from the website, unpack it, and run install-desktop. It updates itself like the Mac app, and asks before restarting.",
-  "Pasting keeps formatting: Markdown pastes exactly as written, and text from Google Docs and web pages keeps its headings, bold, links, numbered lists and code. Backslash escapes like \\- now read as the character itself.",
-  "Tab now stays in your writing: it nests list items or indents selected lines, and Shift-Tab outdents. It no longer jumps to the sidebar.",
-  "The text right-click menu now works like a Markdown editor’s: Cut, Copy, Paste and Select All with their shortcuts, a row for bold, italic, underline, code and links, and paragraph styles for headings, lists and quotes. Spelling fixes and link actions come first.",
-  "Context menus are easier to read: solid backgrounds, clearer dividers, dimmed unavailable items, checkmarks on the current status and open versions, and Delete shown in red.",
-  "Mac login items now explicitly identify Draft, and existing registrations are repaired without changing their launch settings.",
-  "Draft’s original menu bar icon is restored for standard and Retina displays.",
-  "The app is named Draft in macOS and Linux launchers.",
-  "Draft deletion now asks only “Delete this draft?” with Delete and Cancel.",
-  "Untitled draft context menus now show “New Draft” as their title.",
-  "The Settings sidebar toggle hides and reopens navigation while keeping Back available."
+  {
+    "title": "Updates list what’s new in a few short lines",
+    "details": "release-notes.json entries are {title, details}. Installed apps get only the titles, in the signed manifest’s notes; details go to the GitHub release body. Updates leaves out notes the release you’re running already listed (Updates.news in desktop/updates.ts)."
+  },
+  {
+    "title": "The Features box shows a blinking cursor while you type",
+    "details": "caret::poll in native/rune-prototype/src/caret.rs now tracks the feature-request field on Settings › Features."
+  }
 ]

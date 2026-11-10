@@ -419,6 +419,18 @@ fn models(s: &State, dark: bool, p: design::Palette, mut body: El) -> El {
     }
     body
 }
+/// What a release adds, one short line each.
+fn news(notes: &[Value], p: design::Palette) -> El {
+    let notes: Vec<&str> = notes.iter().filter_map(Value::as_str).collect();
+    let mut list = col().key("update-news").w_full().gap(4.0);
+    if notes.is_empty() {
+        return list.child(settings::copy("Fixes and improvements.", p).wrap());
+    }
+    for note in notes {
+        list = list.child(settings::copy(format!("•  {note}"), p).wrap());
+    }
+    list
+}
 /// Describe a change, and see the features this Draft has.
 fn features(s: &State, p: design::Palette, mut body: El) -> El {
     body = body
@@ -564,9 +576,7 @@ fn updates(s: &State, p: design::Palette, mut body: El) -> El {
         && let Some(latest) = latest
     {
         if let Some(notes) = f["latestOfficial"]["notes"].as_array() {
-            for note in notes.iter().filter_map(Value::as_str) {
-                body = body.child(settings::copy(format!("•  {note}"), p).wrap());
-            }
+            body = body.child(news(notes, p));
         }
         body = body.child(settings::button(
             "install-update",
@@ -658,8 +668,12 @@ pub fn page(s: &State, dark: bool, p: design::Palette) -> El {
                     )
                     .wrap(),
                 );
-            if current && let Some(summary) = update["summary"].as_str().filter(|s| !s.is_empty()) {
-                card = card.child(settings::copy(summary, p).wrap());
+            if current {
+                if let Some(notes) = update["notes"].as_array() {
+                    card = card.child(news(notes, p));
+                } else if let Some(summary) = update["summary"].as_str().filter(|s| !s.is_empty()) {
+                    card = card.child(settings::copy(summary, p).wrap());
+                }
             }
             if let Some(error) = update["error"].as_str() {
                 card = card.child(settings::copy(error, p).wrap());
