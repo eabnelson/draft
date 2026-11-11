@@ -4,7 +4,9 @@ import {join} from 'node:path';
 import {atomicWrite,exists,readJSON} from './files';
 import type {Secrets,ZoConfig} from './zo-sync';
 
-export const ZO_CLIENT_ID='draft-desktop';
+// A client ID metadata document on Draft's website (website/oauth). Zo shows its name on the
+// consent page and accepts only the loopback callback it lists.
+export const ZO_CLIENT_ID='https://draft.studiofour.io/oauth/client-metadata.json';
 export type Workspace={workspace_id:string;name:string;subject:{type:string;id:string}};
 export class SignInNeeded extends Error{}
 type Fetch=(url:string,init?:RequestInit)=>Promise<Response>;
@@ -19,11 +21,16 @@ export class ZoAuth{
   private generation=0;
   private abort?:AbortController;
   enabled=false;
+  // A sign-in saved under an earlier client ID. It is revoked on the next sign-in, never refreshed.
+  legacy=false;
   constructor(readonly root:string,private secrets:Secrets,private account:string,private config:ZoConfig,private fetch:Fetch){}
   private get path(){return join(this.root,'zo-auth.json');}
   private get resource(){return `${this.config.apiOrigin}/zo-system-api`;}
   private get key(){return `${this.account}-oauth`;}
-  async initialize(){this.enabled=await exists(this.path)&&(await readJSON<{clientId?:string}>(this.path).catch(()=>null))?.clientId===ZO_CLIENT_ID;}
+  async initialize(){
+    const saved=await exists(this.path)?(await readJSON<{clientId?:string}>(this.path).catch(()=>null))?.clientId:undefined;
+    this.enabled=saved===ZO_CLIENT_ID;this.legacy=typeof saved==='string'&&!this.enabled;
+  }
   invalidate(){this.access=undefined;}
   cancel(){this.generation++;this.abort?.abort();this.callback?.stop(true);this.callback=undefined;clearTimeout(this.timeout);}
 
@@ -74,7 +81,8 @@ export class ZoAuth{
   async token():Promise<string>{
     if(this.access&&this.access.expires>Date.now()+30_000)return this.access.token;
     this.refreshing??=this.lock(async()=>{
-      const saved=await readJSON<{refreshUncertain?:boolean}>(this.path).catch(()=>null);
+      const saved=await readJSON<{clientId?:string;refreshUncertain?:boolean}>(this.path).catch(()=>null);
+      if(saved&&saved.clientId!==ZO_CLIENT_ID)throw new SignInNeeded('Draft signs in to Zo a new way. Connect to Zo again.');
       if(saved?.refreshUncertain)throw new SignInNeeded('A Zo refresh was interrupted. Connect to Zo again.');
       const refresh=await this.secrets.get(this.key);if(!refresh)throw new SignInNeeded('Connect to Zo again.');
       // If this process stops after Zo rotates but before Keychain is updated, never replay
@@ -100,12 +108,14 @@ export class ZoAuth{
     this.cancel();this.enabled=false;this.access=undefined;
     await this.lock(async()=>{
       const refresh=await this.secrets.get(this.key);
+      const clientId=(await readJSON<{clientId?:string}>(this.path).catch(()=>null))?.clientId??ZO_CLIENT_ID,legacy=clientId!==ZO_CLIENT_ID;
       if(refresh){
-        // Retain the credential if revocation is unavailable, so disconnect can be retried.
-        const response=await this.fetch(`${this.config.authOrigin}/zo-system-api/oauth/revoke`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:refresh,client_id:ZO_CLIENT_ID,token_type_hint:'refresh_token'}),signal:AbortSignal.timeout(15_000)});
-        if(!response.ok)throw Error('Zo could not revoke this sign-in. Try disconnecting again.');
+        // Retain the credential if revocation is unavailable, so disconnect can be retried. An
+        // earlier client's sign-in is revoked once, best effort: it expires within 30 days anyway.
+        const response=await this.fetch(`${this.config.authOrigin}/zo-system-api/oauth/revoke`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:refresh,client_id:clientId,token_type_hint:'refresh_token'}),signal:AbortSignal.timeout(15_000)}).catch(error=>{if(legacy)return null;throw error;});
+        if(!response?.ok&&!legacy)throw Error('Zo could not revoke this sign-in. Try disconnecting again.');
       }
-      await this.secrets.delete(this.key);await rm(this.path,{force:true});
+      await this.secrets.delete(this.key);await rm(this.path,{force:true});this.legacy=false;
     });
   }
   // Share refresh serialization with any second host using this data folder. Read the latest

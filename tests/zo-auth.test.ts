@@ -1,6 +1,6 @@
 import {test,expect} from 'bun:test';
 import {createHash} from 'node:crypto';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ZoAuth,ZO_CLIENT_ID,SignInNeeded} from '../desktop/zo-auth';
@@ -13,9 +13,9 @@ class MemorySecrets implements Secrets{
   async set(key:string,value:string){this.values.set(key,value);}
   async delete(key:string){this.values.delete(key);}
 }
-async function fixture(run:(f:{root:string;secrets:MemorySecrets;auth:ZoAuth;sync:ZoSync;origin:string;login:()=>Promise<URL>;get:()=>{refreshes:number;revoked:boolean;headers:string[]};failRefresh:()=>void;expire:()=>void})=>Promise<void>){
+async function fixture(run:(f:{root:string;secrets:MemorySecrets;auth:ZoAuth;sync:ZoSync;origin:string;login:()=>Promise<URL>;get:()=>{refreshes:number;revoked:boolean;revokedBy:string;headers:string[]};failRefresh:()=>void;expire:()=>void})=>Promise<void>){
   const root=await mkdtemp(join(tmpdir(),'draft-oauth-')),secrets=new MemorySecrets();
-  let refreshes=0,revoked=false,short=false,fail=false,challenge='',redirect='',serial=0;const headers:string[]=[];
+  let refreshes=0,revoked=false,revokedBy='',short=false,fail=false,challenge='',redirect='',serial=0;const headers:string[]=[];
   const server=Bun.serve({hostname:'127.0.0.1',port:0,async fetch(request){
     const url=new URL(request.url);
     if(url.pathname.endsWith('/oauth/token')){
@@ -27,7 +27,7 @@ async function fixture(run:(f:{root:string;secrets:MemorySecrets;auth:ZoAuth;syn
       }else{expect(form.get('grant_type')).toBe('refresh_token');refreshes++;if(fail)return Response.json({error:'temporarily_unavailable'},{status:503});}
       return Response.json({access_token:`access-${++serial}`,refresh_token:`refresh-${serial}`,expires_in:short?1:300});
     }
-    if(url.pathname.endsWith('/oauth/revoke')){revoked=true;return new Response(null,{status:200});}
+    if(url.pathname.endsWith('/oauth/revoke')){revoked=true;revokedBy=new URLSearchParams(await request.text()).get('client_id')??'';return new Response(null,{status:200});}
     if(url.pathname.endsWith('/session'))return Response.json({workspaces:[{workspace_id:'wsp_a',name:'Studio',subject:{type:'service_account',id:'draft'}},{workspace_id:'wsp_b',name:'Personal',subject:{type:'user',id:'me'}}]});
     if(url.pathname.endsWith('/invoke')){headers.push(request.headers.get('Zo-Workspace-Id')??'');return Response.json({result:{entries:[],next_cursor:null}});}
     return new Response(null,{status:404});
@@ -39,7 +39,7 @@ async function fixture(run:(f:{root:string;secrets:MemorySecrets;auth:ZoAuth;syn
     let url!:URL;await sync.signIn(async value=>{url=new URL(value);});
     challenge=url.searchParams.get('code_challenge')!;redirect=url.searchParams.get('redirect_uri')!;return url;
   }
-  try{await run({root,secrets,auth,sync,origin,login,get:()=>({refreshes,revoked,headers}),failRefresh:()=>{fail=true;},expire:()=>{short=true;}});}
+  try{await run({root,secrets,auth,sync,origin,login,get:()=>({refreshes,revoked,revokedBy,headers}),failRefresh:()=>{fail=true;},expire:()=>{short=true;}});}
   finally{auth.cancel();await sync.disconnect().catch(()=>{});server.stop(true);await rm(root,{recursive:true,force:true});}
 }
 function callback(url:URL,issuer:string,fields:Record<string,string>={}){
@@ -95,4 +95,26 @@ test('a cancelled callback cannot restore a disconnected connection',()=>fixture
   const url=await f.login();await f.sync.disconnect();
   await fetch(callback(url,f.origin)).catch(()=>{});
   expect(f.sync.status().state).toBe('off');expect(f.secrets.values.size).toBe(0);
+}));
+
+test('the published metadata document names Draft and the callback it signs in with',async()=>{
+  const doc=JSON.parse(await readFile(join(import.meta.dir,'../website/oauth/client-metadata.json'),'utf8'));
+  expect(doc).toMatchObject({client_id:ZO_CLIENT_ID,client_name:'Draft',token_endpoint_auth_method:'none'});
+  expect(doc.grant_types).toEqual(['authorization_code','refresh_token']);
+  const url=new URL(ZO_CLIENT_ID);expect(url.protocol).toBe('https:');
+  expect(doc.redirect_uris).toContain('http://127.0.0.1/callback');expect(doc).not.toHaveProperty('client_secret');
+});
+
+test('a sign-in under the old client ID is never refreshed and is revoked under that ID on the next sign-in',()=>fixture(async f=>{
+  await writeFile(join(f.root,'zo-auth.json'),JSON.stringify({clientId:'draft-desktop'})+'\n');
+  await writeFile(join(f.root,'zo-sync.json'),JSON.stringify({schemaVersion:3,auth:'oauth',clientId:'draft-desktop',workspaceId:'wsp_a',workspaceName:'Studio',base:'/workspace/Draft',files:{}})+'\n');
+  const auth=new ZoAuth(f.root,f.secrets,'test',{authOrigin:f.origin,apiOrigin:f.origin},fetch);
+  await f.secrets.set('test-oauth','old-refresh');await auth.initialize();
+  expect(auth.enabled).toBe(false);expect(auth.legacy).toBe(true);
+  await expect(auth.token()).rejects.toBeInstanceOf(SignInNeeded);expect(f.get().refreshes).toBe(0);
+  await f.secrets.set(`client-${createHash('sha256').update(f.root).digest('hex').slice(0,16)}-oauth`,'old-refresh');
+  await f.sync.initialize();
+  const url=await f.login();expect(f.get().revokedBy).toBe('draft-desktop');
+  expect((await fetch(callback(url,f.origin))).ok).toBe(true);expect(f.sync.status().state).toBe('choose-workspace');
+  expect(JSON.parse(await readFile(join(f.root,'zo-auth.json'),'utf8'))).toEqual({clientId:ZO_CLIENT_ID});
 }));

@@ -84,7 +84,7 @@ Sync works both ways. New drafts, edits, archiving, restoring and deleting on th
 
 **Disconnect** revokes this browser sign-in and removes its credential from this Mac, keeping drafts here and in Zo. Legacy service-account secrets are only forgotten locally; revoke them in Zo to stop other uses. Without Zo, Draft works entirely on this Mac.
 
-The desktop OAuth client is registered once with Zo as `draft-desktop`, display name **Draft**, callback `http://127.0.0.1/callback` (dynamic loopback port). This uses Zo's existing operator registration command and requires no hostagent code changes.
+Draft identifies itself to Zo with a client ID metadata document, [`website/oauth/client-metadata.json`](website/oauth/client-metadata.json), published at `https://draft.studiofour.io/oauth/client-metadata.json`. That URL is Draft's OAuth client ID. Zo reads the name **Draft** and the loopback callback `http://127.0.0.1/callback` (any port) from it, so nothing is registered on Zo's side. Publish changes to the document before shipping an app that depends on them. Sign-ins made under the earlier ID, `draft-desktop`, are revoked on the next sign-in.
 
 ## Landing page
 

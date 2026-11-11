@@ -663,7 +663,7 @@ export class ZoSync{
   async signIn(open:(url:string)=>Promise<void>=openExternalLink):Promise<SyncStatus>{
     await this.pause();this.phase='signing-in';this.message=undefined;
     try{
-      if(this.auth.enabled)await this.auth.disconnect();
+      if(this.auth.enabled||this.auth.legacy)await this.auth.disconnect();
       const url=await this.auth.begin(async error=>{
         if(error){this.phase='needs-credentials';this.message=error.message;return;}
         this.state=null;this.access=undefined;

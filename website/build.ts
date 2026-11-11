@@ -6,6 +6,8 @@ await rm(join(root,'dist'),{recursive:true,force:true});await mkdir(join(root,'d
 const download=await latestDownloads();
 const html=new HTMLRewriter().on('a[data-mac-download]',{element(element){element.setAttribute('href',download.mac);}}).on('a[data-linux-download]',{element(element){element.setAttribute('href',download.linux);}}).transform(new Response(await readFile(join(root,'index.html'),'utf8')));
 await writeFile(join(root,'dist/index.html'),await html.text());await cp(join(root,'assets'),join(root,'dist/assets'),{recursive:true});
+// Zo reads Draft's name and sign-in callback from this document; its URL is Draft's OAuth client ID.
+await cp(join(root,'oauth'),join(root,'dist/oauth'),{recursive:true});
 // The page's player (headline, glass cursor, pause and replay) and the walkthrough: the real app in a frame.
 const player=await Bun.build({entrypoints:[join(root,'player.ts')],outdir:join(root,'dist'),target:'browser',minify:true});if(!player.success)throw Error('The walkthrough player could not be built.');
 const child=Bun.spawn([process.execPath,join(root,'../node_modules/vite/bin/vite.js'),'build','--config',join(root,'vite.config.ts')],{cwd:join(root,'..'),stdout:'inherit',stderr:'inherit'});if(await child.exited)process.exit(1);
