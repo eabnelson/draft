@@ -30,15 +30,38 @@ const CLAIMS='https://zo.computer/claims/system-api';
 // Wait for a pause in typing so every keystroke is not a new version in Zo, but never hold
 // changes back for long. Quiet cloud checks read one small index, not every folder.
 export const QUIET_MS=15_000,MAX_WAIT_MS=120_000,CHECK_MS=120_000,IDLE_CHECK_MS=900_000,AUDIT_MS=1_800_000;
+// A folder follows its draft's title once the title has stopped changing for this long, so a title
+// taken from a first sentence being typed doesn't rename the folder at every save.
+export const RETITLE_MS=300_000;
 export const SYNC_INDEX='Draft-sync.json';
 const IDLE_MS=300_000,ACTIVITY_CHECK_MS=15_000;
 const INLINE_BYTES=512*1024;
 const TRANSIENT=new Set(['authorization_changed','implementation_unavailable','temporarily_unavailable','unavailable','rate_limited','internal_error','timeout']);
 const MEDIA_NAME=/^[a-f0-9]{32}\.(png|jpg|webp|gif)$/,VERSION_NAME=/^v\d+\.md$/;
-// A draft's file, relative to the folder in Zo: <id>.draft/... for live drafts, Archive/<id>.draft/... for archived ones.
+// A draft's file as sync tracks it, by the draft's ID: <id>.draft/... for live drafts,
+// Archive/<id>.draft/... for archived ones. That is also its path on this Mac. In Zo the folder is
+// named for the draft instead (see folderName), and remotePath translates.
 const REL=/^(Archive\/)?([A-Za-z0-9][A-Za-z0-9._-]{0,150})\.draft\/(draft\.json|versions\/v\d+\.md|media\/[a-f0-9]{32}\.(?:png|jpg|webp|gif))$/;
 export function parseRel(rel:string):{place:Place;id:string;name:string}|null{const m=REL.exec(rel);return m?{place:m[1]?'archived':'live',id:m[2],name:m[3]}:null;}
 const relOf=(id:string,place:Place,name:string)=>`${place==='archived'?'Archive/':''}${id}.draft/${name}`;
+// A draft's folder in Zo is named for its title, so it reads well there and turns up in search:
+// "Personal Products (083361c7).draft". The start of the ID keeps two drafts with one title apart
+// and tells Draft which draft the folder holds. It follows the title when the title changes.
+// Folders from earlier versions, named <id>.draft, still work and are renamed on the next full check.
+const LEGACY_FOLDER=/^([A-Za-z0-9][A-Za-z0-9._-]{0,150})\.draft$/,TITLED_FOLDER=/^.+ \(([A-Za-z0-9][A-Za-z0-9._-]{0,150})\)\.draft$/;
+const TITLE_BYTES=150;
+export function folderName(title:string,id:string):string{
+  const words=title.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f/\\]+/g,' ').replace(/\s+/g,' ').trim();
+  let kept='';for(const char of words){if(Buffer.byteLength(kept+char)>TITLE_BYTES)break;kept+=char;}
+  // Cut at a word when a long title is shortened, unless that leaves too little.
+  if(kept.length<words.length){const cut=kept.replace(/\s+\S*$/,'');kept=(cut.length>=kept.length/2?cut:kept).replace(/[\s.,;:–—-]+$/,'');}
+  return `${kept||'Untitled'} (${id.slice(0,8)}).draft`;
+}
+// Which draft a folder in Zo holds: its whole ID for an older folder, or the start of it.
+function folderKey(name:string):{id:string}|{short:string}|null{
+  const legacy=LEGACY_FOLDER.exec(name);if(legacy)return {id:legacy[1]};
+  const titled=TITLED_FOLDER.exec(name);return titled?{short:titled[1]}:null;
+}
 
 export interface Secrets{get(account:string):Promise<string|null>;set(account:string,value:string):Promise<void>;delete(account:string):Promise<void>}
 // The service account's secret lives in the login Keychain. It goes to `security` on stdin, never
@@ -84,11 +107,12 @@ class NeedsCredentials extends Error{}
 type FileState={id:string;revision:number;sha:string;md5?:string;size:number;mtime:number};
 // No folder yet means connected, waiting for the person to choose where drafts go.
 // baseVersions: each draft's versions as both sides last agreed. deleted: drafts deleted on this Mac
-// and removed from Zo, and when. cleanup: emptied folders in Zo still to remove.
+// and removed from Zo, and when. cleanup: emptied folders in Zo still to remove. names: each draft's
+// folder name in Zo, as last seen or made there.
 type IndexChange={change:string;place:Place|'deleted'};
 type IndexHead={id:string;revision:number};
 type SyncIndex={schemaVersion:1;generation:string;changes:Record<string,IndexChange>};
-type State={schemaVersion:3;auth?:'oauth';clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];lastSyncedAt?:string;connectedAt:string;indexHead?:IndexHead;pendingIndex?:Record<string,IndexChange>;lastInventoryAt?:number};
+type State={schemaVersion:3;auth?:'oauth';clientId:string;workspaceId:string;workspaceName?:string;base?:string;files:Record<string,FileState>;baseVersions?:Record<string,string[]>;deleted?:Record<string,number>;cleanup?:string[];names?:Record<string,string>;lastSyncedAt?:string;connectedAt:string;indexHead?:IndexHead;pendingIndex?:Record<string,IndexChange>;lastInventoryAt?:number};
 type RemoteEntry={id:string;revision:number;updatedAt:number;md5?:string|null};
 type KnowledgeEntry={kind:string;path:string;folder?:{name:string};file?:{id:string;revision:number;updated_at?:string};md5?:string|null};
 export type SyncStatus={
@@ -98,6 +122,8 @@ export type SyncStatus={
   local?:string;lastSynced?:string;
 };
 type LocalFile={rel:string;path:string;size:number;mtime:number};
+type Stray={moves:{fileId:string;name:string}[];blocked:boolean};
+type Titles=Map<string,{title:string;place:Place;mtime:number}>;
 type RemoteFile={id:string;revision:number};
 export type FolderList={path:string|null;parent:string|null;folders:{name:string;path:string}[]};
 type Fetch=(input:string,init?:RequestInit)=>Promise<Response>;
@@ -134,6 +160,10 @@ export class ZoSync{
   private running?:Promise<void>;private again=false;
   private readonly auth:ZoAuth;
   private folderCache=new Map<string,{entries:KnowledgeEntry[];watermark:number;checkedAt:number}>();
+  // Each draft's folders in Zo at the last full look, by "<place>:<id>", and the ones besides its own.
+  private remoteFolders=new Map<string,Set<string>>();private strays=new Map<string,Map<string,Stray>>();
+  // Renames Zo refused this session, by "<id>:<name>", so they aren't tried at every check.
+  private refused=new Set<string>();
   private readonly secrets:Secrets;private readonly config:ZoConfig;private readonly fetch:Fetch;private readonly sleep:(ms:number)=>Promise<void>;private readonly timers:boolean;private readonly now:()=>number;
   readonly draftsRoot:string;
   constructor(readonly dataRoot:string,readonly store:DraftStore,options:Options={}){
@@ -213,15 +243,20 @@ export class ZoSync{
       const localWork=local.some(f=>!state.files[f.rel]||state.files[f.rel].size!==f.size||state.files[f.rel].mtime!==f.mtime)||Object.keys(state.files).some(rel=>parseRel(rel)&&!localPaths.has(rel));
       const audit=!state.lastInventoryAt||this.now()-state.lastInventoryAt>=AUDIT_MS;
       const changed=!head||!state.indexHead||head.id!==state.indexHead.id||head.revision!==state.indexHead.revision;
-      const inventory=fullScan||audit||changed||localWork||Object.keys(state.pendingIndex??{}).length>0;
+      let titles=await this.titles(local);
+      const inventory=fullScan||audit||changed||localWork||Object.keys(state.pendingIndex??{}).length>0||this.retitleDue(state,titles);
       if(fullScan||audit||changed)this.folderCache.clear();
       await this.cleanup(state);
       // Index entries are hints, never authority to delete writing. Actual changes still
       // use complete folder inventories and the existing revision/merge checks.
-      const remote=inventory?await this.remoteFiles(state):null;if(this.state!==state)return;
-      if(remote&&await this.reconcile(state,local,remote))local=this.worthSaving(state,await this.localFiles());
+      const remote=inventory?await this.remoteFiles(state,local):null;if(this.state!==state)return;
+      if(remote&&await this.reconcile(state,local,remote)){local=this.worthSaving(state,await this.localFiles());titles=await this.titles(local);}
       if(this.state!==state)return;
-      await this.push(state,local);
+      await this.push(state,local,titles);
+      if(this.state!==state)return;
+      // Folders are tidied and follow their titles only after a full look at Zo, so a name is never guessed.
+      if(remote){await this.gather(state,titles);if(this.state!==state)return;await this.retitle(state,titles);if(this.state!==state)return;}
+      await this.publishList(state,titles);
       if(this.state!==state)return;
       if(!head||Object.keys(state.pendingIndex??{}).length){
         const published=await this.publishIndex(state,head);
@@ -233,6 +268,7 @@ export class ZoSync{
       const versions:Record<string,string[]>={};
       for(const file of local.filter(f=>f.rel.endsWith('/draft.json'))){try{const record=await readJSON<{id:string;versions:{id:string}[]}>(file.path);versions[record.id]=record.versions.map(v=>v.id);}catch{}}
       state.baseVersions=versions;
+      if(remote){const ids=new Set([...local,...Object.keys(state.files).map(rel=>({rel}))].map(f=>parseRel(f.rel)?.id));state.names=Object.fromEntries(Object.entries(state.names??{}).filter(([id])=>ids.has(id)));}
       const cutoff=Date.now()-90*86_400_000;state.deleted=Object.fromEntries(Object.entries(state.deleted??{}).filter(([,at])=>at>cutoff));
       state.lastSyncedAt=new Date().toISOString();await this.save();
       this.phase=this.firstChange?'waiting':'synced';
@@ -281,25 +317,81 @@ export class ZoSync{
   }
   // Enumerate authoritative folder contents. Search indexing is not a sync inventory.
   // Walk only package folders and their versions/media, and refuse an incomplete inventory.
-  private async remoteFiles(state:State):Promise<Map<string,RemoteEntry>|null>{
+  // Files are keyed by the draft's ID (see parseRel), whatever their folder in Zo is called.
+  private async remoteFiles(state:State,local:LocalFile[]):Promise<Map<string,RemoteEntry>|null>{
     const folder=await this.folderId(state.base!,false);if(!folder)return null;
-    const files=new Map<string,RemoteEntry>(),queue=[state.base!];
+    const base=state.base!,names=state.names??={};
+    const known=new Set([...local.map(f=>f.rel),...Object.keys(state.files)].map(rel=>parseRel(rel)?.id).filter(Boolean) as string[]);
+    for(const id of Object.keys(names))known.add(id);
+    type Package={id:string;place:Place;root:string};type Found=RemoteEntry&{folder:string};
+    const found=new Map<string,Found[]>(),folders=new Map<string,Set<string>>();
+    const queue:{path:string;package?:Package}[]=[{path:base}];
     for(let index=0;index<queue.length;index++){
       if(index>20_000)throw Error('Too many folders to finish a sync safely.');
-      const path=queue[index];
-      for(const entry of await this.listFolder(path)){
-        if(!entry.path.startsWith(`${path}/`)||entry.path.slice(path.length+1).includes('/'))throw Error('Zo returned a file outside its folder.');
-        const rel=entry.path.slice(state.base!.length+1);
-        if(entry.kind==='folder'&&/^(Archive|(?:Archive\/)?[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.draft(?:\/(?:versions|media))?)$/.test(rel))queue.push(entry.path);
-        if(entry.file&&parseRel(rel)){
-          const known=state.files[rel];
-          // A metadata-only revision can be acknowledged without downloading unchanged bytes.
-          if(known?.id===entry.file.id&&known.md5&&entry.md5===known.md5)known.revision=entry.file.revision;
-          files.set(rel,{id:entry.file.id,revision:entry.file.revision,updatedAt:Date.parse(entry.file.updated_at??'')||0,md5:entry.md5});
+      const {path}=queue[index],rel=path===base?'':path.slice(base.length+1),entries=await this.listFolder(path);
+      for(const entry of entries)if(!entry.path.startsWith(`${path}/`)||entry.path.slice(path.length+1).includes('/'))throw Error('Zo returned a file outside its folder.');
+      let pkg=queue[index].package;
+      if(!pkg&&rel!==''&&rel!=='Archive'){
+        const name=basename(path),id=await this.folderDraft(name,entries,known);if(!id)continue;
+        pkg={id,place:rel.startsWith('Archive/')?'archived':'live',root:path};
+        const key=`${pkg.place}:${id}`;folders.set(key,(folders.get(key)??new Set()).add(name));
+      }
+      for(const entry of entries){
+        const child=entry.path.slice(path.length+1);
+        if(entry.kind==='folder'){
+          if(!pkg&&((rel===''&&child==='Archive')||folderKey(child)))queue.push({path:entry.path});
+          else if(pkg&&path===pkg.root&&(child==='versions'||child==='media'))queue.push({path:entry.path,package:pkg});
         }
+        if(!entry.file||!pkg)continue;
+        const canonical=relOf(pkg.id,pkg.place,entry.path.slice(pkg.root.length+1));if(!parseRel(canonical))continue;
+        found.set(canonical,[...found.get(canonical)??[],{id:entry.file.id,revision:entry.file.revision,updatedAt:Date.parse(entry.file.updated_at??'')||0,md5:entry.md5,folder:basename(pkg.root)}]);
       }
     }
+    // Normally one folder per draft. Two can appear while another Mac is still on an earlier
+    // version, or during a rename; the folder last made or seen here is preferred, and every
+    // file still takes part, so nothing in either goes unseen.
+    for(const [key,seen] of folders){
+      const id=key.slice(key.indexOf(':')+1);
+      if(!names[id]||!seen.has(names[id]))names[id]=[...seen].sort((a,b)=>Number(!!LEGACY_FOLDER.exec(a))-Number(!!LEGACY_FOLDER.exec(b)))[0];
+    }
+    // Files in a draft's other folders are gathered into its own folder (see gather). A file there
+    // whose name its own folder already has stays put with its folder, so no writing is set aside.
+    const strays=new Map<string,Map<string,Stray>>();
+    for(const [key,seen] of folders){const id=key.slice(key.indexOf(':')+1);for(const name of seen)if(name!==names[id])strays.set(key,(strays.get(key)??new Map()).set(name,{moves:[],blocked:false}));}
+    for(const [rel,candidates] of found){
+      const p=parseRel(rel)!,key=`${p.place}:${p.id}`,away=candidates.filter(c=>c.folder!==names[p.id]);
+      for(const c of away){const stray=strays.get(key)!.get(c.folder)!;if(away.length<candidates.length||away.length>1)stray.blocked=true;else stray.moves.push({fileId:c.id,name:p.name});}
+    }
+    this.strays=strays;
+    const files=new Map<string,RemoteEntry>();
+    for(const [rel,candidates] of found){
+      const id=parseRel(rel)!.id,mine=state.files[rel]?.id;
+      const entry=candidates.find(c=>c.id===mine)??candidates.find(c=>c.folder===names[id])??candidates.reduce((a,b)=>b.updatedAt>a.updatedAt?b:a);
+      const known=state.files[rel];
+      // A metadata-only revision can be acknowledged without downloading unchanged bytes.
+      if(known?.id===entry.id&&known.md5&&entry.md5===known.md5)known.revision=entry.revision;
+      files.set(rel,{id:entry.id,revision:entry.revision,updatedAt:entry.updatedAt,md5:entry.md5});
+    }
+    this.remoteFolders=folders;
     return files;
+  }
+  // The draft a folder in Zo holds. The start of an ID that only one known draft has settles it;
+  // otherwise the folder's draft.json says, as for a draft first made on another Mac.
+  private async folderDraft(name:string,entries:KnowledgeEntry[],known:Set<string>):Promise<string|null>{
+    const key=folderKey(name);if(!key)return null;
+    if('id' in key)return key.id;
+    const matches=[...known].filter(id=>id.startsWith(key.short));
+    if(matches.length===1&&matches[0].slice(0,8)===key.short)return matches[0];
+    const record=entries.find(e=>e.file&&basename(e.path)==='draft.json');if(!record?.file)return null;
+    const text=(await this.download(record.file.id)).bytes.toString('utf8');
+    let id:unknown;try{id=JSON.parse(text)?.id;}catch{return null;}
+    if(typeof id!=='string'||id.slice(0,8)!==key.short||!parseRel(relOf(id,'live','draft.json')))return null;
+    known.add(id);return id;
+  }
+  // Where a tracked file is in Zo: in the draft's named folder, or the older <id>.draft one.
+  private remotePath(state:State,rel:string):string{
+    const p=parseRel(rel);if(!p)return `${state.base}/${rel}`;
+    return `${state.base}/${p.place==='archived'?'Archive/':''}${state.names?.[p.id]??`${p.id}.draft`}/${p.name}`;
   }
   private async listFolder(path:string):Promise<KnowledgeEntry[]>{
     const key=`${this.state!.workspaceId}:${path}`,cached=this.folderCache.get(key);
@@ -444,9 +536,12 @@ export class ZoSync{
       }
       delete state.files[rel];
     }
-    const packages=new Set(rels.map(rel=>{const p=parseRel(rel)!;return `${state.base}/${p.place==='archived'?'Archive/':''}${id}.draft`;}));
+    const packages=new Set(rels.flatMap(rel=>{
+      const p=parseRel(rel)!,at=`${state.base}/${p.place==='archived'?'Archive/':''}`;
+      return [dirname(this.remotePath(state,relOf(id,p.place,'draft.json'))),...[...this.remoteFolders.get(`${p.place}:${id}`)??[]].map(name=>at+name)];
+    }));
     state.cleanup=[...new Set([...state.cleanup??[],...[...packages].flatMap(p=>[`${p}/versions`,`${p}/media`,p])])];
-    state.deleted![id]=Date.now();await this.save();
+    delete state.names?.[id];state.deleted![id]=Date.now();await this.save();
   }
   private async cleanup(state:State){
     const left:string[]=[];
@@ -460,7 +555,7 @@ export class ZoSync{
   private async moveRemote(state:State,id:string,from:Place,to:Place,remote:Map<string,RemoteEntry>){
     await this.markIndex(state,id,to);
     const destination=await this.folderId(to==='archived'?`${state.base}/Archive`:state.base!,true);
-    try{await this.invoke('zo.folder.update',{path:`${state.base}/${from==='archived'?'Archive/':''}${id}.draft`,destination_folder_id:destination});}
+    try{await this.invoke('zo.folder.update',{path:dirname(this.remotePath(state,relOf(id,from,'draft.json'))),destination_folder_id:destination});}
     catch(error){if(!(error instanceof ZoError&&['conflict','resource_not_found'].includes(error.code)))throw error;}
     const rekey=(rel:string)=>{const p=parseRel(rel);return p&&p.id===id&&p.place===from?relOf(id,to,p.name):null;};
     for(const rel of Object.keys(state.files)){const next=rekey(rel);if(next){state.files[next]=state.files[rel];delete state.files[rel];}}
@@ -480,7 +575,10 @@ export class ZoSync{
   }
 
   // Everything changed on this Mac goes up, and versions removed from a draft here are removed there.
-  private async push(state:State,files:LocalFile[]){
+  private async push(state:State,files:LocalFile[],titles:Titles){
+    // A draft not yet in Zo gets a folder named for it. One already there keeps its folder until retitle.
+    const names=state.names??={},tracked=new Set(Object.keys(state.files).map(rel=>parseRel(rel)?.id));
+    for(const [id,{title}] of titles)if(!names[id]&&!tracked.has(id))names[id]=folderName(title,id);
     const changed:{file:LocalFile;bytes:Buffer;sha:string}[]=[];
     for(const file of files){
       const known=state.files[file.rel];
@@ -492,8 +590,6 @@ export class ZoSync{
     }
     const here=new Set(files.map(f=>f.rel)),packages=new Set(files.map(f=>{const p=parseRel(f.rel)!;return `${p.place}:${p.id}`;}));
     const removed=Object.keys(state.files).filter(rel=>{const p=parseRel(rel);return p&&!here.has(rel)&&packages.has(`${p.place}:${p.id}`);});
-    const index=Buffer.from(await this.index(files)),indexSha=sha256(index);
-    if(state.files['Drafts.md']?.sha!==indexSha)changed.push({file:{rel:'Drafts.md',path:'',size:index.length,mtime:0},bytes:index,sha:indexSha});
     this.pending=changed.length+removed.length;
     for(const item of changed){
       if(this.state!==state)return;
@@ -554,18 +650,76 @@ export class ZoSync{
     }
     throw new ZoError('conflict','Another Mac is updating Draft’s sync index. Draft will check again.');
   }
-  // A readable list at the top of the folder, so a person or agent in Zo can find a draft by title.
-  private async index(files:LocalFile[]){
-    const rows:string[]=[];
-    for(const file of files.filter(f=>f.rel.endsWith('/draft.json')&&parseRel(f.rel)?.place==='live')){
-      let title='';try{title=String((await readJSON<{title?:unknown}>(file.path)).title??'').trim();}catch{}
-      rows.push(`- ${(title||'Untitled').replace(/[\r\n]+/g,' ')} — \`${dirname(file.rel)}\``);
+  // Each draft's title and place, from its draft.json on this Mac.
+  private async titles(files:LocalFile[]):Promise<Titles>{
+    const titles:Titles=new Map();
+    for(const file of files.filter(f=>f.rel.endsWith('/draft.json'))){
+      const p=parseRel(file.rel)!;let title='';try{title=String((await readJSON<{title?:unknown}>(file.path)).title??'').trim();}catch{}
+      titles.set(p.id,{title,place:p.place,mtime:file.mtime});
     }
+    return titles;
+  }
+  // A draft whose folder should take its settled title.
+  private renameFor(state:State,id:string,{title,mtime}:{title:string;mtime:number}){
+    const have=state.names?.[id],want=folderName(title,id);
+    return have&&have!==want&&this.now()-mtime>=RETITLE_MS&&!this.refused.has(`${id}:${want}`)?{have,want}:null;
+  }
+  private retitleDue(state:State,titles:Titles){for(const [id,t] of titles)if(this.renameFor(state,id,t))return true;return false;}
+  // A folder whose draft was retitled is renamed to match, keeping its files and their history.
+  // Another Mac that renamed it first, or a name already taken, leaves it for a later check.
+  private async retitle(state:State,titles:Titles){
+    let renamed=false;
+    for(const [id,t] of titles){
+      const rename=this.renameFor(state,id,t);
+      if(!rename||!this.remoteFolders.get(`${t.place}:${id}`)?.has(rename.have))continue;
+      await this.markIndex(state,id,t.place);
+      try{await this.invoke('zo.folder.update',{path:dirname(this.remotePath(state,relOf(id,t.place,'draft.json'))),name:rename.want});}
+      catch(error){if(error instanceof ZoError&&['conflict','resource_not_found'].includes(error.code)){this.refused.add(`${id}:${rename.want}`);continue;}throw error;}
+      state.names![id]=rename.want;this.remoteFolders.set(`${t.place}:${id}`,new Set([rename.want]));renamed=true;await this.save();
+    }
+    if(renamed)this.folderCache.clear();
+  }
+  // A draft with files in more than one folder, as when a Mac still on an earlier version adds a
+  // version under the old name, has them moved into its own folder, keeping their IDs and history.
+  // The emptied folders are removed.
+  private async gather(state:State,titles:Titles){
+    let moved=false;
+    for(const [key,strays] of this.strays){
+      const place=key.slice(0,key.indexOf(':')) as Place,id=key.slice(key.indexOf(':')+1);
+      if(titles.get(id)?.place!==place)continue;
+      const home=dirname(this.remotePath(state,relOf(id,place,'draft.json')));
+      if(!await this.folderId(home,false))continue;
+      let here=false;
+      for(const [folder,stray] of strays){
+        if(stray.blocked)continue;
+        let left=false;
+        for(const file of stray.moves){
+          const sub=dirname(file.name),destination=await this.folderId(sub==='.'?home:`${home}/${sub}`,true);
+          try{await this.invoke('zo.file.update',{file_id:file.fileId,destination_folder_id:destination});moved=here=true;}
+          catch(error){if(error instanceof ZoError&&['conflict','resource_not_found'].includes(error.code)){left=true;continue;}throw error;}
+        }
+        if(left)continue;
+        const path=`${state.base}/${place==='archived'?'Archive/':''}${folder}`;
+        state.cleanup=[...new Set([...state.cleanup??[],`${path}/versions`,`${path}/media`,path])];
+        this.remoteFolders.get(key)?.delete(folder);await this.save();
+      }
+      if(here)await this.markIndex(state,id,place);
+    }
+    this.strays=new Map();
+    if(moved)this.folderCache.clear();
+  }
+  // A readable list at the top of the folder, so a person or agent in Zo can find a draft by title.
+  private async publishList(state:State,titles:Titles){
+    const rows:string[]=[];
+    for(const [id,{title,place}] of titles)if(place==='live')rows.push(`- ${(title||'Untitled').replace(/[\r\n]+/g,' ')} — \`${state.names?.[id]??folderName(title,id)}\``);
     rows.sort((a,b)=>a.localeCompare(b));
-    return `# Drafts\n\nDraft keeps your drafts here and on each Mac you connect. Each folder is one draft: \`draft.json\`, and every version as Markdown in \`versions/\`. Archived drafts are in \`Archive/\`.\n\n${rows.join('\n')}\n`;
+    const list=Buffer.from(`# Drafts\n\nDraft keeps your drafts here and on each Mac you connect. Each folder is one draft, named for its title: \`draft.json\`, and every version as Markdown in \`versions/\`. Archived drafts are in \`Archive/\`.\n\n${rows.join('\n')}\n`),sha=sha256(list);
+    if(state.files['Drafts.md']?.sha===sha)return;
+    const remote=await this.upload(state,'Drafts.md',list,sha);
+    state.files['Drafts.md']={...remote,sha,md5:createHash('md5').update(list).digest('hex'),size:list.length,mtime:0};await this.save();
   }
   private async upload(state:State,rel:string,bytes:Buffer,sha:string):Promise<RemoteFile>{
-    const path=`${state.base}/${rel}`,known=state.files[rel],key=(step:string,revision=0)=>`draft-${step}-${sha256(`${state.workspaceId}:${state.base}/${rel}:${sha}:${revision}`).slice(0,48)}`;
+    const path=this.remotePath(state,rel),known=state.files[rel],key=(step:string,revision=0)=>`draft-${step}-${sha256(`${state.workspaceId}:${path}:${sha}:${revision}`).slice(0,48)}`;
     const text=!rel.includes('/media/')&&bytes.length<=INLINE_BYTES?bytes.toString('utf8'):null;
     const replace=async(file:RemoteFile):Promise<RemoteFile>=>{
       try{return await this.replace(file,bytes,text,key('update',file.revision));}
@@ -718,7 +872,7 @@ export class ZoSync{
     const previous=this.state?.workspaceId===workspaceId?this.state:null,base=chosen??previous?.base;
     clearTimeout(this.timer);this.timer=undefined;
     const same=previous&&previous.base===base?previous:null;
-    this.state={schemaVersion:3,clientId,workspaceId,workspaceName:parsed.workspaceName??previous?.workspaceName,base,files:same?.files??{},baseVersions:same?.baseVersions,deleted:same?.deleted,cleanup:same?.cleanup,lastSyncedAt:same?.lastSyncedAt,indexHead:same?.indexHead,pendingIndex:same?.pendingIndex,lastInventoryAt:same?.lastInventoryAt,connectedAt:new Date().toISOString()};
+    this.state={schemaVersion:3,clientId,workspaceId,workspaceName:parsed.workspaceName??previous?.workspaceName,base,files:same?.files??{},baseVersions:same?.baseVersions,deleted:same?.deleted,cleanup:same?.cleanup,names:same?.names,lastSyncedAt:same?.lastSyncedAt,indexHead:same?.indexHead,pendingIndex:same?.pendingIndex,lastInventoryAt:same?.lastInventoryAt,connectedAt:new Date().toISOString()};
     this.access=access;this.message=undefined;
     try{const workspace=await this.invoke<{display_name?:string}>('zo.workspace.get',{workspace_id:workspaceId});if(workspace.display_name)this.state.workspaceName=workspace.display_name;}catch{}
     await this.save();
@@ -771,7 +925,7 @@ export class ZoSync{
     const base=normalizeFolder(path);
     await this.pause();
     this.folderCache.clear();
-    if(base!==state.base){state.base=base;state.files={};state.baseVersions=undefined;state.deleted=undefined;state.lastSyncedAt=undefined;state.indexHead=undefined;state.pendingIndex=undefined;state.lastInventoryAt=undefined;await this.save();}
+    if(base!==state.base){state.base=base;state.files={};state.names=undefined;state.baseVersions=undefined;state.deleted=undefined;state.lastSyncedAt=undefined;state.indexHead=undefined;state.pendingIndex=undefined;state.lastInventoryAt=undefined;await this.save();}
     if(!this.stopped){this.message=undefined;this.start();}
     return this.status();
   }

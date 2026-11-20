@@ -1,5 +1,9 @@
 [
   {
+    "title": "Drafts in Zo are in folders named for their titles",
+    "details": "Zo folders are now \"<title> (<first 8 of id>).draft\" and are renamed once a changed title has settled for RETITLE_MS (folderName and ZoSync.retitle in desktop/zo-sync.ts). Files a draft has in another folder are moved into its own (ZoSync.gather). Sync still keys files by draft ID; older <id>.draft folders are recognized and renamed on the next full check."
+  },
+  {
     "title": "Updates list what’s new in a few short lines",
     "details": "release-notes.json entries are {title, details}. Installed apps get only the titles, in the signed manifest’s notes; details go to the GitHub release body. Updates leaves out notes the release you’re running already listed (Updates.news in desktop/updates.ts)."
   },
