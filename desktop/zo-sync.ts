@@ -767,7 +767,7 @@ export class ZoSync{
     const rows:string[]=[];
     for(const [id,t] of titles)if(t.place==='live')rows.push(`- ${(t.title||'Untitled').replace(/[\r\n]+/g,' ')} — \`${state.names?.[id]??folderName(t.brief?.name??t.title,id)}\``);
     rows.sort((a,b)=>a.localeCompare(b));
-    const list=Buffer.from(`# Drafts\n\nDraft keeps your drafts here and on each Mac you connect. Each folder is one draft, named for its title: \`draft.json\`, and every version as Markdown in \`versions/\`. Archived drafts are in \`Archive/\`.\n\n${rows.join('\n')}\n`),sha=sha256(list);
+    const list=Buffer.from(`# Drafts\n\nDraft keeps your drafts here and on each Mac you connect. Each folder is one draft, with a brief name for what it’s about: \`draft.json\`, and every version as Markdown in \`versions/\`. Archived drafts are in \`Archive/\`.\n\n${rows.join('\n')}\n`),sha=sha256(list);
     if(state.files['Drafts.md']?.sha===sha)return;
     const remote=await this.upload(state,'Drafts.md',list,sha);
     state.files['Drafts.md']={...remote,sha,md5:createHash('md5').update(list).digest('hex'),size:list.length,mtime:0};await this.save();
