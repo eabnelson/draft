@@ -33,6 +33,10 @@ export const QUIET_MS=15_000,MAX_WAIT_MS=120_000,CHECK_MS=120_000,IDLE_CHECK_MS=
 // A folder follows its draft's title once the title has stopped changing for this long, so a title
 // taken from a first sentence being typed doesn't rename the folder at every save.
 export const RETITLE_MS=300_000;
+// A brief name is written once a draft has a few words, and again only when its length has
+// changed a lot, as a summary would be.
+const NAME_WORDS=5,NAME_LENGTH=60;
+export const renameDue=(named:number,words:number)=>words-named>=Math.max(25,named/5)||named-words>=Math.max(25,named/5);
 export const SYNC_INDEX='Draft-sync.json';
 const IDLE_MS=300_000,ACTIVITY_CHECK_MS=15_000;
 const INLINE_BYTES=512*1024;
@@ -41,12 +45,13 @@ const MEDIA_NAME=/^[a-f0-9]{32}\.(png|jpg|webp|gif)$/,VERSION_NAME=/^v\d+\.md$/;
 // A draft's file as sync tracks it, by the draft's ID: <id>.draft/... for live drafts,
 // Archive/<id>.draft/... for archived ones. That is also its path on this Mac. In Zo the folder is
 // named for the draft instead (see folderName), and remotePath translates.
-const REL=/^(Archive\/)?([A-Za-z0-9][A-Za-z0-9._-]{0,150})\.draft\/(draft\.json|versions\/v\d+\.md|media\/[a-f0-9]{32}\.(?:png|jpg|webp|gif))$/;
+const REL=/^(Archive\/)?([A-Za-z0-9][A-Za-z0-9._-]{0,150})\.draft\/(draft\.json|name\.json|versions\/v\d+\.md|media\/[a-f0-9]{32}\.(?:png|jpg|webp|gif))$/;
 export function parseRel(rel:string):{place:Place;id:string;name:string}|null{const m=REL.exec(rel);return m?{place:m[1]?'archived':'live',id:m[2],name:m[3]}:null;}
 const relOf=(id:string,place:Place,name:string)=>`${place==='archived'?'Archive/':''}${id}.draft/${name}`;
-// A draft's folder in Zo is named for its title, so it reads well there and turns up in search:
-// "Personal Products (083361c7).draft". The start of the ID keeps two drafts with one title apart
-// and tells Draft which draft the folder holds. It follows the title when the title changes.
+// A draft's folder in Zo is named for it, so it reads well there and turns up in search:
+// "Hearing loss stat (4b341cd3).draft". The name is a brief one the connected model wrote for the
+// draft (name.json beside it), or its title until there is one. The start of the ID keeps two drafts
+// with one name apart and tells Draft which draft the folder holds. It follows the name as it changes.
 // Folders from earlier versions, named <id>.draft, still work and are renamed on the next full check.
 const LEGACY_FOLDER=/^([A-Za-z0-9][A-Za-z0-9._-]{0,150})\.draft$/,TITLED_FOLDER=/^.+ \(([A-Za-z0-9][A-Za-z0-9._-]{0,150})\)\.draft$/;
 const TITLE_BYTES=150;
@@ -123,11 +128,12 @@ export type SyncStatus={
 };
 type LocalFile={rel:string;path:string;size:number;mtime:number};
 type Stray={moves:{fileId:string;name:string}[];blocked:boolean};
-type Titles=Map<string,{title:string;place:Place;mtime:number}>;
+type Titles=Map<string,{title:string;place:Place;mtime:number;brief?:{name:string;words:number}}>;
 type RemoteFile={id:string;revision:number};
 export type FolderList={path:string|null;parent:string|null;folders:{name:string;path:string}[]};
 type Fetch=(input:string,init?:RequestInit)=>Promise<Response>;
-type Options={secrets?:Secrets;config?:ZoConfig;fetch?:Fetch;sleep?:(ms:number)=>Promise<void>;timers?:boolean;now?:()=>number};
+// name: asks the connected model for a draft's brief name; without it, folders use titles.
+type Options={secrets?:Secrets;config?:ZoConfig;fetch?:Fetch;sleep?:(ms:number)=>Promise<void>;timers?:boolean;now?:()=>number;name?:(text:string)=>Promise<string|null>};
 
 const sha256=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 export function workspaceOf(accessToken:string):string{
@@ -164,13 +170,15 @@ export class ZoSync{
   private remoteFolders=new Map<string,Set<string>>();private strays=new Map<string,Map<string,Stray>>();
   // Renames Zo refused this session, by "<id>:<name>", so they aren't tried at every check.
   private refused=new Set<string>();
+  // Brief names being written, and the text each draft was last named from this session.
+  private naming?:Promise<void>;private named=new Map<string,string>();private readonly name?:(text:string)=>Promise<string|null>;
   private readonly secrets:Secrets;private readonly config:ZoConfig;private readonly fetch:Fetch;private readonly sleep:(ms:number)=>Promise<void>;private readonly timers:boolean;private readonly now:()=>number;
   readonly draftsRoot:string;
   constructor(readonly dataRoot:string,readonly store:DraftStore,options:Options={}){
     this.draftsRoot=store.root;
     this.secrets=options.secrets??(process.platform==='linux'?new SecretService():new Keychain());this.config=options.config??ZO;
     this.fetch=options.fetch??((input,init)=>globalThis.fetch(input,init));this.sleep=options.sleep??(ms=>new Promise(r=>setTimeout(r,ms)));this.timers=options.timers??true;
-    this.now=options.now??Date.now;this.lastActivity=this.now();
+    this.now=options.now??Date.now;this.lastActivity=this.now();this.name=options.name;
     this.auth=new ZoAuth(dataRoot,this.secrets,this.account,this.config,this.fetch);
   }
   private get statePath(){return join(this.dataRoot,'zo-sync.json');}
@@ -272,6 +280,7 @@ export class ZoSync{
       const cutoff=Date.now()-90*86_400_000;state.deleted=Object.fromEntries(Object.entries(state.deleted??{}).filter(([,at])=>at>cutoff));
       state.lastSyncedAt=new Date().toISOString();await this.save();
       this.phase=this.firstChange?'waiting':'synced';
+      this.startNaming(state);
     }catch(error){
       if(this.state!==state)return;
       this.forceScan=true;
@@ -298,7 +307,7 @@ export class ZoSync{
       for(const entry of await readdir(folder,{withFileTypes:true})){
         if(!entry.isDirectory()||!entry.name.endsWith('.draft'))continue;
         const root=join(folder,entry.name);if(!await exists(join(root,'draft.json')))continue;
-        const names=['draft.json'];
+        const names=['draft.json','name.json'];
         for(const [sub,pattern] of [['versions',VERSION_NAME],['media',MEDIA_NAME]] as const){
           try{for(const name of await readdir(join(root,sub)))if(pattern.test(name))names.push(`${sub}/${name}`);}catch{}
         }
@@ -510,6 +519,8 @@ export class ZoSync{
       new Set(state.baseVersions?.[id]??[])):theirs;
     for(const rel of rels){const name=parseRel(rel)!.name;if(name.startsWith('media/')&&!local.has(rel))await this.store.writeMediaExternal(id,place,name.slice(6),await fetchFile(rel));}
     await this.store.writeExternal(merged,place);
+    // A brief name written on another Mac comes here as it is; it's only a name, so Zo's copy wins.
+    const nameRel=at('name.json');if(remote.has(nameRel)&&state.files[nameRel]?.revision!==remote.get(nameRel)!.revision)await this.store.writeName(id,place,await fetchFile(nameRel));
     // Zo's copy is now the known one: anything the merge kept from this Mac differs from it and is
     // saved back to Zo by the push that follows.
     for(const [rel,got] of downloaded)state.files[rel]={id:got.id,revision:got.revision,sha:sha256(got.bytes),md5:createHash('md5').update(got.bytes).digest('hex'),size:-1,mtime:-1};
@@ -578,7 +589,7 @@ export class ZoSync{
   private async push(state:State,files:LocalFile[],titles:Titles){
     // A draft not yet in Zo gets a folder named for it. One already there keeps its folder until retitle.
     const names=state.names??={},tracked=new Set(Object.keys(state.files).map(rel=>parseRel(rel)?.id));
-    for(const [id,{title}] of titles)if(!names[id]&&!tracked.has(id))names[id]=folderName(title,id);
+    for(const [id,t] of titles)if(!names[id]&&!tracked.has(id))names[id]=folderName(t.brief?.name??t.title,id);
     const changed:{file:LocalFile;bytes:Buffer;sha:string}[]=[];
     for(const file of files){
       const known=state.files[file.rel];
@@ -650,18 +661,61 @@ export class ZoSync{
     }
     throw new ZoError('conflict','Another Mac is updating Draft’s sync index. Draft will check again.');
   }
-  // Each draft's title and place, from its draft.json on this Mac.
+  // Brief names are written in the background, one draft at a time, so a slow model never holds up
+  // sync. A draft is named once its writing has settled, and the name goes to Zo with the next sync.
+  private startNaming(state:State){
+    if(!this.name||this.naming||this.state!==state||this.stopped||this.paused)return;
+    this.naming=this.nameDrafts(state).catch(error=>console.error('Draft sync naming:',error)).finally(()=>{this.naming=undefined;});
+  }
+  private async nameDrafts(state:State){
+    for(;;){
+      if(this.state!==state||this.stopped||this.paused)return;
+      const next=await this.unnamed(state);if(!next)return;
+      this.named.set(next.id,next.sha);
+      let name:string|null=null;try{name=await this.name!(next.text);}catch{}
+      const clean=(name??'').replace(/[\u0000-\u001f]+/g,' ').replace(/^["'“‘\s]+|["'”’\s.]+$/g,'').replace(/\s+/g,' ');
+      if(!clean)continue;
+      await this.store.writeName(next.id,next.place,Buffer.from(JSON.stringify({name:[...clean].slice(0,NAME_LENGTH).join('').trim(),words:next.words,at:new Date(this.now()).toISOString()},null,2)+'\n'));
+      this.changed();
+    }
+  }
+  // A draft due a brief name: settled, with enough writing, and unnamed or much changed since.
+  private async unnamed(state:State){
+    for(const [id,t] of await this.titles(this.worthSaving(state,await this.localFiles()))){
+      if(this.now()-t.mtime<RETITLE_MS)continue;
+      const text=await this.latestText(id,t.place);if(!text)continue;
+      const words=text.split(/\s+/).filter(Boolean).length,sha=sha256(text);
+      if(words<NAME_WORDS||(t.brief&&!renameDue(t.brief.words,words))||this.named.get(id)===sha)continue;
+      return {id,place:t.place,text,words,sha};
+    }
+    return null;
+  }
+  // The newest version with writing in it; a fresh, empty version doesn't describe the draft.
+  private async latestText(id:string,place:Place):Promise<string|null>{
+    try{
+      const root=this.store.package(id,place==='archived'),record=await readJSON<{versions?:{number?:unknown}[]}>(join(root,'draft.json'));
+      for(const n of (record.versions??[]).map(v=>Number(v.number)).filter(Number.isInteger).sort((a,b)=>b-a)){
+        try{const text=(await readFile(join(root,'versions',`v${n}.md`),'utf8')).slice(0,20000);if(text.trim())return text;}catch{}
+      }
+    }catch{}
+    return null;
+  }
+  // For tests: wait for sync and brief names to finish.
+  async idle(){while(this.running||this.naming){await this.running;await this.naming;}}
+  // Each draft's title, brief name and place, from this Mac's files.
   private async titles(files:LocalFile[]):Promise<Titles>{
     const titles:Titles=new Map();
     for(const file of files.filter(f=>f.rel.endsWith('/draft.json'))){
       const p=parseRel(file.rel)!;let title='';try{title=String((await readJSON<{title?:unknown}>(file.path)).title??'').trim();}catch{}
-      titles.set(p.id,{title,place:p.place,mtime:file.mtime});
+      let brief:{name:string;words:number}|undefined;
+      try{const value=await readJSON<{name?:unknown;words?:unknown}>(join(dirname(file.path),'name.json'));if(typeof value.name==='string'&&value.name.trim()&&Number.isInteger(value.words))brief={name:value.name.trim(),words:value.words as number};}catch{}
+      titles.set(p.id,{title,place:p.place,mtime:file.mtime,...brief?{brief}:{}});
     }
     return titles;
   }
   // A draft whose folder should take its settled title.
-  private renameFor(state:State,id:string,{title,mtime}:{title:string;mtime:number}){
-    const have=state.names?.[id],want=folderName(title,id);
+  private renameFor(state:State,id:string,{title,mtime,brief}:{title:string;mtime:number;brief?:{name:string}}){
+    const have=state.names?.[id],want=folderName(brief?.name??title,id);
     return have&&have!==want&&this.now()-mtime>=RETITLE_MS&&!this.refused.has(`${id}:${want}`)?{have,want}:null;
   }
   private retitleDue(state:State,titles:Titles){for(const [id,t] of titles)if(this.renameFor(state,id,t))return true;return false;}
@@ -711,7 +765,7 @@ export class ZoSync{
   // A readable list at the top of the folder, so a person or agent in Zo can find a draft by title.
   private async publishList(state:State,titles:Titles){
     const rows:string[]=[];
-    for(const [id,{title,place}] of titles)if(place==='live')rows.push(`- ${(title||'Untitled').replace(/[\r\n]+/g,' ')} — \`${state.names?.[id]??folderName(title,id)}\``);
+    for(const [id,t] of titles)if(t.place==='live')rows.push(`- ${(t.title||'Untitled').replace(/[\r\n]+/g,' ')} — \`${state.names?.[id]??folderName(t.brief?.name??t.title,id)}\``);
     rows.sort((a,b)=>a.localeCompare(b));
     const list=Buffer.from(`# Drafts\n\nDraft keeps your drafts here and on each Mac you connect. Each folder is one draft, named for its title: \`draft.json\`, and every version as Markdown in \`versions/\`. Archived drafts are in \`Archive/\`.\n\n${rows.join('\n')}\n`),sha=sha256(list);
     if(state.files['Drafts.md']?.sha===sha)return;

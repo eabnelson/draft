@@ -311,11 +311,11 @@ test('a service account that can only add files says what access it needs',()=>f
 }));
 
 // A second Mac connected to the same folder.
-async function secondMac(f:Fixture,run:(m:{store:DraftStore;sync:ZoSync;drafts:string;root:string})=>Promise<void>){
+async function secondMac(f:Fixture,run:(m:{store:DraftStore;sync:ZoSync;drafts:string;root:string})=>Promise<void>,options:{name?:(text:string)=>Promise<string|null>}={}){
   const root=await mkdtemp(join(tmpdir(),'draft-zo-mac-'));
   try{
     const drafts=join(root,'Drafts'),store=new DraftStore(drafts);await store.load();
-    const sync=new ZoSync(root,store,{secrets:new MemorySecrets(),config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false,now});
+    const sync=new ZoSync(root,store,{secrets:new MemorySecrets(),config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false,now,...options});
     await sync.initialize();await sync.connect({credentials:env()});await sync.chooseFolder(BASE);
     await run({store,sync,drafts,root});
   }finally{await rm(root,{recursive:true,force:true});}
@@ -519,6 +519,61 @@ test('files left in a draft’s other folder are gathered into its own, unless t
   expect(f.zo.files.get(`${old}/versions/v1.md`)?.id).toBe('stray-copy');
   expect(f.zo.files.get(v1)?.id).toBe(file.id);
   expect((await f.store.readAt(d.id,'live')).versions[0].text).toBe('One folder per draft.');
+}));
+
+// This Mac again, with a model that writes brief names.
+async function withNamer(f:Fixture,name:(text:string)=>Promise<string|null>){
+  const sync=new ZoSync(f.root,f.store,{secrets:f.secrets,config:{authOrigin:f.zo.origin,apiOrigin:f.zo.origin},sleep:async()=>{},timers:false,now,name});
+  await sync.initialize();return sync;
+}
+const words=(n:number)=>Array.from({length:n},(_,i)=>`word${i}`).join(' ');
+
+test('a brief name from the model names the folder once the writing settles, and comes with the draft',()=>fixture(async f=>{
+  const text='I had no idea 1 in 6 adults have trouble hearing. Most never get checked.';
+  const d=written(text);await f.store.save(d);
+  await link(f);await f.sync.run();
+  const titled=f.zo.pkg(d.id);expect(titled).toBe(folderName(d.title,d.id));
+  const asked:string[]=[],sync=await withNamer(f,async text=>{asked.push(text);return '“Hearing loss stat.”';});
+  await sync.run();await sync.idle();
+  expect(asked).toEqual([]);
+  clock.ahead=RETITLE_MS;await sync.run();await sync.idle();
+  expect(asked).toEqual([text]);
+  await sync.run();
+  const name=`Hearing loss stat (${d.id.slice(0,8)}).draft`;
+  expect(f.zo.pkg(d.id)).toBe(name);
+  expect(JSON.parse(f.zo.text(`${name}/name.json`))).toMatchObject({name:'Hearing loss stat',words:15});
+  expect(f.zo.text('Drafts.md')).toContain(`- ${d.title} — \`${name}\``);expect(f.zo.folder(`${BASE}/${titled}`)).toBe(false);
+  // Another Mac takes the name as it is, without asking its own model.
+  const theirs:string[]=[];
+  await secondMac(f,async mac=>{
+    await mac.sync.run();await mac.sync.idle();
+    expect(theirs).toEqual([]);
+    expect(JSON.parse(await readFile(join(mac.drafts,`${d.id}.draft`,'name.json'),'utf8')).name).toBe('Hearing loss stat');
+  },{name:async text=>{theirs.push(text);return 'Something else';}});
+  expect(f.zo.pkg(d.id)).toBe(name);
+}));
+
+test('a brief name is written again only when the writing changes a lot, and a failed one falls back to the title',()=>fixture(async f=>{
+  let d=written(`Pricing thoughts. ${words(20)}`);await f.store.save(d);
+  await link(f);await f.sync.run();
+  let answer:string|null=null;const asked:string[]=[];
+  const sync=await withNamer(f,async text=>{asked.push(text);if(answer===null)throw Error('No model connected.');return answer;});
+  clock.ahead=RETITLE_MS;await sync.run();await sync.idle();await sync.run();await sync.idle();
+  // Tried once for this text, and the folder keeps the title.
+  expect(asked.length).toBe(1);expect(f.zo.pkg(d.id)).toBe(folderName(d.title,d.id));
+  d=editVersion(d,d.versions[0].id,`Pricing thoughts. ${words(21)}`);await f.store.save(d);
+  answer='Launch pricing';await sync.run();await sync.idle();await sync.run();
+  expect(asked.length).toBe(2);expect(f.zo.pkg(d.id)).toBe(`Launch pricing (${d.id.slice(0,8)}).draft`);
+  // A few more words keep the name.
+  d=editVersion(d,d.versions[0].id,`Pricing thoughts. ${words(30)}`);await f.store.save(d);
+  await sync.run();await sync.idle();expect(asked.length).toBe(2);
+  // A lot more writing asks again.
+  answer='Launch pricing tiers';d=editVersion(d,d.versions[0].id,`Pricing thoughts. ${words(60)}`);await f.store.save(d);
+  await sync.run();await sync.idle();await sync.run();
+  expect(asked.length).toBe(3);expect(f.zo.pkg(d.id)).toBe(`Launch pricing tiers (${d.id.slice(0,8)}).draft`);
+  // A new, empty version doesn't change what the draft is about.
+  d=addVersion(d).draft;await f.store.save(d);await sync.run();await sync.idle();await sync.run();
+  expect(asked.length).toBe(3);expect(f.zo.pkg(d.id)).toBe(`Launch pricing tiers (${d.id.slice(0,8)}).draft`);
 }));
 
 test('folder names are readable, safe for Zo, and kept short',()=>{

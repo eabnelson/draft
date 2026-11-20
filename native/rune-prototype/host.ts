@@ -9,6 +9,7 @@ import {NativeControl} from '../../desktop/native-control';
 import {openExternalLink} from '../../desktop/links';
 import {NativeSpelling,spellingExecutable} from '../../desktop/spelling';
 import {atomicWrite,readJSON} from '../../desktop/files';
+import {briefName} from '../../desktop/writing';
 
 export async function startPrototypeHost(root:string,token:string,options:{examples?:boolean;runtime?:string;template?:string;packaged?:boolean}={}){
   root=resolve(root);
@@ -19,7 +20,8 @@ export async function startPrototypeHost(root:string,token:string,options:{examp
   const store=new DraftStore(join(resolve(root),'Drafts'));
   // The sync engine keys credentials by data root. The prototype never borrows
   // the installed app's account or connects until the person chooses to.
-  const sync=new ZoSync(resolve(root),store);
+  // Each draft's folder in Zo takes a brief name from the connected model, when there is one.
+  const sync=new ZoSync(resolve(root),store,{name:text=>briefName((prompt,kind)=>control.assist(prompt,kind),text)});
   await sync.initialize();
   const library=await store.load();
   const nativeLibrary=async()=>{

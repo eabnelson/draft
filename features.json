@@ -123,8 +123,8 @@
     {
       "id": "zo-sync",
       "title": "Sync with Zo",
-      "description": "Sync drafts with Zo after writing, in folders named for each draft, check a small shared index on app activity, and reduce background checks while idle. Concurrent writing, offline edits and recoverable deletes are preserved.",
-      "updatedAt": "2026-11-20T15:00:00Z",
+      "description": "Sync drafts with Zo after writing, in folders with brief names your connected model writes, check a small shared index on app activity, and reduce background checks while idle. Concurrent writing, offline edits and recoverable deletes are preserved.",
+      "updatedAt": "2026-11-20T16:30:00Z",
       "origin": "official",
       "state": "active",
       "code": [

@@ -16,7 +16,7 @@ On Linux, use **Draft for Linux** at the bottom of [the website](https://draft.s
 
 Writing works without an AI connection. For assistance and personal updates, install and sign in to [Claude Code](https://claude.com/product/claude-code) or [Codex](https://developers.openai.com/codex/cli). Draft discovers those installations and their available models. It reuses their normal login flow and does not copy tokens into its settings. When available, Claude Opus 5.5 is the default. Model settings lets you change it.
 
-Your provider processes the writing context or feature request you submit. Provider subscriptions, access, limits, and usage charges still apply. Draft runs its document store, editor, build tools, and app versions on your Mac.
+Your provider processes the writing context or feature request you submit, and, with Zo sync connected, each draft's text to give its folder a brief name. Provider subscriptions, access, limits, and usage charges still apply. Draft runs its document store, editor, build tools, and app versions on your Mac.
 
 ## Make it yours
 
@@ -43,7 +43,7 @@ If a feature isn’t quite right, choose **Keep working on this**. **Copy prompt
 The native Mac app keeps its data in `~/Library/Application Support/Draft Native/`
 (Linux uses `${XDG_DATA_HOME:-~/.local/share}/draft-native`):
 
-- `Drafts/`: one `<id>.draft` folder per draft. Each holds `draft.json` (title, stage, versions, publications), every version as Markdown in `versions/`, its images in `media/`, and undo history in `history/`. `Archive/` holds archived drafts and `Recovery/` keeps the previous text of every changed or deleted version.
+- `Drafts/`: one `<id>.draft` folder per draft. Each holds `draft.json` (title, stage, versions, publications), `name.json` (its brief name for Zo, once it has one), every version as Markdown in `versions/`, its images in `media/`, and undo history in `history/`. `Archive/` holds archived drafts and `Recovery/` keeps the previous text of every changed or deleted version.
 - `Documents/`: Draft 1 files. They are migrated into `Drafts/` once and left in place as a recovery copy.
 - `versions/`: the exact source and built application for official and personal versions.
 - `Workspaces/`: unfinished feature work shared with your local agent, kept until you finish iterating.
@@ -79,7 +79,7 @@ Sync works both ways. New drafts, edits, archiving, restoring and deleting on th
 - **Deleting.** A deleted draft goes to Zo's trash and is cleared; its folder in Zo goes once Zo allows it. A draft deleted in Zo, or on another Mac, moves to Draft's Recovery folder here. If you kept writing in it here, your writing wins and it's saved to Zo again.
 - **Archiving.** Archived drafts move to `Archive/` in Zo, keeping each file's history.
 - **A safety stop.** If most drafts disappear from Zo at once, Draft keeps them and says so in Settings rather than deleting them here.
-- **What's in Zo.** Each draft has a folder named for its title, such as `Pricing for launch (083361c7).draft`, so it's easy to find or search for in Zo. The start of the draft's ID keeps drafts with the same title apart. Retitling a draft renames its folder once the title has stayed the same for 5 minutes, so a title taken from a first sentence you're still typing doesn't rename it at every save. Folders from earlier versions, named only by ID, are renamed on the next full check. If a draft ends up with files in a second folder, such as a version added by a Mac still on an earlier Draft, they're moved into its own folder and the empty one is removed. A file whose name is already taken there stays where it is. Each folder holds `draft.json`, every version as Markdown, and its images. `Drafts.md` lists them by title. Undo history stays on each Mac.
+- **What's in Zo.** Each draft has a folder with a brief name that says what it's about, such as `Hearing loss stat (4b341cd3).draft`, so it's easy to find or search for in Zo. With Zo connected, Draft asks your connected model for that name once a draft has a few words and you've stopped editing it for 5 minutes, and again only after it grows or shrinks by a lot. This sends the draft's latest version to your provider. The name is kept in `name.json` beside the draft and syncs with it, so other Macs use it without asking again. Without a model, the folder uses the draft's title. The start of the draft's ID keeps drafts with the same name apart. Folders from earlier versions, named only by ID, are renamed on the next full check. If a draft ends up with files in a second folder, such as a version added by a Mac still on an earlier Draft, they're moved into its own folder and the empty one is removed. A file whose name is already taken there stays where it is. Each folder holds `draft.json`, `name.json`, every version as Markdown, and its images. `Drafts.md` lists them by title. Undo history stays on each Mac.
 - **Blank drafts stay put.** A blank draft that was never synced stays on its Mac.
 
 **Disconnect** revokes this browser sign-in and removes its credential from this Mac, keeping drafts here and in Zo. Legacy service-account secrets are only forgotten locally; revoke them in Zo to stop other uses. Without Zo, Draft works entirely on this Mac.

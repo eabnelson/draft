@@ -1,7 +1,7 @@
 [
   {
-    "title": "Drafts in Zo are in folders named for their titles",
-    "details": "Zo folders are now \"<title> (<first 8 of id>).draft\" and are renamed once a changed title has settled for RETITLE_MS (folderName and ZoSync.retitle in desktop/zo-sync.ts). Files a draft has in another folder are moved into its own (ZoSync.gather). Sync still keys files by draft ID; older <id>.draft folders are recognized and renamed on the next full check."
+    "title": "Drafts in Zo are in folders with brief, descriptive names",
+    "details": "Zo folders are \"<brief name> (<first 8 of id>).draft\". The connected model writes the 2–5 word name once a draft settles (ZoSync.nameDrafts, briefName in desktop/writing.ts); it's stored in <id>.draft/name.json, synced, and rewritten only after a large change in length (renameDue). Without a model, folders use the title. Sync still keys files by draft ID; older <id>.draft folders are renamed on the next full check, and files a draft has in another folder are moved into its own (ZoSync.gather)."
   },
   {
     "title": "Updates list what’s new in a few short lines",

@@ -23,6 +23,14 @@ export class NativeControl {
     if(this.packaged)updates.startAutomaticChecks();
     return updates;
   }
+  // Writing help from the connected model, in the shape writingSchema names for kind.
+  async assist(prompt:unknown,kind:unknown,signal?:AbortSignal):Promise<{response:string;provider:string}>{
+    if(typeof prompt!=='string'||prompt.length>100000)throw Error('The writing request is too large.');
+    const updates=await this.ready();
+    const selection=await updates.defaultSelection();if(!selection)throw Error('Connect Claude Code or Codex in Model settings.');
+    const response=await updates.agents.run(selection,prompt,{signal,schema:writingSchema(kind)});
+    await updates.rememberConnection(selection.provider);return {response,provider:selection.provider};
+  }
   async close(){if(this.recoveryTimer)clearInterval(this.recoveryTimer);(await this.loading?.catch(()=>undefined))?.stopAutomaticChecks();}
   async handle(request:Request):Promise<Response|null>{
     const url=new URL(request.url),path=url.pathname;
@@ -48,12 +56,7 @@ export class NativeControl {
       case 'POST /api/updates/abort':this.restart=false;await updates.abortActivation();result={restored:true};break;
       case 'POST /api/updates/handoff':result=await updates.handoff(input);break;
       case 'POST /api/updates/handoff/check':result=await updates.checkHandoff(input.id);break;
-      case 'POST /api/assist':{
-        if(typeof input.prompt!=='string'||input.prompt.length>100000)throw Error('The writing request is too large.');
-        const selection=await updates.defaultSelection();if(!selection)throw Error('Connect Claude Code or Codex in Model settings.');
-        const response=await updates.agents.run(selection,input.prompt,{signal:request.signal,schema:writingSchema(input.kind)});
-        await updates.rememberConnection(selection.provider);result={response,provider:selection.provider};break;
-      }
+      case 'POST /api/assist':result=await this.assist(input.prompt,input.kind,request.signal);break;
       case 'POST /api/external':{
         const links:Record<string,string>={claude:'https://claude.com/product/claude-code',codex:'https://developers.openai.com/codex/cli',source:'https://github.com/eabnelson/draft'};
         if(!links[input.kind])throw Error('Unknown link.');await openExternalLink(links[input.kind]);result={opened:true};break;

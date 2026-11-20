@@ -169,6 +169,11 @@ export class DraftStore {
       await this.write(path,draft);this.deleted.delete(draft.id);this.note(draft.id);
     });
   }
+  // A draft's brief name for its folder in Zo, kept beside it in name.json. Only sync writes it;
+  // saves from the window leave it alone.
+  writeName(id:string,place:Place,bytes:Uint8Array):Promise<void>{
+    return this.serial(async()=>{const path=this.package(id,place==='archived');if(await exists(join(path,'draft.json')))await atomicWrite(join(path,'name.json'),bytes);});
+  }
   writeMediaExternal(id:string,place:Place,name:string,bytes:Uint8Array):Promise<void>{
     if(!MEDIA_NAME.test(name))return Promise.resolve();
     return this.serial(async()=>{await atomicWrite(join(this.package(id,place==='archived'),'media',name),bytes);});
